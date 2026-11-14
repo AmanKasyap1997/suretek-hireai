@@ -51,6 +51,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Check generated enum migrations
+        run: npm run enums:check
       - name: Lint
         run: npm run lint
       - name: Check formatting

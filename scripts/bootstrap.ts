@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { randomBytes, randomUUID, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
+import { Role } from '../src/common/enums';
 
 const scryptAsync = promisify(scrypt);
 
@@ -91,8 +92,8 @@ async function main(): Promise<void> {
     const userId = randomUUID();
     await client.query(
       `INSERT INTO users (id, tenant_id, email, password_hash, full_name, role)
-       VALUES ($1, $2, $3, $4, $5, 'SUPER_ADMIN')`,
-      [userId, tenantId, email, passwordHash, fullName],
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [userId, tenantId, email, passwordHash, fullName, Role.SUPER_ADMIN],
     );
     await client.query(
       `INSERT INTO audit_events (tenant_id, actor_id, action, entity_type, entity_id)

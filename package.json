@@ -15,7 +15,9 @@
     "lint": "eslint src scripts test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "enums:generate": "tsx scripts/generate-enum-migration.ts",
+    "enums:check": "tsx scripts/generate-enum-migration.ts --check"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",

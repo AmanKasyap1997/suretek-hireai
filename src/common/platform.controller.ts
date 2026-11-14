@@ -8,6 +8,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { DbService } from '../database/db.service';
 import { Roles, Public } from '../auth/roles.decorator';
+import { ADMIN_ROLES, RECRUITMENT_ROLES } from '../auth/role-groups';
 import { Actor, CurrentUser } from './actor';
 import { parse, paginationSchema } from './validation';
 @ApiTags('Health')
@@ -34,7 +35,7 @@ export class HealthController {
 export class PlatformController {
   constructor(private readonly db: DbService) {}
   @Get('reports/hiring-summary')
-  @Roles('SUPER_ADMIN', 'HR_ADMIN', 'RECRUITER')
+  @Roles(...RECRUITMENT_ROLES)
   async summary(@CurrentUser() actor: Actor) {
     return {
       applicationsByStage: await this.db.query(
@@ -48,7 +49,7 @@ export class PlatformController {
     };
   }
   @Get('audit-events')
-  @Roles('SUPER_ADMIN', 'HR_ADMIN')
+  @Roles(...ADMIN_ROLES)
   async audit(@CurrentUser() actor: Actor, @Query() query: unknown) {
     const p = parse(paginationSchema, query);
     return {

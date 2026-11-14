@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
+import { RECRUITMENT_ROLES } from '../auth/role-groups';
 import { Actor, CurrentUser } from '../common/actor';
 import { BodySchema, parse } from '../common/validation';
 import {
@@ -20,7 +21,7 @@ import { CallingService } from './calling.service';
 
 @ApiTags('Consent and call planning')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'HR_ADMIN', 'RECRUITER')
+@Roles(...RECRUITMENT_ROLES)
 @Controller()
 export class CallingController {
   constructor(private readonly calling: CallingService) {}

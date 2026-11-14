@@ -1,1 +1,12 @@
-{ "singleQuote": true, "trailingComma": "all" }
+{
+  "singleQuote": true,
+  "trailingComma": "all",
+  "overrides": [
+    {
+      "files": "database/enums.snapshot.json",
+      "options": {
+        "parser": "json-stringify"
+      }
+    }
+  ]
+}

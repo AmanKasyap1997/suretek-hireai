@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "columns": [
+    {
+      "enumName": "ApplicationStage",
+      "table": "applications",
+      "column": "stage",
+      "constraintName": "applications_stage_check",
+      "values": [
+        "APPLIED",
+        "HIRED",
+        "INTERVIEW",
+        "OFFER",
+        "REJECTED",
+        "SHORTLISTED"
+      ],
+      "defaultValue": "APPLIED"
+    },
+    {
+      "enumName": "CallLanguage",
+      "table": "call_requests",
+      "column": "language",
+      "constraintName": "call_requests_language_check",
+      "values": [
+        "EN",
+        "HI"
+      ]
+    },
+    {
+      "enumName": "CallRequestStatus",
+      "table": "call_requests",
+      "column": "status",
+      "constraintName": "call_requests_status_check",
+      "values": [
+        "CANCELLED",
+        "PLANNED"
+      ],
+      "defaultValue": "PLANNED"
+    },
+    {
+      "enumName": "ConsentScope",
+      "table": "consents",
+      "column": "scope",
+      "constraintName": "consents_scope_check",
+      "values": [
+        "CALL",
+        "RECORDING",
+        "TRANSCRIPTION"
+      ]
+    },
+    {
+      "enumName": "EmployeeStatus",
+      "table": "employees",
+      "column": "status",
+      "constraintName": "employees_status_check",
+      "values": [
+        "ACTIVE",
+        "EXITED"
+      ],
+      "defaultValue": "ACTIVE"
+    },
+    {
+      "enumName": "JobStatus",
+      "table": "jobs",
+      "column": "status",
+      "constraintName": "jobs_status_check",
+      "values": [
+        "APPROVED",
+        "CLOSED",
+        "DRAFT",
+        "PUBLISHED"
+      ],
+      "defaultValue": "DRAFT"
+    },
+    {
+      "enumName": "LeaveStatus",
+      "table": "leave_requests",
+      "column": "status",
+      "constraintName": "leave_requests_status_check",
+      "values": [
+        "APPROVED",
+        "PENDING",
+        "REJECTED"
+      ],
+      "defaultValue": "PENDING"
+    },
+    {
+      "enumName": "LeaveType",
+      "table": "leave_requests",
+      "column": "type",
+      "constraintName": "leave_requests_type_check",
+      "values": [
+        "ANNUAL",
+        "SICK",
+        "UNPAID"
+      ]
+    },
+    {
+      "enumName": "OfferStatus",
+      "table": "offers",
+      "column": "status",
+      "constraintName": "offers_status_check",
+      "values": [
+        "ACCEPTED",
+        "APPROVED",
+        "DRAFT"
+      ],
+      "defaultValue": "DRAFT"
+    },
+    {
+      "enumName": "Role",
+      "table": "users",
+      "column": "role",
+      "constraintName": "users_role_check",
+      "values": [
+        "CANDIDATE",
+        "EMPLOYEE",
+        "HIRING_MANAGER",
+        "HR_ADMIN",
+        "INTERVIEWER",
+        "IT_ASSET_ADMIN",
+        "PAYROLL_FINANCE",
+        "RECRUITER",
+        "REPORTING_MANAGER",
+        "SUPER_ADMIN"
+      ]
+    }
+  ],
+  "invariants": [
+    {
+      "table": "offers",
+      "constraintName": "offers_acceptance_evidence_check",
+      "legacyConstraintNames": [
+        "offers_check"
+      ],
+      "conditionColumn": "status",
+      "conditionValue": "ACCEPTED",
+      "requiredNonNullColumns": [
+        "acceptance_reference",
+        "accepted_at"
+      ]
+    }
+  ]
+}

@@ -6,6 +6,13 @@ import {
 } from '@nestjs/common';
 import { Actor } from '../common/actor';
 import { audit } from '../common/audit';
+import {
+  ApplicationStage,
+  CallLanguage,
+  CallRequestStatus,
+  ConsentScope,
+  JobStatus,
+} from '../common/enums';
 import { DbClient, DbService } from '../database/db.service';
 import { callPolicyFromEnv, isWithinCallingWindow } from './calling.policy';
 import { CallingClock } from './calling.clock';
@@ -15,16 +22,21 @@ import {
   ConsentInput,
 } from './calling.schemas';
 
+const eligibleCallStages: readonly ApplicationStage[] = [
+  ApplicationStage.SHORTLISTED,
+  ApplicationStage.INTERVIEW,
+];
+
 interface ApplicationRow {
   id: string;
   candidate_id: string;
-  stage: string;
-  job_status: string;
+  stage: ApplicationStage;
+  job_status: JobStatus;
 }
 
 interface ConsentRow {
   id: string;
-  scope: string;
+  scope: ConsentScope;
   granted: boolean;
   source: string;
   created_at: Date;
@@ -33,10 +45,10 @@ interface ConsentRow {
 interface CallRequestRow {
   id: string;
   application_id: string;
-  language: string;
+  language: CallLanguage;
   recording: boolean;
   transcription: boolean;
-  status: string;
+  status: CallRequestStatus;
   idempotency_key: string;
   created_at: Date;
 }
@@ -68,13 +80,22 @@ export class CallingService {
       );
       if (!input.granted) {
         const cancelled = await tx.query<{ id: string }>(
-          `UPDATE call_requests cr SET status='CANCELLED'
+          `UPDATE call_requests cr SET status=$4
            FROM applications a
            WHERE cr.tenant_id=$1 AND a.tenant_id=cr.tenant_id AND a.id=cr.application_id
-             AND a.candidate_id=$2 AND cr.status='PLANNED'
-             AND ($3='CALL' OR ($3='RECORDING' AND cr.recording) OR ($3='TRANSCRIPTION' AND cr.transcription))
+             AND a.candidate_id=$2 AND cr.status=$5
+             AND ($3::text=$6 OR ($3::text=$7 AND cr.recording) OR ($3::text=$8 AND cr.transcription))
            RETURNING cr.id`,
-          [actor.tenantId, candidateId, input.scope],
+          [
+            actor.tenantId,
+            candidateId,
+            input.scope,
+            CallRequestStatus.CANCELLED,
+            CallRequestStatus.PLANNED,
+            ConsentScope.CALL,
+            ConsentScope.RECORDING,
+            ConsentScope.TRANSCRIPTION,
+          ],
         );
         for (const request of cancelled) {
           await audit(
@@ -122,7 +143,9 @@ export class CallingService {
   async planCall(actor: Actor, input: CallRequestInput) {
     return this.db.transaction(async (tx) => {
       // Lock candidate first, so consent revocations and plan creation serialize.
-      const application = await tx.one<ApplicationRow>(
+      const application = await tx.one<
+        Pick<ApplicationRow, 'id' | 'candidate_id' | 'stage'>
+      >(
         `SELECT id,candidate_id,stage FROM applications WHERE tenant_id=$1 AND id=$2`,
         [actor.tenantId, input.applicationId],
       );
@@ -161,22 +184,25 @@ export class CallingService {
       );
       if (
         !current ||
-        !['SHORTLISTED', 'INTERVIEW'].includes(current.stage) ||
-        current.job_status !== 'PUBLISHED'
+        !eligibleCallStages.includes(current.stage) ||
+        current.job_status !== JobStatus.PUBLISHED
       ) {
         throw new ConflictException(
           'Call planning requires a shortlisted/interview application for a published job',
         );
       }
-      const consents = await tx.query<{ scope: string; granted: boolean }>(
+      const consents = await tx.query<{
+        scope: ConsentScope;
+        granted: boolean;
+      }>(
         `SELECT DISTINCT ON (scope) scope,granted FROM consents
          WHERE tenant_id=$1 AND candidate_id=$2 ORDER BY scope,sequence_id DESC`,
         [actor.tenantId, current.candidate_id],
       );
-      const required = [
-        'CALL',
-        ...(input.recording ? ['RECORDING'] : []),
-        ...(input.transcription ? ['TRANSCRIPTION'] : []),
+      const required: ConsentScope[] = [
+        ConsentScope.CALL,
+        ...(input.recording ? [ConsentScope.RECORDING] : []),
+        ...(input.transcription ? [ConsentScope.TRANSCRIPTION] : []),
       ];
       for (const scope of required) {
         if (
@@ -190,8 +216,8 @@ export class CallingService {
         }
       }
       const request = await tx.one<CallRequestRow>(
-        `INSERT INTO call_requests (tenant_id,application_id,requested_by,language,recording,transcription,idempotency_key)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO call_requests (tenant_id,application_id,requested_by,language,recording,transcription,idempotency_key,status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          RETURNING id,application_id,language,recording,transcription,status,idempotency_key,created_at`,
         [
           actor.tenantId,
@@ -201,6 +227,7 @@ export class CallingService {
           input.recording,
           input.transcription,
           input.idempotencyKey,
+          CallRequestStatus.PLANNED,
         ],
       );
       await audit(
@@ -237,11 +264,11 @@ export class CallingService {
         [actor.tenantId, requestId],
       );
       if (!request) throw new NotFoundException('Call request not found');
-      if (request.status === 'CANCELLED') return request;
+      if (request.status === CallRequestStatus.CANCELLED) return request;
       const updated = await tx.one<CallRequestRow>(
-        `UPDATE call_requests SET status='CANCELLED' WHERE tenant_id=$1 AND id=$2
+        `UPDATE call_requests SET status=$3 WHERE tenant_id=$1 AND id=$2
          RETURNING id,application_id,language,recording,transcription,status,idempotency_key,created_at`,
-        [actor.tenantId, requestId],
+        [actor.tenantId, requestId, CallRequestStatus.CANCELLED],
       );
       await audit(
         tx,

@@ -12,6 +12,8 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Actor, CurrentUser } from '../common/actor';
 import { Roles } from '../auth/roles.decorator';
+import { ADMIN_ROLES, RECRUITMENT_ROLES } from '../auth/role-groups';
+import { JobStatus } from '../common/enums';
 import { BodySchema, parse } from '../common/validation';
 import {
   acceptOfferSchema,
@@ -27,7 +29,7 @@ import { HiringService } from './hiring.service';
 
 @ApiTags('Jobs')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'HR_ADMIN', 'RECRUITER')
+@Roles(...RECRUITMENT_ROLES)
 @Controller('jobs')
 export class JobsController {
   constructor(private readonly hiring: HiringService) {}
@@ -60,9 +62,9 @@ export class JobsController {
 
   @Post(':id/approve')
   @HttpCode(200)
-  @Roles('SUPER_ADMIN', 'HR_ADMIN')
+  @Roles(...ADMIN_ROLES)
   approve(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.hiring.transitionJob(actor, id, 'APPROVED');
+    return this.hiring.transitionJob(actor, id, JobStatus.APPROVED);
   }
 
   @Post(':id/publish')
@@ -72,19 +74,19 @@ export class JobsController {
       'Publish the internal job record; no external CMS/LinkedIn integration is enabled.',
   })
   publish(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.hiring.transitionJob(actor, id, 'PUBLISHED');
+    return this.hiring.transitionJob(actor, id, JobStatus.PUBLISHED);
   }
 
   @Post(':id/close')
   @HttpCode(200)
   close(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.hiring.transitionJob(actor, id, 'CLOSED');
+    return this.hiring.transitionJob(actor, id, JobStatus.CLOSED);
   }
 }
 
 @ApiTags('Candidates')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'HR_ADMIN', 'RECRUITER')
+@Roles(...RECRUITMENT_ROLES)
 @Controller('candidates')
 export class CandidatesController {
   constructor(private readonly hiring: HiringService) {}
@@ -108,7 +110,7 @@ export class CandidatesController {
 
 @ApiTags('Applications')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'HR_ADMIN', 'RECRUITER')
+@Roles(...RECRUITMENT_ROLES)
 @Controller('applications')
 export class ApplicationsController {
   constructor(private readonly hiring: HiringService) {}
@@ -146,7 +148,7 @@ export class ApplicationsController {
 
 @ApiTags('Offers')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'HR_ADMIN')
+@Roles(...ADMIN_ROLES)
 @Controller('offers')
 export class OffersController {
   constructor(private readonly hiring: HiringService) {}

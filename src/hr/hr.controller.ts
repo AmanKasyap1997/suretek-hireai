@@ -14,6 +14,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { DbService, DbClient } from '../database/db.service';
 import { Roles } from '../auth/roles.decorator';
+import { ADMIN_ROLES } from '../auth/role-groups';
+import { LeaveType, LeaveStatus } from '../common/enums';
 import { Actor, CurrentUser } from '../common/actor';
 import { audit } from '../common/audit';
 import { BodySchema, parse, paginationSchema } from '../common/validation';
@@ -28,7 +30,7 @@ const date = z
 const leaveSchema = z
   .object({
     employeeId: z.string().uuid(),
-    type: z.enum(['ANNUAL', 'SICK', 'UNPAID']),
+    type: z.enum(LeaveType),
     startDate: date,
     endDate: date,
     reason: z.string().trim().min(1).max(2000),
@@ -36,7 +38,11 @@ const leaveSchema = z
   .strict()
   .refine((v) => v.startDate <= v.endDate, 'End date must follow start date');
 const reviewSchema = z
-  .object({ status: z.enum(['APPROVED', 'REJECTED']) })
+  .object({
+    status: z
+      .enum(LeaveStatus)
+      .extract([LeaveStatus.APPROVED, LeaveStatus.REJECTED]),
+  })
   .strict();
 const attendanceSchema = z
   .object({
@@ -53,7 +59,7 @@ const attendanceSchema = z
 const completionSchema = z.object({ completed: z.boolean() }).strict();
 @ApiTags('Core HR')
 @ApiBearerAuth()
-@Roles('SUPER_ADMIN', 'HR_ADMIN')
+@Roles(...ADMIN_ROLES)
 @Controller()
 export class HrController {
   constructor(private readonly db: DbService) {}
@@ -163,7 +169,7 @@ export class HrController {
         [actor.tenantId, id],
       );
       if (!current) throw new NotFoundException();
-      if (current.status !== 'PENDING')
+      if (current.status !== LeaveStatus.PENDING)
         throw new ConflictException('Leave has already been reviewed');
       const row = await tx.one(
         'UPDATE leave_requests SET status=$3,reviewed_by=$4 WHERE tenant_id=$1 AND id=$2 RETURNING *',

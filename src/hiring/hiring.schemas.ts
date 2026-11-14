@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ApplicationStage } from '../common/enums';
 import { paginationSchema } from '../common/validation';
 export { paginationSchema };
 
@@ -40,7 +41,13 @@ export const applicationSchema = z
   .strict();
 export const stageSchema = z
   .object({
-    stage: z.enum(['SHORTLISTED', 'INTERVIEW', 'REJECTED']),
+    stage: z
+      .enum(ApplicationStage)
+      .extract([
+        ApplicationStage.SHORTLISTED,
+        ApplicationStage.INTERVIEW,
+        ApplicationStage.REJECTED,
+      ]),
   })
   .strict();
 export const offerSchema = z

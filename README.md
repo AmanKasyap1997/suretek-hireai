@@ -85,6 +85,22 @@ npm run db:migrate
 
 Use a separate migration role and a restricted API database role in production. The local development user owns its database for convenience. Set `PGSSLMODE=require` for a hosted database that requires TLS, and configure the appropriate CA trust; certificate verification stays enabled. Production backups, restore testing, retention/deletion processes and database access policies require deployment configuration.
 
+## Shared enums
+
+Define role, status, stage, consent, language and leave values in [`src/common/enums.ts`](src/common/enums.ts). Application code and validation import these enums; PostgreSQL stores the same strings and validates them with generated `CHECK` constraints.
+
+After changing an enum, generate and apply its database migration:
+
+```bash
+npm run enums:generate
+npm run enums:check
+npm run db:migrate
+```
+
+Commit the enum change, generated SQL migration and `database/enums.snapshot.json`. New roles receive no business permissions until you deliberately add them to the grants in `src/auth/role-groups.ts`; they can read their own authenticated profile. Renaming or removing stored values requires a deliberate data migration. The generator never rewrites existing rows. See [enum usage and upgrades](docs/enums.md).
+
+If you already run an earlier starter version, keep your `.env` and database, install the latest code's dependencies with `npm ci`, then run `npm run db:migrate` from the project folder. These commands also work in Windows PowerShell. No database reset or repeat bootstrap is needed.
+
 ## Verify changes
 
 Run the suite against a dedicated test database. Tests create and modify tenant records; do not point them at production.

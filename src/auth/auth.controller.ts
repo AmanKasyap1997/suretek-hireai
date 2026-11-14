@@ -17,7 +17,9 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { DbService } from '../database/db.service';
-import { Actor, CurrentUser, roles } from '../common/actor';
+import { Actor, CurrentUser } from '../common/actor';
+import { Role } from '../common/enums';
+import { ADMIN_ROLES, ALL_ROLES } from './role-groups';
 import { BodySchema, parse } from '../common/validation';
 import { audit } from '../common/audit';
 import { readConfig } from '../common/config';
@@ -41,7 +43,7 @@ const createUserSchema = z
     fullName: z.string().trim().min(1).max(200),
     email,
     password: z.string().min(12).max(128),
-    role: z.enum(roles),
+    role: z.enum(Role),
   })
   .strict();
 const userStatusSchema = z.object({ active: z.boolean() }).strict();
@@ -93,7 +95,7 @@ export class AuthController {
     return this.auth.login(parse(loginSchema, body));
   }
   @Get('me')
-  @Roles(...roles)
+  @Roles(...ALL_ROLES)
   me(@CurrentUser() actor: Actor) {
     return this.db.one(
       'SELECT id,tenant_id,full_name,email,role,active FROM users WHERE tenant_id=$1 AND id=$2',
@@ -101,14 +103,11 @@ export class AuthController {
     );
   }
   @Post('users')
-  @Roles('SUPER_ADMIN', 'HR_ADMIN')
+  @Roles(...ADMIN_ROLES)
   @BodySchema(createUserSchema)
   async createUser(@CurrentUser() actor: Actor, @Body() body: unknown) {
     const input = parse(createUserSchema, body);
-    if (
-      actor.role !== 'SUPER_ADMIN' &&
-      ['SUPER_ADMIN', 'HR_ADMIN'].includes(input.role)
-    )
+    if (actor.role !== Role.SUPER_ADMIN && ADMIN_ROLES.includes(input.role))
       throw new ForbiddenException(
         'Only a super admin can create administrator accounts',
       );
@@ -125,7 +124,7 @@ export class AuthController {
     });
   }
   @Patch('users/:id/status')
-  @Roles('SUPER_ADMIN', 'HR_ADMIN')
+  @Roles(...ADMIN_ROLES)
   @BodySchema(userStatusSchema)
   async setStatus(
     @CurrentUser() actor: Actor,
@@ -141,20 +140,17 @@ export class AuthController {
       await tx.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE', [
         actor.tenantId,
       ]);
-      const target = await tx.one(
+      const target = await tx.one<{ id: string; role: Role }>(
         'SELECT id,role FROM users WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
         [actor.tenantId, id],
       );
       if (!target) throw new NotFoundException('User not found');
-      if (
-        actor.role !== 'SUPER_ADMIN' &&
-        ['SUPER_ADMIN', 'HR_ADMIN'].includes(target.role)
-      )
+      if (actor.role !== Role.SUPER_ADMIN && ADMIN_ROLES.includes(target.role))
         throw new ForbiddenException();
-      if (target.role === 'SUPER_ADMIN' && !input.active) {
+      if (target.role === Role.SUPER_ADMIN && !input.active) {
         const remaining = await tx.one(
           'SELECT count(*)::int AS count FROM users WHERE tenant_id=$1 AND role=$2 AND active=true AND id<>$3',
-          [actor.tenantId, 'SUPER_ADMIN', id],
+          [actor.tenantId, Role.SUPER_ADMIN, id],
         );
         if (!remaining?.count)
           throw new ForbiddenException('Keep at least one active super admin');

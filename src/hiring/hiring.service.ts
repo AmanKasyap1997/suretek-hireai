@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { DbService } from '../database/db.service';
 import { Actor } from '../common/actor';
 import { audit } from '../common/audit';
+import { ApplicationStage, JobStatus, OfferStatus } from '../common/enums';
 import {
   ApplicationInput,
   CandidateInput,
@@ -19,7 +20,7 @@ import {
 
 interface Job {
   id: string;
-  status: 'DRAFT' | 'APPROVED' | 'PUBLISHED' | 'CLOSED';
+  status: JobStatus;
 }
 interface Candidate {
   id: string;
@@ -30,13 +31,12 @@ interface Application {
   id: string;
   job_id: string;
   candidate_id: string;
-  stage:
-    'APPLIED' | 'SHORTLISTED' | 'INTERVIEW' | 'OFFER' | 'HIRED' | 'REJECTED';
+  stage: ApplicationStage;
 }
 interface Offer {
   id: string;
   application_id: string;
-  status: 'DRAFT' | 'APPROVED' | 'ACCEPTED';
+  status: OfferStatus;
   annual_ctc: string;
   currency: string;
   joining_date: string;
@@ -92,7 +92,7 @@ export class HiringService {
         [actor.tenantId, id],
       );
       if (!row) throw new NotFoundException('Job not found.');
-      if (row.status !== 'DRAFT')
+      if (row.status !== JobStatus.DRAFT)
         throw new ConflictException('Only draft jobs can be edited.');
       const job = await tx.one<Job>(
         `UPDATE jobs SET title=COALESCE($3,title),description=COALESCE($4,description),
@@ -112,18 +112,18 @@ export class HiringService {
     });
   }
 
-  async transitionJob(actor: Actor, id: string, target: Job['status']) {
+  async transitionJob(actor: Actor, id: string, target: JobStatus) {
     return this.db.transaction(async (tx) => {
       const row = await tx.one<Job>(
         'SELECT * FROM jobs WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
         [actor.tenantId, id],
       );
       if (!row) throw new NotFoundException('Job not found.');
-      const allowed: Record<Job['status'], Job['status'][]> = {
-        DRAFT: ['APPROVED', 'CLOSED'],
-        APPROVED: ['PUBLISHED', 'CLOSED'],
-        PUBLISHED: ['CLOSED'],
-        CLOSED: [],
+      const allowed: Record<JobStatus, JobStatus[]> = {
+        [JobStatus.DRAFT]: [JobStatus.APPROVED, JobStatus.CLOSED],
+        [JobStatus.APPROVED]: [JobStatus.PUBLISHED, JobStatus.CLOSED],
+        [JobStatus.PUBLISHED]: [JobStatus.CLOSED],
+        [JobStatus.CLOSED]: [],
       };
       if (!allowed[row.status].includes(target))
         throw new ConflictException(
@@ -173,7 +173,7 @@ export class HiringService {
         [actor.tenantId, input.jobId],
       );
       if (!job) throw new NotFoundException('Job not found.');
-      if (job.status !== 'PUBLISHED')
+      if (job.status !== JobStatus.PUBLISHED)
         throw new ConflictException('Applications require a published job.');
       const candidate = await tx.one<Candidate>(
         'SELECT id FROM candidates WHERE tenant_id=$1 AND id=$2',
@@ -222,13 +222,19 @@ export class HiringService {
         [actor.tenantId, id],
       );
       if (!row) throw new NotFoundException('Application not found.');
-      const allowed: Record<Application['stage'], string[]> = {
-        APPLIED: ['SHORTLISTED', 'REJECTED'],
-        SHORTLISTED: ['INTERVIEW', 'REJECTED'],
-        INTERVIEW: ['REJECTED'],
-        OFFER: [],
-        HIRED: [],
-        REJECTED: [],
+      const allowed: Record<ApplicationStage, ApplicationStage[]> = {
+        [ApplicationStage.APPLIED]: [
+          ApplicationStage.SHORTLISTED,
+          ApplicationStage.REJECTED,
+        ],
+        [ApplicationStage.SHORTLISTED]: [
+          ApplicationStage.INTERVIEW,
+          ApplicationStage.REJECTED,
+        ],
+        [ApplicationStage.INTERVIEW]: [ApplicationStage.REJECTED],
+        [ApplicationStage.OFFER]: [],
+        [ApplicationStage.HIRED]: [],
+        [ApplicationStage.REJECTED]: [],
       };
       if (!allowed[row.stage].includes(input.stage))
         throw new ConflictException(
@@ -253,7 +259,11 @@ export class HiringService {
         [actor.tenantId, input.applicationId],
       );
       if (!app) throw new NotFoundException('Application not found.');
-      if (!['SHORTLISTED', 'INTERVIEW'].includes(app.stage))
+      const offerEligibleStages: readonly ApplicationStage[] = [
+        ApplicationStage.SHORTLISTED,
+        ApplicationStage.INTERVIEW,
+      ];
+      if (!offerEligibleStages.includes(app.stage))
         throw new ConflictException(
           'Shortlist or interview the candidate before drafting an offer.',
         );
@@ -271,7 +281,7 @@ export class HiringService {
       );
       await tx.query(
         'UPDATE applications SET stage=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2',
-        [actor.tenantId, app.id, 'OFFER'],
+        [actor.tenantId, app.id, ApplicationStage.OFFER],
       );
       await audit(tx, actor, 'offer.created', 'offer', offer!.id);
       return offer;
@@ -302,11 +312,11 @@ export class HiringService {
         [actor.tenantId, id],
       );
       if (!offer) throw new NotFoundException('Offer not found.');
-      if (offer.status !== 'DRAFT')
+      if (offer.status !== OfferStatus.DRAFT)
         throw new ConflictException('Only draft offers can be approved.');
       const updated = await tx.one<Offer>(
-        `UPDATE offers SET status='APPROVED',approved_by=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *`,
-        [actor.tenantId, id, actor.userId],
+        `UPDATE offers SET status=$4,approved_by=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING *`,
+        [actor.tenantId, id, actor.userId, OfferStatus.APPROVED],
       );
       await audit(tx, actor, 'offer.approved', 'offer', id);
       return updated;
@@ -320,14 +330,14 @@ export class HiringService {
         [actor.tenantId, id],
       );
       if (!offer) throw new NotFoundException('Offer not found.');
-      if (offer.status !== 'APPROVED')
+      if (offer.status !== OfferStatus.APPROVED)
         throw new ConflictException(
           'Only approved offers can have acceptance recorded.',
         );
       const updated = await tx.one<Offer>(
-        `UPDATE offers SET status='ACCEPTED',accepted_at=now(),acceptance_reference=$3,updated_at=now()
+        `UPDATE offers SET status=$4,accepted_at=now(),acceptance_reference=$3,updated_at=now()
          WHERE tenant_id=$1 AND id=$2 RETURNING *`,
-        [actor.tenantId, id, acceptanceReference],
+        [actor.tenantId, id, acceptanceReference, OfferStatus.ACCEPTED],
       );
       // The reference is evidence metadata recorded by HR, not an electronic signature.
       await audit(tx, actor, 'offer.acceptance_recorded', 'offer', id);
@@ -342,7 +352,7 @@ export class HiringService {
         [actor.tenantId, id],
       );
       if (!offer) throw new NotFoundException('Offer not found.');
-      if (offer.status !== 'ACCEPTED')
+      if (offer.status !== OfferStatus.ACCEPTED)
         throw new ConflictException(
           'Record candidate acceptance before hiring.',
         );
@@ -356,7 +366,7 @@ export class HiringService {
         'SELECT * FROM applications WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
         [actor.tenantId, offer.application_id],
       );
-      if (!app || app.stage !== 'OFFER')
+      if (!app || app.stage !== ApplicationStage.OFFER)
         throw new ConflictException('Application is not in the offer stage.');
       const candidate = await tx.one<Candidate>(
         'SELECT * FROM candidates WHERE tenant_id=$1 AND id=$2',
@@ -394,8 +404,8 @@ export class HiringService {
         [actor.tenantId, employeeId],
       );
       await tx.query(
-        `UPDATE applications SET stage='HIRED',updated_at=now() WHERE tenant_id=$1 AND id=$2`,
-        [actor.tenantId, app.id],
+        `UPDATE applications SET stage=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2`,
+        [actor.tenantId, app.id, ApplicationStage.HIRED],
       );
       await audit(
         tx,

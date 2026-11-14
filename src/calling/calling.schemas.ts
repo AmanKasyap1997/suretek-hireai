@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { CallLanguage, ConsentScope } from '../common/enums';
 
 export const consentSchema = z
   .object({
-    scope: z.enum(['CALL', 'RECORDING', 'TRANSCRIPTION']),
+    scope: z.enum(ConsentScope),
     granted: z.boolean(),
     source: z.string().trim().min(3).max(1000),
   })
@@ -11,7 +12,7 @@ export const consentSchema = z
 export const callRequestSchema = z
   .object({
     applicationId: z.string().uuid(),
-    language: z.enum(['EN', 'HI']),
+    language: z.enum(CallLanguage),
     recording: z.boolean().default(false),
     transcription: z.boolean().default(false),
     idempotencyKey: z.string().trim().min(8).max(100),

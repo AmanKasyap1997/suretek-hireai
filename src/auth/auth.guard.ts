@@ -8,7 +8,8 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { DbService } from '../database/db.service';
-import { Actor, Role } from '../common/actor';
+import { Actor } from '../common/actor';
+import { Role } from '../common/enums';
 import { PUBLIC_KEY, ROLES_KEY } from './roles.decorator';
 @Injectable()
 export class AuthGuard implements CanActivate {

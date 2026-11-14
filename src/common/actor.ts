@@ -1,17 +1,6 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-export const roles = [
-  'SUPER_ADMIN',
-  'HR_ADMIN',
-  'RECRUITER',
-  'HIRING_MANAGER',
-  'INTERVIEWER',
-  'CANDIDATE',
-  'EMPLOYEE',
-  'REPORTING_MANAGER',
-  'PAYROLL_FINANCE',
-  'IT_ASSET_ADMIN',
-] as const;
-export type Role = (typeof roles)[number];
+import { Role } from './enums';
+export { Role } from './enums';
 export interface Actor {
   userId: string;
   tenantId: string;
