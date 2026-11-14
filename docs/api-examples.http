@@ -1,0 +1,180 @@
+@baseUrl = http://localhost:3000/api/v1
+@tenantId = REPLACE_WITH_BOOTSTRAP_TENANT_ID
+@token = REPLACE_WITH_LOGIN_ACCESS_TOKEN
+@jobId = REPLACE_WITH_JOB_ID
+@candidateId = REPLACE_WITH_CANDIDATE_ID
+@applicationId = REPLACE_WITH_APPLICATION_ID
+@offerId = REPLACE_WITH_OFFER_ID
+@employeeId = REPLACE_WITH_EMPLOYEE_ID
+@leaveRequestId = REPLACE_WITH_LEAVE_REQUEST_ID
+
+### Login: use the email/password configured for bootstrap.
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantId}}",
+  "email": "admin@example.com",
+  "password": "REPLACE_WITH_YOUR_BOOTSTRAP_PASSWORD"
+}
+
+### Current user
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+### Create a requisition
+POST {{baseUrl}}/jobs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Senior Node.js Developer",
+  "description": "Build and maintain TypeScript services with PostgreSQL.",
+  "department": "Engineering",
+  "location": "Bengaluru"
+}
+
+### Approve job
+POST {{baseUrl}}/jobs/{{jobId}}/approve
+Authorization: Bearer {{token}}
+
+### Publish to the internal listing only
+POST {{baseUrl}}/jobs/{{jobId}}/publish
+Authorization: Bearer {{token}}
+
+### Create candidate; email is deduplicated within the tenant.
+POST {{baseUrl}}/candidates
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Sample Candidate",
+  "email": "candidate@example.com",
+  "phone": "+919876543210"
+}
+
+### Create application
+POST {{baseUrl}}/applications
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "jobId": "{{jobId}}",
+  "candidateId": "{{candidateId}}"
+}
+
+### Human shortlisting
+PATCH {{baseUrl}}/applications/{{applicationId}}/stage
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "stage": "SHORTLISTED"
+}
+
+### Record call consent with an evidence reference; other scopes are independent.
+POST {{baseUrl}}/candidates/{{candidateId}}/consents
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "scope": "CALL",
+  "granted": true,
+  "source": "Candidate consent form reference CONSENT-001"
+}
+
+### Optional plan: enable CALL_PLANNING_ENABLED and use the allowed calling window.
+### This creates a planning record only; no external call is made.
+POST {{baseUrl}}/call-requests
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "applicationId": "{{applicationId}}",
+  "language": "EN",
+  "recording": false,
+  "transcription": false,
+  "idempotencyKey": "sample-call-plan-001"
+}
+
+### Draft offer: monetary value is a decimal string.
+POST {{baseUrl}}/offers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "applicationId": "{{applicationId}}",
+  "annualCtc": "1800000.00",
+  "currency": "INR",
+  "joiningDate": "2027-01-11"
+}
+
+### Approve offer
+POST {{baseUrl}}/offers/{{offerId}}/approve
+Authorization: Bearer {{token}}
+
+### HR records acceptance evidence; no candidate portal/e-signature exists yet.
+POST {{baseUrl}}/offers/{{offerId}}/accept
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "acceptanceReference": "Candidate acceptance email stored under OFFER-001"
+}
+
+### Hire: retrying this same offer returns its existing employee.
+POST {{baseUrl}}/offers/{{offerId}}/hire
+Authorization: Bearer {{token}}
+
+### Paginated staff lists
+GET {{baseUrl}}/employees?limit=25&offset=0
+Authorization: Bearer {{token}}
+
+### Initial onboarding tasks created by hire-to-join
+GET {{baseUrl}}/employees/{{employeeId}}/onboarding-tasks
+Authorization: Bearer {{token}}
+
+### HR records a leave request; leave balances/accruals are future work.
+POST {{baseUrl}}/leave-requests
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "employeeId": "{{employeeId}}",
+  "type": "ANNUAL",
+  "startDate": "2027-01-18",
+  "endDate": "2027-01-19",
+  "reason": "Personal leave"
+}
+
+### HR reviews a pending leave request
+POST {{baseUrl}}/leave-requests/{{leaveRequestId}}/review
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "APPROVED"
+}
+
+### HR records one attendance entry per employee/work date
+POST {{baseUrl}}/attendance
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "employeeId": "{{employeeId}}",
+  "workDate": "2027-01-12",
+  "checkIn": "2027-01-12T09:00:00+05:30",
+  "checkOut": "2027-01-12T18:00:00+05:30"
+}
+
+### Revoke calling consent; affected pending plans are cancelled.
+POST {{baseUrl}}/candidates/{{candidateId}}/consents
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "scope": "CALL",
+  "granted": false,
+  "source": "Candidate opt-out email reference OPTOUT-001"
+}

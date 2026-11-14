@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: hireai
+      POSTGRES_PASSWORD: hireai_dev
+      POSTGRES_DB: hireai
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hireai -d hireai']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    profiles: ['app']
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://hireai:hireai_dev@postgres:5432/hireai
+      NODE_ENV: production
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

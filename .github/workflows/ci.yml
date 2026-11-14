@@ -1,0 +1,65 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, build and PostgreSQL integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_USER: hireai
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: hireai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hireai -d hireai_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://hireai:ci_test_password@localhost:5432/hireai_test
+      JWT_SECRET: ci-only-isolated-test-secret-0123456789abcdef
+      JWT_EXPIRES_IN_SECONDS: '900'
+      CALL_PLANNING_ENABLED: 'false'
+      CALL_TIMEZONE: Asia/Kolkata
+      CALL_WINDOW_START: '09:00'
+      CALL_WINDOW_END: '18:00'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2; Node.js 24 action runtime
+      - name: Set up Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0; Node.js 24 action runtime
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Check formatting
+        run: npm run format:check
+      - name: Build
+        run: npm run build
+      - name: Apply PostgreSQL migrations
+        run: npm run db:migrate
+      - name: Verify migration retries are safe
+        run: npm run db:migrate
+      - name: Run tests
+        run: npm test
