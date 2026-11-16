@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 # One source copy and one install/build layer also keep VFS-backed builders small.
 COPY . .
@@ -9,7 +9,7 @@ RUN npm ci \
     && mkdir /runtime \
     && mv node_modules dist package.json package-lock.json database /runtime/
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
