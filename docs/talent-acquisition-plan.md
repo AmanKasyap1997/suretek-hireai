@@ -1,10 +1,11 @@
 # Talent Acquisition plan
 
-| Milestone | Status   |
-| --------- | -------- |
-| A         | Complete |
-| B         | Complete |
-| C         | Complete |
+| Milestone | Status      |
+| --------- | ----------- |
+| A         | Complete    |
+| B         | Complete    |
+| C         | Complete    |
+| D         | In progress |
 
 ## Working rules (apply to every milestone)
 
@@ -41,7 +42,19 @@ C2. scorecards per panelist: scores against the job's screening criteria, recomm
 C3. CalendarPort interface with a stub only (no real calendar integration yet).
 C4. Reports from stage events: funnel by job and period, time-in-stage, time-to-hire; restricted to admin and recruiter roles; indexed.
 
-## Non-goals for all three milestones
+## Milestone D: Phase 1 readiness
+
+D1. Malware scanning: add ClamAvScanner behind MalwareScanPort using clamd INSTREAM over TCP, with bounded chunks, total size, replies and timeouts. Configure MALWARE_SCANNER=clamav|pending; production requires an explicit choice. A tenant-scoped documents:scan batch CLI locks eligible documents with FOR UPDATE SKIP LOCKED, records CLEAN/INFECTED/FAILED and scanned_at, audits results transactionally, retries failures with a cap and never reuses infected documents. Grant updates only to the scanning fields. Use a fake clamd server, including EICAR, in tests; provide optional Compose ClamAV and real-scanner verification instructions.
+
+D2. Storage safety: production requires S3 unless RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION=true explicitly permits a persistent private local volume. Add MinIO to Compose and CI, and exercise actual S3ObjectStorage upload/download/delete/missing-object round trips against it. Fix protocol/signing defects exposed by these checks.
+
+D3. Contact verification: introduce EmailPort and a log-only development adapter, without a provider integration. Public intake issues a single-use, expiring token with only its hash persisted. Verification uses constant-time comparison and bounded attempts, has a generic response for existing/unknown addresses, and appends new verified consent evidence with a verification method; existing evidence is never updated. A verification must identify the exact intake choices it confirms and cannot overwrite newer revocation/erasure evidence. Call planning continues to require verified CALL consent.
+
+D4. Abuse protection: add a fail-closed Cloudflare Turnstile CaptchaPort adapter with request timeout. Production requires a real adapter or CAPTCHA_DISABLED_ACKNOWLEDGED=true. Count email/client intake buckets only after CAPTCHA and input validation; retain independent client/IP protection so submitting another person's email cannot exhaust that person's unrelated client bucket. Document privacy, trust-proxy and residual abuse limits.
+
+Add unit/integration coverage, cross-tenant and permission checks for new resources, and preserve the RLS coverage guard. Update README, blueprint scope, Milestone B operations, hardening and API examples. Complete the acceptance checks below and record files, schema, decisions, results, verification limits and a PR description.
+
+## Non-goals for all milestones
 
 AI screening calls, durable job queue, call dispatch, real telephony or calendar providers, candidate portal, payroll, HR self-service.
 
