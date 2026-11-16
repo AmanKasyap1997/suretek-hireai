@@ -1,4 +1,4 @@
-import { Actor } from './actor';
+import { Actor } from '../../shared/actor';
 import { DbClient } from '../database/db.service';
 export async function audit(
   db: DbClient,

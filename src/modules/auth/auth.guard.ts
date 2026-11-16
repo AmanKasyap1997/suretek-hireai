@@ -8,11 +8,11 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { z } from 'zod';
-import { DbService } from '../database/db.service';
-import { setTenantId } from '../database/tenant-context';
-import { Actor } from '../common/actor';
-import { Role } from '../common/enums';
-import { PUBLIC_KEY, ROLES_KEY } from './roles.decorator';
+import { DbService } from '../../platform/database/db.service';
+import { setTenantId } from '../../platform/database/tenant-context';
+import { Actor } from '../../shared/actor';
+import { Role } from '../../shared/enums';
+import { PUBLIC_KEY, ROLES_KEY } from '../../shared/roles.decorator';
 
 const claimsSchema = z.object({
   sub: z.string().uuid(),

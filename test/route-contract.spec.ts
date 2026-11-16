@@ -10,8 +10,8 @@ import {
 import { ApplicationConfig } from '@nestjs/core/application-config';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
-import { PUBLIC_KEY, ROLES_KEY } from '../src/auth/roles.decorator';
-import { Role } from '../src/common/enums';
+import { PUBLIC_KEY, ROLES_KEY } from '../src/shared/roles.decorator';
+import { Role } from '../src/shared/enums';
 
 interface RouteContract {
   method: string;

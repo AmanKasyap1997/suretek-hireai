@@ -1,4 +1,4 @@
-import { Role } from '../common/enums';
+import { Role } from './enums';
 
 /** Every enum role can read its own authenticated profile. */
 export const ALL_ROLES: readonly Role[] = Object.values(Role);

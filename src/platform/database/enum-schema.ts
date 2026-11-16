@@ -9,9 +9,9 @@ import {
   LeaveType,
   OfferStatus,
   Role,
-} from '../common/enums';
+} from '../../shared/enums';
 
-/** Enum-to-column mappings; persisted values belong only in common/enums.ts. */
+/** Enum-to-column mappings; persisted values belong only in shared/enums.ts. */
 export interface EnumColumnDefinition {
   enumName: string;
   table: string;

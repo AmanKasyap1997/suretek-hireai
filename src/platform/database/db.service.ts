@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Pool, PoolClient, QueryResultRow } from 'pg';
-import { readConfig } from '../common/config';
+import { readConfig } from '../config';
 import { tenantContext } from './tenant-context';
 
 export interface DbClient {

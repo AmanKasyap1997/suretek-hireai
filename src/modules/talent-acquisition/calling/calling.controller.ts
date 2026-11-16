@@ -8,10 +8,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Roles } from '../auth/roles.decorator';
-import { RECRUITMENT_ROLES } from '../auth/role-groups';
-import { Actor, CurrentUser } from '../common/actor';
-import { BodySchema, parse } from '../common/validation';
+import { Roles } from '../../../shared/roles.decorator';
+import { RECRUITMENT_ROLES } from '../../../shared/role-groups';
+import { Actor, CurrentUser } from '../../../shared/actor';
+import { BodySchema, parse } from '../../../platform/http/validation';
 import {
   callRequestSchema,
   callingPaginationSchema,

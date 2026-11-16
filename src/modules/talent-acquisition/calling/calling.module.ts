@@ -6,5 +6,6 @@ import { CallingClock } from './calling.clock';
 @Module({
   controllers: [CallingController],
   providers: [CallingService, CallingClock],
+  exports: [CallingService, CallingClock],
 })
 export class CallingModule {}

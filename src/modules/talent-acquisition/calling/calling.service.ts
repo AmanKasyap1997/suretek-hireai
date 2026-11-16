@@ -4,16 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Actor } from '../common/actor';
-import { audit } from '../common/audit';
+import { Actor } from '../../../shared/actor';
+import { audit } from '../../../platform/audit/audit';
 import {
   ApplicationStage,
   CallLanguage,
   CallRequestStatus,
   ConsentScope,
   JobStatus,
-} from '../common/enums';
-import { DbClient, DbService } from '../database/db.service';
+} from '../../../shared/enums';
+import { DbClient, DbService } from '../../../platform/database/db.service';
 import { callPolicyFromEnv, isWithinCallingWindow } from './calling.policy';
 import { CallingClock } from './calling.clock';
 import {

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { randomBytes, randomUUID, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
-import { Role } from '../src/common/enums';
+import { Role } from '../src/shared/enums';
 import { migrationDatabaseUrl } from './database-connection';
 
 const scryptAsync = promisify(scrypt);

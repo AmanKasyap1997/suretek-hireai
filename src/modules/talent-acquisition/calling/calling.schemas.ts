@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CallLanguage, ConsentScope } from '../common/enums';
+import { CallLanguage, ConsentScope } from '../../../shared/enums';
 
 export const consentSchema = z
   .object({

@@ -12,9 +12,12 @@ import {
   EnumSchema,
   EnumSnapshot,
   enumSchema,
-} from '../src/database/enum-schema';
+} from '../src/platform/database/enum-schema';
 
-export type { EnumSchema, EnumSnapshot } from '../src/database/enum-schema';
+export type {
+  EnumSchema,
+  EnumSnapshot,
+} from '../src/platform/database/enum-schema';
 
 function sortedUnique(values: readonly string[]): string[] {
   if (
@@ -102,7 +105,7 @@ export function renderEnumMigration(
 ): string {
   const canonical = canonicalSnapshot(snapshot);
   const statements = [
-    '-- Generated from src/common/enums.ts by npm run enums:generate.',
+    '-- Generated from src/shared/enums.ts by npm run enums:generate.',
     '-- Commit this migration and database/enums.snapshot.json together.',
     '-- Renamed/removed values require an explicit preceding data migration.',
     '-- Never edit migrations that have already been applied.',
