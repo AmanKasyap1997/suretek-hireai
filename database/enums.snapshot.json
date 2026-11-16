@@ -113,6 +113,52 @@
       "defaultValue": "ACTIVE"
     },
     {
+      "enumName": "InterviewStatus",
+      "table": "interview_panelists",
+      "column": "status",
+      "constraintName": "interview_panelists_status_check",
+      "values": [
+        "CANCELLED",
+        "SCHEDULED"
+      ],
+      "defaultValue": "SCHEDULED"
+    },
+    {
+      "enumName": "ScorecardRecommendation",
+      "table": "interview_scorecards",
+      "column": "recommendation",
+      "constraintName": "interview_scorecards_recommendation_check",
+      "values": [
+        "HIRE",
+        "HOLD",
+        "NO_HIRE",
+        "STRONG_HIRE",
+        "STRONG_NO_HIRE"
+      ]
+    },
+    {
+      "enumName": "InterviewMode",
+      "table": "interviews",
+      "column": "mode",
+      "constraintName": "interviews_mode_check",
+      "values": [
+        "ONSITE",
+        "PHONE",
+        "VIDEO"
+      ]
+    },
+    {
+      "enumName": "InterviewStatus",
+      "table": "interviews",
+      "column": "status",
+      "constraintName": "interviews_status_check",
+      "values": [
+        "CANCELLED",
+        "SCHEDULED"
+      ],
+      "defaultValue": "SCHEDULED"
+    },
+    {
       "enumName": "AssignmentRole",
       "table": "job_assignments",
       "column": "role",
