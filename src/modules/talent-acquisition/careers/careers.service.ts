@@ -13,7 +13,11 @@ import { readConfig } from '../../../platform/config';
 import { audit } from '../../../platform/audit/audit';
 import { stageEvent } from '../../../shared/ta-history';
 import { ApplicationStage, ConsentScope } from '../../../shared/enums';
-import { StoredObject, CaptchaPort } from '../../../integrations';
+import {
+  StoredObject,
+  CaptchaPort,
+  validateResume,
+} from '../../../integrations';
 import { DocumentsService } from '../documents';
 import { IntakeInput } from './careers.schemas';
 
@@ -101,6 +105,16 @@ export class CareersService {
         throw new BadRequestException('Use the current consent notice version');
       if (!(await this.captcha.verify(input.captchaToken, ip)))
         throw new ForbiddenException('Intake verification failed');
+      const resume = input.resume
+        ? {
+            originalname: input.resume.filename,
+            buffer: Buffer.from(input.resume.base64, 'base64'),
+          }
+        : undefined;
+      // Validate before the duplicate-application branch so malformed uploads
+      // cannot reveal whether an email address has already applied.
+      if (resume)
+        validateResume(resume.originalname, resume.buffer, c.RESUME_MAX_BYTES);
       const keys: StoredObject[] = [];
       try {
         return await this.db.transaction(async (tx) => {
@@ -163,16 +177,9 @@ export class CareersService {
               },
             );
           }
-          if (input.resume)
-            await this.documents.write(
-              tx,
-              actor,
-              candidate.id,
-              {
-                originalname: input.resume.filename,
-                buffer: Buffer.from(input.resume.base64, 'base64'),
-              },
-              (key) => keys.push(key),
+          if (resume)
+            await this.documents.write(tx, actor, candidate.id, resume, (key) =>
+              keys.push(key),
             );
           await audit(
             tx,

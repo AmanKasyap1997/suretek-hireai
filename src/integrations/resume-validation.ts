@@ -1,5 +1,6 @@
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import { basename } from 'node:path';
+import { crc32, inflateRawSync } from 'node:zlib';
 
 /** ZIP central-directory validation distinguishes DOCX packages from arbitrary ZIPs. */
 function isDocx(bytes: Buffer): boolean {
@@ -60,16 +61,48 @@ function isDocx(bytes: Buffer): boolean {
       return false;
     const localNameLength = bytes.readUInt16LE(local + 26),
       localExtra = bytes.readUInt16LE(local + 28);
+    const dataStart = local + 30 + localNameLength + localExtra;
     if (
+      bytes.readUInt16LE(local + 6) !== flags ||
+      bytes.readUInt16LE(local + 8) !== method ||
       localNameLength !== nameLength ||
       bytes
         .subarray(local + 30, local + 30 + localNameLength)
         .toString('utf8') !== name ||
-      local + 30 + localNameLength + localExtra + compressed > offset
+      dataStart + compressed > offset
     )
       return false;
+    // A data descriptor permits zero sizes/CRC in the local header. Otherwise
+    // both headers must describe the exact same entry.
+    for (const [localField, expected] of [
+      [14, bytes.readUInt32LE(cursor + 16)],
+      [18, compressed],
+      [22, uncompressed],
+    ]) {
+      const actual = bytes.readUInt32LE(local + localField);
+      if (actual !== expected && (!(flags & 8) || actual !== 0)) return false;
+    }
     total += uncompressed;
     if (total > 20 * 1024 * 1024) return false;
+    // Do not trust ZIP size declarations: malformed/over-expanding streams and
+    // corrupt entries must fail before reaching a scanner or private storage.
+    const compressedBytes = bytes.subarray(dataStart, dataStart + compressed);
+    let content: Buffer;
+    try {
+      content =
+        method === 0
+          ? compressedBytes
+          : inflateRawSync(compressedBytes, {
+              maxOutputLength: Math.max(uncompressed, 1),
+            });
+    } catch {
+      return false;
+    }
+    if (
+      content.length !== uncompressed ||
+      crc32(content) !== bytes.readUInt32LE(cursor + 16)
+    )
+      return false;
     names.add(name);
     cursor += 46 + nameLength + extra + comment;
   }
