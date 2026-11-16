@@ -17,6 +17,7 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { DbService } from '../database/db.service';
+import { setTenantId } from '../database/tenant-context';
 import { Actor, CurrentUser } from '../common/actor';
 import { Role } from '../common/enums';
 import { ADMIN_ROLES, ALL_ROLES } from './role-groups';
@@ -55,6 +56,7 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
   async login(input: z.infer<typeof loginSchema>) {
+    setTenantId(input.tenantId);
     const user = await this.db.one(
       'SELECT id,tenant_id,password_hash,active FROM users WHERE tenant_id=$1 AND lower(email)=$2',
       [input.tenantId, input.email],

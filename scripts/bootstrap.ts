@@ -3,17 +3,17 @@ import { randomBytes, randomUUID, scrypt } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
 import { Role } from '../src/common/enums';
+import { migrationDatabaseUrl } from './database-connection';
 
 const scryptAsync = promisify(scrypt);
 
 async function main(): Promise<void> {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = migrationDatabaseUrl();
   const tenantName = process.env.BOOTSTRAP_TENANT_NAME?.trim();
   const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
   const fullName = process.env.BOOTSTRAP_ADMIN_NAME?.trim();
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
-  const suppliedTenantId = process.env.BOOTSTRAP_TENANT_ID;
-  if (!connectionString) throw new Error('DATABASE_URL is required');
+  const suppliedTenantId = process.env.BOOTSTRAP_TENANT_ID?.trim() || undefined;
   if (!tenantName || !email || !fullName || !password) {
     throw new Error(
       'BOOTSTRAP_TENANT_NAME, BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_NAME and BOOTSTRAP_ADMIN_PASSWORD are required',
@@ -33,6 +33,9 @@ async function main(): Promise<void> {
   ) {
     throw new Error('BOOTSTRAP_TENANT_ID must be a UUID');
   }
+  // A no-ID invocation always creates a new tenant. Keep the printed UUID for
+  // subsequent invocations rather than trying to identify tenants by name.
+  const tenantId = suppliedTenantId ?? randomUUID();
   const pool = new Pool({
     connectionString,
     max: 1,
@@ -45,31 +48,19 @@ async function main(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // Serializes bootstrap invocations, including the first run without a UUID.
+    // FORCE RLS applies to the owner too. Establish a transaction-local context
+    // before reading or inserting any tenant data; do not perform global scans.
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [
+      tenantId,
+    ]);
     await client.query(
       "SELECT pg_advisory_xact_lock(hashtext('suretek-hireai-bootstrap'))",
     );
-    let tenantId = suppliedTenantId;
-    if (tenantId) {
-      const tenant = await client.query<{ id: string }>(
-        'SELECT id FROM tenants WHERE id = $1',
-        [tenantId],
-      );
-      if (!tenant.rows.length)
-        await client.query('INSERT INTO tenants (id, name) VALUES ($1, $2)', [
-          tenantId,
-          tenantName,
-        ]);
-    } else {
-      const tenants = await client.query<{ id: string }>(
-        'SELECT id FROM tenants WHERE name = $1',
-        [tenantName],
-      );
-      if (tenants.rows.length)
-        throw new Error(
-          'A tenant with this name already exists; provide BOOTSTRAP_TENANT_ID to target it explicitly',
-        );
-      tenantId = randomUUID();
+    const tenant = await client.query<{ id: string }>(
+      'SELECT id FROM tenants WHERE id = $1',
+      [tenantId],
+    );
+    if (!tenant.rows.length) {
       await client.query('INSERT INTO tenants (id, name) VALUES ($1, $2)', [
         tenantId,
         tenantName,
@@ -103,6 +94,11 @@ async function main(): Promise<void> {
     await client.query('COMMIT');
     console.log(`Tenant ID: ${tenantId}`);
     console.log(`Admin user ID: ${userId}`);
+    if (!suppliedTenantId) {
+      console.log(
+        'Created a new tenant because BOOTSTRAP_TENANT_ID was not supplied. Save the printed tenant ID and supply it for every rerun.',
+      );
+    }
     console.log(
       'Bootstrap complete. Remove BOOTSTRAP_ADMIN_PASSWORD from the environment after use.',
     );
