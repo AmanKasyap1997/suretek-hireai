@@ -170,7 +170,7 @@ export class OffersService {
       if (!app || app.stage !== ApplicationStage.OFFER)
         throw new ConflictException('Application is not in the offer stage.');
       const candidate = await tx.one<Candidate>(
-        'SELECT * FROM candidates WHERE tenant_id=$1 AND id=$2',
+        'SELECT * FROM candidates WHERE tenant_id=$1 AND id=$2 AND erased_at IS NULL FOR SHARE',
         [actor.tenantId, app.candidate_id],
       );
       if (!candidate) throw new NotFoundException('Candidate not found.');

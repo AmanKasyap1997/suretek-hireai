@@ -50,6 +50,11 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
     [userId, tenantId, `${userId}@example.test`, Role.HR_ADMIN],
   );
   await client.query(
+    `INSERT INTO public_intake_limits(tenant_id,bucket_key,window_start,hits) VALUES($1,$2,now(),1)`,
+    [tenantId, '0'.repeat(64)],
+  );
+
+  await client.query(
     `INSERT INTO jobs(id,tenant_id,title,description,department,location,status,created_by)
      VALUES($1,$2,'RLS job','RLS fixture job description','Engineering','Remote',$3,$4)`,
     [jobId, tenantId, JobStatus.PUBLISHED, userId],
@@ -57,6 +62,10 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
   await client.query(
     `INSERT INTO candidates(id,tenant_id,full_name,email) VALUES($1,$2,'RLS Candidate',$3)`,
     [candidateId, tenantId, `${candidateId}@example.test`],
+  );
+  await client.query(
+    `INSERT INTO candidate_documents(tenant_id,candidate_id,object_key,original_name,content_type,byte_size,sha256) VALUES($1,$2,$3,'fixture.pdf','application/pdf',8,$4)`,
+    [tenantId, candidateId, `${tenantId}/${randomUUID()}`, '0'.repeat(64)],
   );
   await client.query(
     `INSERT INTO applications(id,tenant_id,job_id,candidate_id,stage) VALUES($1,$2,$3,$4,$5)`,
@@ -180,6 +189,8 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
   afterAll(async () => {
     if (admin && first && second) {
       for (const table of [
+        'candidate_documents',
+        'public_intake_limits',
         'application_stage_events',
         'job_assignments',
         'audit_events',

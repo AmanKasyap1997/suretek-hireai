@@ -53,6 +53,21 @@ describe('Production configuration', () => {
     expect(() => readConfig()).toThrow(/OFFER_MAKER_CHECKER/);
   });
 
+  it('validates S3 configuration and rejects plaintext production storage endpoints', () => {
+    process.env.RESUME_STORAGE = 's3';
+    expect(() => readConfig()).toThrow(/requires endpoint/);
+    Object.assign(process.env, {
+      S3_ENDPOINT: 'http://storage.example.test',
+      S3_BUCKET: 'private-resumes',
+      S3_ACCESS_KEY_ID: 'test-only-id',
+      S3_SECRET_ACCESS_KEY: 'test-only-secret',
+    });
+    expect(() => readConfig()).toThrow(/must use HTTPS/);
+    process.env.S3_ENDPOINT = 'https://storage.example.test';
+    expect(readConfig().RESUME_STORAGE).toBe('s3');
+    process.env.S3_ENDPOINT = 'https://storage.example.test/path';
+    expect(() => readConfig()).toThrow(/HTTP\(S\) origin/);
+  });
   it('disables Swagger UI and JSON by default in production', async () => {
     const configured = await createApp();
     expect(readConfig().SWAGGER_ENABLED).toBe(false);

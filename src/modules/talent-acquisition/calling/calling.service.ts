@@ -128,12 +128,12 @@ export class CallingService {
     );
     if (!candidate) throw new NotFoundException('Candidate not found');
     const data = await this.db.query<ConsentRow>(
-      `SELECT id,scope,granted,source,created_at FROM consents
+      `SELECT id,scope,granted,source,created_at,verified,notice_version FROM consents
        WHERE tenant_id=$1 AND candidate_id=$2 ORDER BY sequence_id DESC LIMIT $3 OFFSET $4`,
       [actor.tenantId, candidateId, pagination.limit, pagination.offset],
     );
     const latest = await this.db.query<ConsentRow>(
-      `SELECT DISTINCT ON (scope) id,scope,granted,source,created_at FROM consents
+      `SELECT DISTINCT ON (scope) id,scope,granted,source,created_at,verified,notice_version FROM consents
        WHERE tenant_id=$1 AND candidate_id=$2 ORDER BY scope,sequence_id DESC`,
       [actor.tenantId, candidateId],
     );
@@ -196,7 +196,7 @@ export class CallingService {
         granted: boolean;
       }>(
         `SELECT DISTINCT ON (scope) scope,granted FROM consents
-         WHERE tenant_id=$1 AND candidate_id=$2 ORDER BY scope,sequence_id DESC`,
+         WHERE tenant_id=$1 AND candidate_id=$2 AND verified=true ORDER BY scope,sequence_id DESC`,
         [actor.tenantId, current.candidate_id],
       );
       const required: ConsentScope[] = [
@@ -283,7 +283,7 @@ export class CallingService {
 
   private async lockCandidate(tx: DbClient, actor: Actor, candidateId: string) {
     const candidate = await tx.one<{ id: string }>(
-      'SELECT id FROM candidates WHERE tenant_id=$1 AND id=$2 FOR NO KEY UPDATE',
+      'SELECT id FROM candidates WHERE tenant_id=$1 AND id=$2 AND erased_at IS NULL FOR NO KEY UPDATE',
       [actor.tenantId, candidateId],
     );
     if (!candidate) throw new NotFoundException('Candidate not found');

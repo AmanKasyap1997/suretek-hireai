@@ -179,6 +179,36 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
   },
   {
     "method": "GET",
+    "path": "/api/v1/candidates/:candidateId/documents",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/candidates/:candidateId/documents",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/candidates/:candidateId/documents/:id/download",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/candidates/:id",
     "public": false,
     "roles": [
@@ -204,6 +234,15 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/candidates/:id/erase",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
       "SUPER_ADMIN",
     ],
   },
@@ -463,6 +502,24 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "SUPER_ADMIN",
     ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/public/:tenantSlug/jobs",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/public/:tenantSlug/jobs/:id",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/public/:tenantSlug/jobs/:id/applications",
+    "public": true,
+    "roles": [],
   },
   {
     "method": "GET",

@@ -242,3 +242,51 @@ Authorization: Bearer {{token}}
 ### Expire (409 before expiresAt)
 POST {{baseUrl}}/offers/{{offerId}}/expire
 Authorization: Bearer {{token}}
+
+
+### Milestone B: configure a public slug through bootstrap, or use tenant-<UUID>
+@tenantSlug = tenant-REPLACE_WITH_TENANT_UUID
+@documentId = REPLACE_WITH_DOCUMENT_UUID
+
+### Public published jobs and current noticeVersion (no authentication)
+GET {{baseUrl}}/public/{{tenantSlug}}/jobs?limit=25&offset=0
+
+### Public job details (no staff-only fields)
+GET {{baseUrl}}/public/{{tenantSlug}}/jobs/{{jobId}}
+
+### Public intake: all three consents are independent and default false
+POST {{baseUrl}}/public/{{tenantSlug}}/jobs/{{jobId}}/applications
+Content-Type: application/json
+
+{"fullName":"Example Applicant","email":"applicant@example.test","phone":"+919876543210","noticeVersion":"2026-11-v1","consents":{"CALL":false,"RECORDING":false,"TRANSCRIPTION":false},"website":""}
+
+### Optional public resume: add {"resume":{"filename":"resume.pdf","base64":"<BASE64>"}} to intake (max 512 KiB)
+### New/existing/duplicate submissions return the same 202 message; consent remains unverified.
+
+### Staff multipart upload; replace ./resume.pdf with a real local PDF/DOCX
+POST {{baseUrl}}/candidates/{{candidateId}}/documents
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=resume-boundary
+
+--resume-boundary
+Content-Disposition: form-data; name="file"; filename="resume.pdf"
+Content-Type: application/pdf
+
+< ./resume.pdf
+--resume-boundary--
+
+### Staff document metadata (private object keys are never returned)
+GET {{baseUrl}}/candidates/{{candidateId}}/documents
+Authorization: Bearer {{token}}
+
+### Audited attachment download: returns 409 until a real scanner returns CLEAN
+GET {{baseUrl}}/candidates/{{candidateId}}/documents/{{documentId}}/download
+Authorization: Bearer {{token}}
+
+### Admin erasure: documentsPending=0 confirms object deletion; retry if positive
+POST {{baseUrl}}/candidates/{{candidateId}}/erase
+Authorization: Bearer {{token}}
+
+### CLI: npm run build
+### CLI preview: npm run retention -- --tenant-id <UUID> --actor-id <ADMIN_UUID> --dry-run
+### CLI execute: npm run retention -- --tenant-id <UUID> --actor-id <ADMIN_UUID> --limit 100

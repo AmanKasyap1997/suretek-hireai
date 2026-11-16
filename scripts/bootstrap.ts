@@ -9,6 +9,11 @@ const scryptAsync = promisify(scrypt);
 
 async function main(): Promise<void> {
   const connectionString = migrationDatabaseUrl();
+  const tenantSlug = process.env.BOOTSTRAP_TENANT_SLUG?.trim();
+  if (tenantSlug && !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(tenantSlug))
+    throw new Error(
+      'BOOTSTRAP_TENANT_SLUG must be a lowercase URL slug, 3–63 characters',
+    );
   const tenantName = process.env.BOOTSTRAP_TENANT_NAME?.trim();
   const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
   const fullName = process.env.BOOTSTRAP_ADMIN_NAME?.trim();
@@ -61,11 +66,16 @@ async function main(): Promise<void> {
       [tenantId],
     );
     if (!tenant.rows.length) {
-      await client.query('INSERT INTO tenants (id, name) VALUES ($1, $2)', [
-        tenantId,
-        tenantName,
-      ]);
+      await client.query(
+        'INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)',
+        [tenantId, tenantName, tenantSlug ?? null],
+      );
     }
+    if (tenant.rows.length && tenantSlug)
+      await client.query('UPDATE tenants SET slug=$2 WHERE id=$1', [
+        tenantId,
+        tenantSlug,
+      ]);
     const existing = await client.query(
       'SELECT id FROM users WHERE tenant_id = $1 AND lower(email) = $2',
       [tenantId, email],
