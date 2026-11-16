@@ -7,6 +7,9 @@
 @offerId = REPLACE_WITH_OFFER_ID
 @employeeId = REPLACE_WITH_EMPLOYEE_ID
 @leaveRequestId = REPLACE_WITH_LEAVE_REQUEST_ID
+@interviewId = REPLACE_WITH_INTERVIEW_ID
+@panelistUserId = REPLACE_WITH_ACTIVE_PANELIST_USER_ID
+@panelistToken = REPLACE_WITH_PANELIST_LOGIN_TOKEN
 
 ### Login: use the email/password configured for bootstrap.
 POST {{baseUrl}}/auth/login
@@ -31,7 +34,8 @@ Content-Type: application/json
   "title": "Senior Node.js Developer",
   "description": "Build and maintain TypeScript services with PostgreSQL.",
   "department": "Engineering",
-  "location": "Bengaluru"
+  "location": "Bengaluru",
+  "screeningCriteria": [{"id":"nodejs","label":"Node.js","weight":100,"must_have":true}]
 }
 
 ### Approve job
@@ -290,3 +294,73 @@ Authorization: Bearer {{token}}
 ### CLI: npm run build
 ### CLI preview: npm run retention -- --tenant-id <UUID> --actor-id <ADMIN_UUID> --dry-run
 ### CLI execute: npm run retention -- --tenant-id <UUID> --actor-id <ADMIN_UUID> --limit 100
+
+### Milestone C: schedule locally (staff); use future dates and a SHORTLISTED/INTERVIEW application.
+### VIDEO requires a manually supplied HTTPS link. No calendar event or meeting link is generated.
+POST {{baseUrl}}/interviews
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "applicationId": "{{applicationId}}",
+  "round": "Technical 1",
+  "mode": "VIDEO",
+  "startsAt": "2027-01-15T10:00:00+05:30",
+  "endsAt": "2027-01-15T11:00:00+05:30",
+  "meetingUrl": "https://meet.example.com/manual-interview-link",
+  "panelistIds": ["{{panelistUserId}}"]
+}
+
+### Staff see tenant interviews; HM/interviewer users see only actual panel membership.
+GET {{baseUrl}}/interviews?applicationId={{applicationId}}&limit=25&offset=0
+Authorization: Bearer {{token}}
+
+### Detail includes frozen criteria_snapshot and panelist_ids.
+GET {{baseUrl}}/interviews/{{interviewId}}
+Authorization: Bearer {{token}}
+
+### Reschedule both timestamps together; conflicting panelist reservations return 409.
+PATCH {{baseUrl}}/interviews/{{interviewId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "startsAt": "2027-01-15T11:00:00+05:30",
+  "endsAt": "2027-01-15T12:00:00+05:30"
+}
+
+### Submit once using the actual panelist's token; match ALL frozen criterion IDs.
+### scores: [] is valid only when criteria_snapshot is empty. Submission never changes hiring stage.
+POST {{baseUrl}}/interviews/{{interviewId}}/scorecards
+Authorization: Bearer {{panelistToken}}
+Content-Type: application/json
+
+{
+  "scores": [{"criterionId":"nodejs","score":4}],
+  "recommendation": "HIRE",
+  "notes": "Evidence-based technical assessment"
+}
+
+### Staff read all cards for this interview; HM/interviewers read only their own submissions.
+GET {{baseUrl}}/interviews/{{interviewId}}/scorecards
+Authorization: Bearer {{token}}
+
+### Staff cancellation is idempotent and releases active panelist reservations.
+POST {{baseUrl}}/interviews/{{interviewId}}/cancel
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"reason":"Candidate requested cancellation"}
+
+### Reports: only recruiter/admin roles, strict query, inclusive from/exclusive to, maximum 366 days.
+### Use observed historical periods; omit dates for the last 30 days. Durations are seconds.
+GET {{baseUrl}}/reports/recruitment/funnel?jobId={{jobId}}&from=2026-01-01T00:00:00Z&to=2026-11-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+### Dwell: clipped positive visits; terminal HIRED/REJECTED dwell excluded.
+GET {{baseUrl}}/reports/recruitment/time-in-stage?jobId={{jobId}}&from=2026-01-01T00:00:00Z&to=2026-11-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+### Time to hire excludes and counts missing APPLIED/reversed evidence; no fabricated zero duration.
+GET {{baseUrl}}/reports/recruitment/time-to-hire?jobId={{jobId}}&from=2026-01-01T00:00:00Z&to=2026-11-01T00:00:00Z
+Authorization: Bearer {{token}}
