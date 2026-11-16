@@ -7,6 +7,9 @@ import { CandidatesModule } from './candidates';
 import { ApplicationsModule } from './applications';
 import { OffersModule } from './offers';
 import { CallingModule } from './calling';
+import { ScorecardsModule } from './scorecards';
+import { ReportsModule } from './reports';
+import { InterviewsModule } from './interviews';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { CallingModule } from './calling';
     ApplicationsModule,
     OffersModule,
     CallingModule,
+    ScorecardsModule,
+    ReportsModule,
+    InterviewsModule,
   ],
   exports: [CallingModule, PrivacyModule],
 })

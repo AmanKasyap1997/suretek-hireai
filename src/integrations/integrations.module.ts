@@ -11,6 +11,7 @@ import {
   MalwareScanPort,
   PendingMalwareScanner,
 } from './intake';
+import { CalendarPort, DisabledCalendar } from './calendar';
 @Module({
   providers: [
     {
@@ -38,7 +39,8 @@ import {
     },
     { provide: CaptchaPort, useClass: DisabledCaptcha },
     { provide: MalwareScanPort, useClass: PendingMalwareScanner },
+    { provide: CalendarPort, useClass: DisabledCalendar },
   ],
-  exports: [ObjectStoragePort, CaptchaPort, MalwareScanPort],
+  exports: [ObjectStoragePort, CaptchaPort, MalwareScanPort, CalendarPort],
 })
 export class IntegrationsModule {}
