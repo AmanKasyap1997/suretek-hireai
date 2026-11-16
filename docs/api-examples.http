@@ -178,3 +178,67 @@ Content-Type: application/json
   "granted": false,
   "source": "Candidate opt-out email reference OPTOUT-001"
 }
+
+
+### Milestone A: extended job requirements (use existing token variables)
+POST {{baseUrl}}/jobs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title":"Backend Engineer","description":"Build secure tenant APIs","department":"Engineering","location":"Remote","openings":2,"employmentType":"FULL_TIME","salaryMin":1000000,"salaryMax":1500000,"screeningCriteria":[{"id":"typescript","label":"TypeScript experience","weight":25,"must_have":true}]}
+
+### Assign an active hiring manager (admin only)
+POST {{baseUrl}}/jobs/{{jobId}}/assignments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"userId":"REPLACE_WITH_MANAGER_UUID","role":"HIRING_MANAGER"}
+
+### List/revoke assignments
+GET {{baseUrl}}/jobs/{{jobId}}/assignments
+Authorization: Bearer {{token}}
+
+### Revoke
+DELETE {{baseUrl}}/jobs/{{jobId}}/assignments/REPLACE_WITH_ASSIGNMENT_UUID
+Authorization: Bearer {{token}}
+
+### Human rejection with required reason
+PATCH {{baseUrl}}/applications/{{applicationId}}/stage
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"stage":"REJECTED","reasonCode":"EXPERIENCE","note":"Reviewed by the hiring manager"}
+
+### Immutable stage history
+GET {{baseUrl}}/applications/{{applicationId}}/history
+Authorization: Bearer {{token}}
+
+### Search and paginate; response also includes total
+GET {{baseUrl}}/applications?jobId={{jobId}}&stage=SHORTLISTED&q=example&sort=created_at&direction=desc&limit=25&offset=0
+Authorization: Bearer {{token}}
+
+### Close a job
+POST {{baseUrl}}/jobs/{{jobId}}/close
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"closeReason":"Position filled"}
+
+### Revised offer: close the prior pending offer first, then POST /offers again
+POST {{baseUrl}}/offers/{{offerId}}/withdraw
+Authorization: Bearer {{token}}
+
+### New revision with optional expiry
+POST {{baseUrl}}/offers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"applicationId":"{{applicationId}}","annualCtc":"1500000.00","currency":"INR","joiningDate":"2027-01-01","expiresAt":"2099-01-01T00:00:00Z"}
+
+### Record decline / expire a due pending offer (admin only)
+POST {{baseUrl}}/offers/{{offerId}}/decline
+Authorization: Bearer {{token}}
+
+### Expire (409 before expiresAt)
+POST {{baseUrl}}/offers/{{offerId}}/expire
+Authorization: Bearer {{token}}

@@ -1,5 +1,6 @@
 import {
   Body,
+  Delete,
   Controller,
   Get,
   HttpCode,
@@ -11,11 +12,18 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Actor, CurrentUser } from '../../../shared/actor';
+import { Role } from '../../../shared/enums';
 import { Roles } from '../../../shared/roles.decorator';
 import { ADMIN_ROLES, RECRUITMENT_ROLES } from '../../../shared/role-groups';
 import { JobStatus } from '../../../shared/enums';
 import { BodySchema, parse } from '../../../platform/http/validation';
-import { jobSchema, updateJobSchema, paginationSchema } from './jobs.schemas';
+import {
+  assignmentSchema,
+  jobSchema,
+  closeJobSchema,
+  updateJobSchema,
+  paginationSchema,
+} from './jobs.schemas';
 import { JobsService } from './jobs.service';
 
 @ApiTags('Jobs')
@@ -32,11 +40,13 @@ export class JobsController {
   }
 
   @Get()
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER, Role.INTERVIEWER)
   list(@CurrentUser() actor: Actor, @Query() query: unknown) {
     return this.hiring.listJobs(actor, parse(paginationSchema, query));
   }
 
   @Get(':id')
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER, Role.INTERVIEWER)
   get(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.hiring.getJob(actor, id);
   }
@@ -70,7 +80,44 @@ export class JobsController {
 
   @Post(':id/close')
   @HttpCode(200)
-  close(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
-    return this.hiring.transitionJob(actor, id, JobStatus.CLOSED);
+  @BodySchema(closeJobSchema)
+  close(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.hiring.transitionJob(
+      actor,
+      id,
+      JobStatus.CLOSED,
+      parse(closeJobSchema, body ?? {}).closeReason,
+    );
+  }
+  @Post(':id/assignments')
+  @Roles(...ADMIN_ROLES)
+  @BodySchema(assignmentSchema)
+  assign(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.hiring.assign(actor, id, parse(assignmentSchema, body));
+  }
+  @Get(':id/assignments')
+  assignments(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.hiring.assignments(actor, id);
+  }
+
+  @Delete(':id/assignments/:assignmentId')
+  @Roles(...ADMIN_ROLES)
+  unassign(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('assignmentId', ParseUUIDPipe) assignmentId: string,
+  ) {
+    return this.hiring.unassign(actor, id, assignmentId);
   }
 }

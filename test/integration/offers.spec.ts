@@ -55,5 +55,12 @@ describe('PostgreSQL-backed API invariants', () => {
       [tenantA, employeeId],
     );
     expect(events.rows).toHaveLength(1);
+    const history = await authorized(
+      'get',
+      `/applications/${applicationId}/history`,
+    ).expect(200);
+    expect(
+      history.body.map((event: { to_stage: string }) => event.to_stage),
+    ).toEqual([ApplicationStage.OFFER, ApplicationStage.HIRED]);
   });
 });

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema } from '../../../platform/http/validation';
+import { listSchema as paginationSchema } from '../../../shared/ta-list';
 export { paginationSchema };
 
 export const candidateSchema = z

@@ -7,6 +7,7 @@ const postgresUrlSchema = z
 
 const schema = z
   .object({
+    OFFER_MAKER_CHECKER: z.enum(['true', 'false']).optional(),
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('development'),
@@ -49,6 +50,10 @@ const schema = z
   })
   .transform((config) => ({
     ...config,
+    OFFER_MAKER_CHECKER:
+      config.OFFER_MAKER_CHECKER === undefined
+        ? config.NODE_ENV === 'production'
+        : config.OFFER_MAKER_CHECKER === 'true',
     SWAGGER_ENABLED: config.SWAGGER_ENABLED ?? config.NODE_ENV !== 'production',
   }));
 export type AppConfig = z.infer<typeof schema>;

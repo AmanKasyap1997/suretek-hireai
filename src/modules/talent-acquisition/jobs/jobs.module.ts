@@ -1,10 +1,11 @@
+import { AccessPolicy } from '../../../shared/ta-policy';
 import { Module } from '@nestjs/common';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 
 @Module({
   controllers: [JobsController],
-  providers: [JobsService],
+  providers: [AccessPolicy, JobsService],
   exports: [JobsService],
 })
 export class JobsModule {}

@@ -38,3 +38,7 @@ This starter implements the shared backend foundation and a small set of complet
 6. Expand employee self-service and HR policies before implementing payroll or later HRMS phases.
 
 Production integration choices and statutory payroll/telephony requirements require validation for the actual providers and deployment jurisdiction. This repository does not reproduce or validate prices from the planning document.
+
+## Milestone A delivered
+
+Job requirements, assignment-scoped manager/interviewer visibility, stage history, reasoned rejection, offer revision/expiry/maker-checker and filtered lists are implemented. Migrations 004 and 005 are forward-only additions; the enum snapshot includes assignments, employment types, event stages and rejection reasons. Existing job/application state machines remain human-controlled. Intake, consent/resume/retention changes (B), interviews/scorecards/reports (C), and all AI/queue/provider work remain outside this delivery. [Roadmap](talent-acquisition-plan.md).

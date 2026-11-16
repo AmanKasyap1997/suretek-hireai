@@ -42,6 +42,17 @@ describe('Production configuration', () => {
     return app;
   }
 
+  it('defaults maker-checker on in production and accepts explicit overrides', () => {
+    expect(readConfig().OFFER_MAKER_CHECKER).toBe(true);
+    process.env.OFFER_MAKER_CHECKER = 'false';
+    expect(readConfig().OFFER_MAKER_CHECKER).toBe(false);
+    delete process.env.OFFER_MAKER_CHECKER;
+    process.env.NODE_ENV = 'test';
+    expect(readConfig().OFFER_MAKER_CHECKER).toBe(false);
+    process.env.OFFER_MAKER_CHECKER = 'yes';
+    expect(() => readConfig()).toThrow(/OFFER_MAKER_CHECKER/);
+  });
+
   it('disables Swagger UI and JSON by default in production', async () => {
     const configured = await createApp();
     expect(readConfig().SWAGGER_ENABLED).toBe(false);

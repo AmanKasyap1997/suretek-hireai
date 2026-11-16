@@ -175,3 +175,11 @@ SELECT count(*) FROM candidates;
 ```
 
 The count must be `0`, including when an administrator can verify that tenant rows exist. For a scoped diagnostic, begin a transaction, run `SELECT set_config('app.tenant_id', 'YOUR-TENANT-UUID', true)`, query, then commit. Do not set tenant context at session scope on pooled runtime connections.
+
+## Milestone A controls
+
+- Every new tenant relationship uses composite keys and explicit tenant predicates. `job_assignments` and `application_stage_events` enable and force `tenant_isolation` RLS; runtime grants are SELECT/INSERT/DELETE for assignments and SELECT/INSERT only for stage evidence. The catalog coverage guard fails if any tenant table lacks forced RLS or a tenant policy with read/write expressions.
+- Global HIRING_MANAGER/INTERVIEWER roles do not grant visibility without the matching per-job assignment. Missing/unassigned resources return 404. Managers may shortlist/reject only; interviewers cannot decide. Assignment changes are admin-only and audited. `hiring_manager_user_id` alone grants no access. Existing recruiter/admin access is retained.
+- All stage changes (including offer and hire) insert immutable evidence in the same transaction. Backfill uses null actor/from-stage and a migration note; existing rejected applications receive OTHER as the historical reason. The migration temporarily removes FORCE from applications for owner backfill inside the transaction and restores it before commit; normal runtime grants and RLS stay in force for the non-owner app role.
+- Offer creation serializes on the application; a partial unique index is a final concurrency guard. A different human approver is required by default in production; setting `OFFER_MAKER_CHECKER=false` explicitly relaxes this control. Expiry blocks approval/acceptance; a manual expiry endpoint and lazy expiry on revision are supplied, with no background queue. Accepted offers remain active to prevent duplicate hire paths.
+- List filtering is bound as query parameters, and sort columns/directions come from whitelists. ILIKE avoids extension privileges, but leading wildcard search may scan tenant rows. No AI makes a hiring decision and no external providers are called.

@@ -1,4 +1,7 @@
 import {
+  AssignmentRole,
+  RejectionReason,
+  EmploymentType,
   ApplicationStage,
   CallLanguage,
   CallRequestStatus,
@@ -52,6 +55,42 @@ export interface EnumSnapshot {
 
 export const enumSchema: EnumSchema = {
   columns: [
+    {
+      enumName: 'AssignmentRole',
+      table: 'job_assignments',
+      column: 'role',
+      constraintName: 'job_assignments_role_check',
+      values: Object.values(AssignmentRole),
+    },
+    {
+      enumName: 'RejectionReason',
+      table: 'application_stage_events',
+      column: 'reason_code',
+      constraintName: 'application_stage_events_reason_code_check',
+      values: Object.values(RejectionReason),
+    },
+    {
+      enumName: 'EmploymentType',
+      table: 'jobs',
+      column: 'employment_type',
+      constraintName: 'jobs_employment_type_check',
+      values: Object.values(EmploymentType),
+      defaultValue: EmploymentType.FULL_TIME,
+    },
+    {
+      enumName: 'ApplicationStage',
+      table: 'application_stage_events',
+      column: 'from_stage',
+      constraintName: 'application_stage_events_from_stage_check',
+      values: Object.values(ApplicationStage),
+    },
+    {
+      enumName: 'ApplicationStage',
+      table: 'application_stage_events',
+      column: 'to_stage',
+      constraintName: 'application_stage_events_to_stage_check',
+      values: Object.values(ApplicationStage),
+    },
     {
       enumName: 'Role',
       table: 'users',

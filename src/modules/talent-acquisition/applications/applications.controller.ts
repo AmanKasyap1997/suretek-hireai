@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Actor, CurrentUser } from '../../../shared/actor';
+import { Role } from '../../../shared/enums';
 import { Roles } from '../../../shared/roles.decorator';
 import { RECRUITMENT_ROLES } from '../../../shared/role-groups';
 import { BodySchema, parse } from '../../../platform/http/validation';
@@ -34,16 +35,19 @@ export class ApplicationsController {
   }
 
   @Get()
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER, Role.INTERVIEWER)
   list(@CurrentUser() actor: Actor, @Query() query: unknown) {
     return this.hiring.listApplications(actor, parse(paginationSchema, query));
   }
 
   @Get(':id')
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER, Role.INTERVIEWER)
   get(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.hiring.getApplication(actor, id);
   }
 
   @Patch(':id/stage')
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER)
   @BodySchema(stageSchema)
   @ApiOperation({
     summary:
@@ -55,5 +59,10 @@ export class ApplicationsController {
     @Body() body: unknown,
   ) {
     return this.hiring.changeStage(actor, id, parse(stageSchema, body));
+  }
+  @Get(':id/history')
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER, Role.INTERVIEWER)
+  history(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.hiring.history(actor, id);
   }
 }
