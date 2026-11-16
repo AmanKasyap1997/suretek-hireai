@@ -7,10 +7,17 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { z } from 'zod';
 import { DbService } from '../database/db.service';
+import { setTenantId } from '../database/tenant-context';
 import { Actor } from '../common/actor';
 import { Role } from '../common/enums';
 import { PUBLIC_KEY, ROLES_KEY } from './roles.decorator';
+
+const claimsSchema = z.object({
+  sub: z.string().uuid(),
+  tenantId: z.string().uuid(),
+});
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
@@ -30,17 +37,19 @@ export class AuthGuard implements CanActivate {
     const header = request.headers.authorization;
     if (typeof header !== 'string' || !header.startsWith('Bearer '))
       throw new UnauthorizedException();
-    let token: { sub: string; tenantId: string };
+    let token: z.infer<typeof claimsSchema>;
     try {
-      token = await this.jwt.verifyAsync(header.slice(7), {
-        algorithms: ['HS256'],
-        issuer: 'suretek-hireai',
-        audience: 'suretek-api',
-      });
+      token = claimsSchema.parse(
+        await this.jwt.verifyAsync<Record<string, unknown>>(header.slice(7), {
+          algorithms: ['HS256'],
+          issuer: 'suretek-hireai',
+          audience: 'suretek-api',
+        }),
+      );
     } catch {
       throw new UnauthorizedException();
     }
-    if (!token.sub || !token.tenantId) throw new UnauthorizedException();
+    setTenantId(token.tenantId);
     const user = await this.db.one<{
       id: string;
       tenant_id: string;

@@ -2,31 +2,70 @@ services:
   postgres:
     image: postgres:17-bookworm
     environment:
-      POSTGRES_USER: hireai
-      POSTGRES_PASSWORD: hireai_dev
-      POSTGRES_DB: hireai
+      POSTGRES_USER: postgres
+      # Defaults are for local development only. Set unique values in .env.
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-postgres_dev_only}
+      POSTGRES_DB: postgres
+      HIREAI_DATABASE: hireai
+      HIREAI_OWNER_PASSWORD: ${HIREAI_OWNER_PASSWORD:-hireai_owner_dev_only}
+      HIREAI_APP_PASSWORD: ${HIREAI_APP_PASSWORD:-hireai_app_dev_only}
     ports:
       - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database/init/01-create-roles.sh:/docker-entrypoint-initdb.d/01-create-roles.sh:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U hireai -d hireai']
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres -d postgres']
       interval: 5s
       timeout: 5s
       retries: 10
 
+  migrate:
+    profiles: ['app']
+    build: .
+    image: suretek-hireai-backend:local
+    command: ['node', 'dist/scripts/migrate.js']
+    environment:
+      DATABASE_MIGRATION_URL: postgresql://hireai_owner:${HIREAI_OWNER_PASSWORD:-hireai_owner_dev_only}@postgres:5432/hireai
+      PGSSLMODE: disable
+      BOOTSTRAP_TENANT_ID: ${BOOTSTRAP_TENANT_ID:-}
+      BOOTSTRAP_TENANT_NAME: ${BOOTSTRAP_TENANT_NAME:-}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    restart: 'no'
+
   api:
     profiles: ['app']
     build: .
-    env_file: .env
+    image: suretek-hireai-backend:local
+    # Explicit variables prevent the API from receiving the owner URL/password.
     environment:
-      DATABASE_URL: postgresql://hireai:hireai_dev@postgres:5432/hireai
+      DATABASE_URL: postgresql://hireai_app:${HIREAI_APP_PASSWORD:-hireai_app_dev_only}@postgres:5432/hireai
       NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '3000'
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRES_IN_SECONDS: ${JWT_EXPIRES_IN_SECONDS:-900}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      CALL_PLANNING_ENABLED: ${CALL_PLANNING_ENABLED:-false}
+      CALL_TIMEZONE: ${CALL_TIMEZONE:-Asia/Kolkata}
+      CALL_WINDOW_START: ${CALL_WINDOW_START:-09:00}
+      CALL_WINDOW_END: ${CALL_WINDOW_END:-18:00}
+      PGSSLMODE: disable
     ports:
       - '127.0.0.1:3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     init: true
     restart: unless-stopped
 

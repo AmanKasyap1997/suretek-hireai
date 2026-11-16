@@ -22,7 +22,7 @@ export class HealthController {
   }
   @Get('ready') async ready() {
     try {
-      await this.db.query('SELECT 1 FROM users LIMIT 1');
+      await this.db.query('SELECT 1');
       return { status: 'ready' };
     } catch {
       throw new ServiceUnavailableException('Database is not ready');

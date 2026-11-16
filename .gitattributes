@@ -1,0 +1,2 @@
+# PostgreSQL's Linux entrypoint sources these scripts, including on Windows hosts.
+*.sh text eol=lf

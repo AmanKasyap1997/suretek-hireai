@@ -117,7 +117,7 @@ describe('PostgreSQL-backed API invariants', () => {
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) {
       throw new Error(
-        'Integration tests require DATABASE_URL pointing to a migrated, disposable PostgreSQL database.',
+        'Integration tests require DATABASE_URL pointing to the non-owner application role on a migrated, disposable PostgreSQL database.',
       );
     }
     process.env.JWT_SECRET ??= 'integration-test-secret-minimum-32-characters';
@@ -125,7 +125,12 @@ describe('PostgreSQL-backed API invariants', () => {
     process.env.CALL_TIMEZONE = 'UTC';
     process.env.CALL_WINDOW_START = '09:00';
     process.env.CALL_WINDOW_END = '18:00';
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    if (!process.env.TEST_ADMIN_DATABASE_URL) {
+      throw new Error(
+        'Integration fixtures require TEST_ADMIN_DATABASE_URL with a separate RLS-bypassing administrative connection.',
+      );
+    }
+    pool = new Pool({ connectionString: process.env.TEST_ADMIN_DATABASE_URL });
     tenantA = randomUUID();
     tenantB = randomUUID();
     await pool.query('INSERT INTO tenants (id,name) VALUES ($1,$2),($3,$4)', [
@@ -384,6 +389,67 @@ describe('PostgreSQL-backed API invariants', () => {
       response.body.data.map((candidate: { id: string }) => candidate.id),
     ).not.toContain(candidateB);
     expect(response.body.pagination).toEqual({ limit: 100, offset: 0 });
+  });
+
+  it('denies tenant A reads and mutations for tenant B records by ID', async () => {
+    const jobId = randomUUID();
+    const applicationId = randomUUID();
+    const offerId = randomUUID();
+    await pool.query(
+      `INSERT INTO jobs(id,tenant_id,title,description,department,location,status,created_by)
+       VALUES($1,$2,'Private tenant B job','Tenant B recruitment position','Engineering','Remote',$3,$4)`,
+      [jobId, tenantB, JobStatus.PUBLISHED, adminB.id],
+    );
+    await pool.query(
+      `INSERT INTO applications(id,tenant_id,job_id,candidate_id,stage) VALUES($1,$2,$3,$4,$5)`,
+      [applicationId, tenantB, jobId, candidateB, ApplicationStage.SHORTLISTED],
+    );
+    await pool.query(
+      `INSERT INTO offers(id,tenant_id,application_id,status,annual_ctc,currency,joining_date,created_by)
+       VALUES($1,$2,$3,$4,'1200000.00','INR','2026-12-01',$5)`,
+      [offerId, tenantB, applicationId, OfferStatus.DRAFT, adminB.id],
+    );
+    await authorized('get', `/jobs/${jobId}`).expect(404);
+    await authorized('patch', `/jobs/${jobId}`)
+      .send({ title: 'Unauthorized change' })
+      .expect(404);
+    await authorized('post', `/jobs/${jobId}/close`).expect(404);
+    await authorized('get', `/candidates/${candidateB}`).expect(404);
+    await authorized('post', `/candidates/${candidateB}/consents`)
+      .send({
+        scope: ConsentScope.CALL,
+        granted: true,
+        source: 'Unauthorized cross-tenant attempt',
+      })
+      .expect(404);
+    await authorized('get', `/applications/${applicationId}`).expect(404);
+    await authorized('patch', `/applications/${applicationId}/stage`)
+      .send({ stage: ApplicationStage.INTERVIEW })
+      .expect(404);
+    await authorized('get', `/offers/${offerId}`).expect(404);
+    await authorized('post', `/offers/${offerId}/approve`).expect(404);
+    await authorized('post', `/offers/${offerId}/accept`)
+      .send({ acceptanceReference: 'Unauthorized acceptance attempt' })
+      .expect(404);
+    await authorized('post', `/offers/${offerId}/hire`).expect(404);
+    const unchanged = await pool.query(
+      `SELECT j.title,j.status,a.stage,o.status AS offer_status FROM jobs j
+       JOIN applications a ON a.tenant_id=j.tenant_id AND a.job_id=j.id
+       JOIN offers o ON o.tenant_id=a.tenant_id AND o.application_id=a.id
+       WHERE j.tenant_id=$1 AND j.id=$2`,
+      [tenantB, jobId],
+    );
+    expect(unchanged.rows[0]).toEqual({
+      title: 'Private tenant B job',
+      status: JobStatus.PUBLISHED,
+      stage: ApplicationStage.SHORTLISTED,
+      offer_status: OfferStatus.DRAFT,
+    });
+    const unauthorizedConsents = await pool.query(
+      'SELECT id FROM consents WHERE tenant_id=$1 AND candidate_id=$2',
+      [tenantB, candidateB],
+    );
+    expect(unauthorizedConsents.rows).toEqual([]);
   });
 
   it('validates bodies and prevents client-supplied tenant authority', async () => {

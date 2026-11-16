@@ -22,19 +22,21 @@ jobs:
       postgres:
         image: postgres:17-bookworm
         env:
-          POSTGRES_USER: hireai
-          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_postgres_password
           POSTGRES_DB: hireai_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U hireai -d hireai_test"
+          --health-cmd "pg_isready -U postgres -d hireai_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
       NODE_ENV: test
-      DATABASE_URL: postgresql://hireai:ci_test_password@localhost:5432/hireai_test
+      DATABASE_URL: postgresql://hireai_app:ci_app_password@localhost:5432/hireai_test
+      DATABASE_MIGRATION_URL: postgresql://hireai_owner:ci_owner_password@localhost:5432/hireai_test
+      TEST_ADMIN_DATABASE_URL: postgresql://postgres:ci_postgres_password@localhost:5432/hireai_test
       JWT_SECRET: ci-only-isolated-test-secret-0123456789abcdef
       JWT_EXPIRES_IN_SECONDS: '900'
       CALL_PLANNING_ENABLED: 'false'
@@ -59,9 +61,35 @@ jobs:
         run: npm run format:check
       - name: Build
         run: npm run build
+      - name: Initialize restricted PostgreSQL roles
+        run: bash database/init/01-create-roles.sh
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGPASSWORD: ci_postgres_password
+          POSTGRES_USER: postgres
+          POSTGRES_DB: hireai_test
+          HIREAI_DATABASE: hireai_test
+          HIREAI_OWNER_PASSWORD: ci_owner_password
+          HIREAI_APP_PASSWORD: ci_app_password
       - name: Apply PostgreSQL migrations
         run: npm run db:migrate
       - name: Verify migration retries are safe
         run: npm run db:migrate
       - name: Run tests
         run: npm test
+
+  docker:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2; Node.js 24 action runtime
+      - name: Build without publishing
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0; Node.js 24 action runtime
+        with:
+          context: .
+          push: false
+          load: false
+          tags: suretek-hireai-backend:ci
