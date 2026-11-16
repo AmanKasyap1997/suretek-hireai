@@ -46,7 +46,10 @@ const schema = z
       .default('us-east-1'),
     S3_ACCESS_KEY_ID: z.string().min(1).optional(),
     S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
-    S3_SESSION_TOKEN: z.string().min(1).optional(),
+    S3_SESSION_TOKEN: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().min(1).optional(),
+    ),
     OFFER_MAKER_CHECKER: z.enum(['true', 'false']).optional(),
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
