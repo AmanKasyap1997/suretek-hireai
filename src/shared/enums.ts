@@ -87,3 +87,10 @@ export enum EmploymentType {
   CONTRACT = 'CONTRACT',
   INTERN = 'INTERN',
 }
+
+export enum DocumentScanStatus {
+  PENDING = 'PENDING',
+  CLEAN = 'CLEAN',
+  INFECTED = 'INFECTED',
+  ERROR = 'ERROR',
+}

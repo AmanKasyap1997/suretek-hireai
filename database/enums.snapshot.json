@@ -78,6 +78,19 @@
       "defaultValue": "PLANNED"
     },
     {
+      "enumName": "DocumentScanStatus",
+      "table": "candidate_documents",
+      "column": "scan_status",
+      "constraintName": "candidate_documents_scan_status_check",
+      "values": [
+        "CLEAN",
+        "ERROR",
+        "INFECTED",
+        "PENDING"
+      ],
+      "defaultValue": "PENDING"
+    },
+    {
       "enumName": "ConsentScope",
       "table": "consents",
       "column": "scope",

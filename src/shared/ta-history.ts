@@ -1,9 +1,9 @@
 import { DbClient } from '../platform/database/db.service';
-import { Actor } from './actor';
+import { EvidenceActor } from './actor';
 import { ApplicationStage } from './enums';
 export async function stageEvent(
   tx: DbClient,
-  actor: Actor,
+  actor: EvidenceActor,
   id: string,
   from: ApplicationStage | null,
   to: ApplicationStage,

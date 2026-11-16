@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/src/main.js",
     "db:migrate": "tsx scripts/migrate.ts",
+    "retention": "node dist/scripts/retention.js",
     "bootstrap": "tsx scripts/bootstrap.ts",
     "lint": "eslint src scripts test",
     "format": "prettier --write .",

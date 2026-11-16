@@ -10,3 +10,8 @@ export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): Actor =>
     ctx.switchToHttp().getRequest().actor,
 );
+
+export interface EvidenceActor {
+  tenantId: string;
+  userId: string | null;
+}

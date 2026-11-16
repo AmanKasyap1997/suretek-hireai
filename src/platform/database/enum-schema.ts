@@ -1,4 +1,5 @@
 import {
+  DocumentScanStatus,
   AssignmentRole,
   RejectionReason,
   EmploymentType,
@@ -55,6 +56,14 @@ export interface EnumSnapshot {
 
 export const enumSchema: EnumSchema = {
   columns: [
+    {
+      enumName: 'DocumentScanStatus',
+      table: 'candidate_documents',
+      column: 'scan_status',
+      constraintName: 'candidate_documents_scan_status_check',
+      values: Object.values(DocumentScanStatus),
+      defaultValue: DocumentScanStatus.PENDING,
+    },
     {
       enumName: 'AssignmentRole',
       table: 'job_assignments',

@@ -42,3 +42,7 @@ Production integration choices and statutory payroll/telephony requirements requ
 ## Milestone A delivered
 
 Job requirements, assignment-scoped manager/interviewer visibility, stage history, reasoned rejection, offer revision/expiry/maker-checker and filtered lists are implemented. Migrations 004 and 005 are forward-only additions; the enum snapshot includes assignments, employment types, event stages and rejection reasons. Existing job/application state machines remain human-controlled. Intake, consent/resume/retention changes (B), interviews/scorecards/reports (C), and all AI/queue/provider work remain outside this delivery. [Roadmap](talent-acquisition-plan.md).
+
+## Milestone B delivered
+
+Public published-job browsing and generic application intake are tenant-resolved without RLS bypass. Independent self-reported consent choices carry notice/IP/timestamp/user-agent evidence and do not replace staff-verified consent. Private PDF/DOCX uploads use local development storage or a signed S3-compatible adapter, with mandatory CLEAN scan status for audited API downloads. The malware/CAPTCHA ports are explicit stubs; there are no real scan/CAPTCHA provider calls. Admin erasure and a tenant-scoped retention CLI anonymize candidates, revoke consent, cancel planned calls and retry private document deletion while preserving evidence. See [operations](milestone-b-operations.md). Milestone C and all non-goals remain unimplemented.

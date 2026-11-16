@@ -41,7 +41,7 @@ export class ApplicationsService {
       if (job.status !== JobStatus.PUBLISHED)
         throw new ConflictException('Applications require a published job.');
       const candidate = await tx.one<Candidate>(
-        'SELECT id FROM candidates WHERE tenant_id=$1 AND id=$2',
+        'SELECT id FROM candidates WHERE tenant_id=$1 AND id=$2 AND erased_at IS NULL FOR SHARE',
         [actor.tenantId, input.candidateId],
       );
       if (!candidate) throw new NotFoundException('Candidate not found.');

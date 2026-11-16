@@ -3,7 +3,7 @@
 | Milestone | Status      |
 | --------- | ----------- |
 | A         | Complete    |
-| B         | Not started |
+| B         | Complete    |
 | C         | Not started |
 
 ## Working rules (apply to every milestone)
@@ -26,7 +26,7 @@ A4. Offers: allow DECLINED, WITHDRAWN and EXPIRED states and re-issuing a revise
 A5. Search and lists: optional filters on candidates, applications and jobs (job, stage, status, created range, text search on name and email), sort whitelist, a total count added in a backward-compatible way, and supporting indexes. Add trigram search only if the extension is available without superuser rights; otherwise use ILIKE and document the limit.
 A6. Tests: unit tests for the state machines and the access policy; integration tests for every new endpoint including permission-denied, cross-tenant and RLS paths; migration idempotency.
 
-## Milestone B (do NOT implement now): intake, consent, resumes, retention
+## Milestone B (implemented): intake, consent, resumes, retention
 
 B1. tenants.slug and a public tenant resolution that does not weaken RLS: a narrow SECURITY DEFINER function with fixed search_path returning only the tenant id for a slug, EXECUTE granted to hireai_app.
 B2. Unauthenticated careers API: GET /public/:tenantSlug/jobs, GET /public/:tenantSlug/jobs/:id, POST /public/:tenantSlug/jobs/:id/applications. Strict validation, per-IP and per-email rate limits, honeypot field, CaptchaPort interface with a disabled stub, the same response whether or not the candidate already exists, no staff-only fields exposed.
@@ -45,6 +45,6 @@ C4. Reports from stage events: funnel by job and period, time-in-stage, time-to-
 
 AI screening calls, durable job queue, call dispatch, real telephony or calendar providers, candidate portal, payroll, HR self-service.
 
-## Acceptance for this task (milestone A)
+## Acceptance for every milestone
 
 npm ci; npm run enums:check; npm run lint; npm run format:check; npm run build; migrations apply twice on a fresh DB with the owner role; npm test passes with the app connected as hireai_app; the RLS coverage guard test passes; Docker build if available (otherwise say not run).

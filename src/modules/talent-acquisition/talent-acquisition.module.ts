@@ -1,3 +1,6 @@
+import { CareersModule } from './careers';
+import { DocumentsModule } from './documents';
+import { PrivacyModule } from './privacy';
 import { Module } from '@nestjs/common';
 import { JobsModule } from './jobs';
 import { CandidatesModule } from './candidates';
@@ -7,12 +10,15 @@ import { CallingModule } from './calling';
 
 @Module({
   imports: [
+    CareersModule,
+    DocumentsModule,
+    PrivacyModule,
     JobsModule,
     CandidatesModule,
     ApplicationsModule,
     OffersModule,
     CallingModule,
   ],
-  exports: [CallingModule],
+  exports: [CallingModule, PrivacyModule],
 })
 export class TalentAcquisitionModule {}
