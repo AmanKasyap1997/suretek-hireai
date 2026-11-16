@@ -313,6 +313,47 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
       ).rows,
     ).toEqual([]);
   });
+  it('does not reveal existing applications through resume validation errors', async () => {
+    const { jobId } = await f.scenario();
+    const existing = body();
+    await apply(jobId, existing).expect(202);
+    const storage = jest.spyOn(f.app!.get(ObjectStoragePort), 'put');
+    const fresh = body();
+    const resume = {
+      filename: 'resume.pdf',
+      base64: Buffer.from('not a PDF').toString('base64'),
+    };
+    const invalidNew = await apply(jobId, { ...fresh, resume }).expect(400);
+    const invalidExisting = await apply(jobId, {
+      ...existing,
+      resume,
+    }).expect(400);
+    expect(invalidExisting.body).toEqual(invalidNew.body);
+
+    process.env.RESUME_MAX_BYTES = '4';
+    const oversized = {
+      filename: 'resume.pdf',
+      base64: pdf.toString('base64'),
+    };
+    const oversizedNew = await apply(jobId, {
+      ...fresh,
+      resume: oversized,
+    }).expect(413);
+    const oversizedExisting = await apply(jobId, {
+      ...existing,
+      resume: oversized,
+    }).expect(413);
+    expect(oversizedExisting.body).toEqual(oversizedNew.body);
+    expect(storage).not.toHaveBeenCalled();
+    expect(
+      (
+        await f.pool.query(
+          'SELECT id FROM candidates WHERE tenant_id=$1 AND email=$2',
+          [f.tenantA, fresh.email],
+        )
+      ).rows,
+    ).toEqual([]);
+  });
   it('authorizes and audits staff document access, and blocks unscanned or corrupted objects', async () => {
     const candidate = f.candidateA;
     const pending = await upload(candidate).expect(201);

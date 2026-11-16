@@ -94,3 +94,22 @@ export enum DocumentScanStatus {
   INFECTED = 'INFECTED',
   ERROR = 'ERROR',
 }
+
+export enum InterviewMode {
+  VIDEO = 'VIDEO',
+  PHONE = 'PHONE',
+  ONSITE = 'ONSITE',
+}
+
+export enum InterviewStatus {
+  SCHEDULED = 'SCHEDULED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum ScorecardRecommendation {
+  STRONG_HIRE = 'STRONG_HIRE',
+  HIRE = 'HIRE',
+  HOLD = 'HOLD',
+  NO_HIRE = 'NO_HIRE',
+  STRONG_NO_HIRE = 'STRONG_NO_HIRE',
+}

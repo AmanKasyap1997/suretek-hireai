@@ -73,6 +73,30 @@ it('enforces the decoded public resume limit at the base64 padding boundary', ()
     }).success,
   ).toBe(false);
 });
+it('rejects corrupt DOCX entries, inconsistent ZIP headers and forged expansion sizes', () => {
+  const valid = docxResume(undefined, true);
+  expect(validateResume('resume.docx', valid, 10000).contentType).toContain(
+    'wordprocessingml',
+  );
+  const corrupt = docxResume();
+  const dataStart = 30 + corrupt.readUInt16LE(26) + corrupt.readUInt16LE(28);
+  corrupt[dataStart] ^= 1;
+  expect(() => validateResume('resume.docx', corrupt, 10000)).toThrow(
+    /Only valid/,
+  );
+  const inconsistent = docxResume();
+  inconsistent.writeUInt16LE(8, 8);
+  expect(() => validateResume('resume.docx', inconsistent, 10000)).toThrow(
+    /Only valid/,
+  );
+  const overExpanding = docxResume(undefined, true);
+  const directory = overExpanding.readUInt32LE(overExpanding.length - 6);
+  overExpanding.writeUInt32LE(1, 22);
+  overExpanding.writeUInt32LE(1, directory + 24);
+  expect(() => validateResume('resume.docx', overExpanding, 10000)).toThrow(
+    /Only valid/,
+  );
+});
 it('uses explicit disabled CAPTCHA and a fail-closed scanner stub', async () => {
   expect(await new DisabledCaptcha().verify()).toBe(true);
   expect(await new PendingMalwareScanner().scan()).toBe(

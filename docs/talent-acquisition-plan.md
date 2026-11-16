@@ -1,10 +1,10 @@
 # Talent Acquisition plan
 
-| Milestone | Status      |
-| --------- | ----------- |
-| A         | Complete    |
-| B         | Complete    |
-| C         | Not started |
+| Milestone | Status   |
+| --------- | -------- |
+| A         | Complete |
+| B         | Complete |
+| C         | Complete |
 
 ## Working rules (apply to every milestone)
 
@@ -34,7 +34,7 @@ B3. Consent at intake: separate unchecked-by-default CALL, RECORDING and TRANSCR
 B4. Resumes: ObjectStoragePort with a local filesystem adapter (dev) and an S3-compatible adapter; private storage; PDF and DOCX only verified by magic bytes; size limit; sanitized names; sha256; table candidate_documents with scan_status; MalwareScanPort (stub clearly labeled); a document is not downloadable until scan_status is CLEAN; every download is authorized, audited and served via short-lived signed URL or streamed by the API.
 B5. Retention and erasure: configurable retention period, staff erase-candidate action that anonymizes PII and deletes documents while keeping consent evidence and audit records, and a CLI command to run retention. Note in docs that legal requirements must be validated with counsel.
 
-## Milestone C (do NOT implement now): interviews, scorecards, reports
+## Milestone C (implemented): interviews, scorecards, reports
 
 C1. interviews (application, round, mode, start/end, location or link, status), interview_panelists, with an exclusion constraint preventing overlapping interviews for the same panelist.
 C2. scorecards per panelist: scores against the job's screening criteria, recommendation enum, notes; immutable once submitted; interviewers can only see and submit for interviews they are assigned to.

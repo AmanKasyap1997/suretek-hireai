@@ -14,3 +14,6 @@ export { CareersService } from './careers';
 export { DocumentsService } from './documents';
 export { PrivacyService } from './privacy';
 export { intakeSchema } from './careers';
+export { ScorecardsService } from './scorecards';
+export { ReportsService } from './reports';
+export { InterviewsService } from './interviews';

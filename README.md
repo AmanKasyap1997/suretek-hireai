@@ -11,10 +11,11 @@ The attached blueprint is requirements input. Vendor recommendations, prices, pu
 - Human-controlled application stages and offer approval/acceptance records.
 - Transactional conversion of an accepted offer into one employee and onboarding tasks, with safe retries.
 - Consent and audit ledgers that the application database role can only read and append, plus consent-checked AI call **planning** records.
+- Local interview scheduling with panelist overlap protection, immutable scorecards and stage-event recruitment reports.
 - Basic employee, leave and attendance administration, audit records and health endpoints.
 - PostgreSQL schema migrations, administrator bootstrap, API documentation, Docker and GitHub Actions.
 
-Live AI calls, resume parsing, file storage, calendar booking, payroll, e-signature and external publishing require further implementation. [Scope and next steps](docs/blueprint-scope.md) map the starter to the full blueprint.
+Live AI calls, resume parsing, external calendar integration, payroll, e-signature and external job publishing require further implementation. [Scope and next steps](docs/blueprint-scope.md) map the starter to the full blueprint.
 
 ## Project layout
 
@@ -31,6 +32,12 @@ src/
       applications/
       offers/
       calling/
+      careers/
+      documents/
+      privacy/
+      interviews/
+      scorecards/
+      reports/
       index.ts                    # Public recruitment module API
     hr/
       employees/
@@ -105,8 +112,9 @@ Use [api-examples.http](docs/api-examples.http) with a REST client or copy its J
 1. Create a job; an HR administrator approves it; publish it to the application's internal job listing.
 2. Create a candidate and application; a recruiter manually shortlists the application.
 3. Record consent evidence. Optionally enable call planning and create a planning record during the configured calling window. No call is dialed.
-4. Prepare and approve an offer. An HR administrator records acceptance with an evidence reference.
-5. Convert the accepted offer to an employee. Retrying the same conversion returns the existing employee; it does not create another employee or duplicate onboarding tasks.
+4. Schedule an interview locally and collect immutable panelist scorecards. Staff retain control of application stages and hiring decisions.
+5. Prepare and approve an offer. An HR administrator records acceptance with an evidence reference.
+6. Convert the accepted offer to an employee. Retrying the same conversion returns the existing employee; it does not create another employee or duplicate onboarding tasks.
 
 `PUBLISHED` is an internal database state. It does not publish a vacancy to a careers CMS or LinkedIn. Offer acceptance records an HR user's attestation; this starter has no candidate acceptance portal or e-signature verification.
 
@@ -187,7 +195,9 @@ The GitHub Actions workflow provisions separate PostgreSQL owner/app roles, inst
 
 ## Run the API in Docker
 
-The optional `app` Compose profile builds the API and a one-shot migration service. Configure `.env` first as above. If you already bootstrapped the same database locally, skip bootstrap and keep using that tenant ID.
+The optional `app` Compose profile builds the API and a one-shot migration service. Its API uses `NODE_ENV=production`, so before starting it configure `RESUME_STORAGE=s3`, an HTTPS `S3_ENDPOINT`, private `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`. Set `S3_SESSION_TOKEN` only for temporary credentials; an empty value is treated as omitted. Provision the bucket to deny public access. Localhost `npm run dev` can continue using private local resume storage.
+
+Compose forwards the storage settings, intake limits, retention period and offer maker-checker setting explicitly, alongside JWT/calling settings. Configure `.env` first as above. If you already bootstrapped the same database locally, skip bootstrap and keep using that tenant ID.
 
 ```bash
 docker compose up -d postgres
@@ -216,7 +226,7 @@ git push -u origin main
 
 ## Talent Acquisition milestone A
 
-Core job requirements, scoped assignments, append-only application history, revised offers and searchable lists are implemented. See [the roadmap](docs/talent-acquisition-plan.md) for the delivered A/B scope and planned milestone C. See [API examples](docs/api-examples.http) for requests.
+Core job requirements, scoped assignments, append-only application history, revised offers and searchable lists are implemented. See [the roadmap](docs/talent-acquisition-plan.md) for A/B/C scope and [API examples](docs/api-examples.http) for requests.
 
 Jobs accept optional `openings`, `employmentType` (FULL_TIME/PART_TIME/CONTRACT/INTERN), nullable numeric `salaryMin`/`salaryMax`, `hiringManagerUserId`, `screeningCriteria` (`id`, `label`, positive `weight` up to 100, `must_have`) and `closeReason`. Existing location is retained. Close accepts an optional `closeReason` and records `closed_at`. The manager field is descriptive; access always requires an explicit assignment.
 
@@ -228,7 +238,7 @@ Offers accept `expiresAt` and can be closed through POST `/api/v1/offers/:id/dec
 
 ## Talent Acquisition milestone B
 
-Public careers, intake evidence, private resumes and candidate erasure/retention are implemented. No interview/report, AI, queue, telephony or calendar work is included. See [Milestone B operations](docs/milestone-b-operations.md) for configuration and recovery details.
+Public careers, intake evidence, private resumes and candidate erasure/retention are implemented. Interviews, scorecards and reports are described under Milestone C below. No AI, queue, telephony or external calendar provider is called. See [Milestone B operations](docs/milestone-b-operations.md) for configuration and recovery details.
 
 Public routes are GET `/api/v1/public/:tenantSlug/jobs`, GET `/api/v1/public/:tenantSlug/jobs/:id`, and POST `/api/v1/public/:tenantSlug/jobs/:id/applications`. Only published jobs and explicitly selected public fields are exposed. Default slugs are `tenant-<UUID>`; set `BOOTSTRAP_TENANT_SLUG` when bootstrapping or rerunning bootstrap for a known tenant ID to configure a friendly slug. Staff-only tenant rows retain forced RLS. A restricted, fixed-search-path SECURITY DEFINER function reads only the derived public slug/ID directory; the runtime cannot read that directory directly.
 
@@ -241,3 +251,15 @@ Local storage is private and for development/test only. Production startup requi
 Admins erase a candidate with POST `/api/v1/candidates/:id/erase`. This anonymizes candidate PII, revokes consent, cancels pending call plans and deletes resumes while preserving consent/audit evidence. The response includes `documentsPending`: zero means storage deletion completed. Failures remain inaccessible and are retried by the same endpoint or retention command. Separate HR employee records follow their own policy.
 
 After `npm run build`, run `npm run retention -- --tenant-id <UUID> --actor-id <ADMIN_UUID> --dry-run` to preview, then omit `--dry-run` to execute. The command requires the `hireai_app` connection and an active administrator in the selected tenant; `--limit` is 1–1000 (default 100). The default period is 365 days. Recent activity, active applications and employee-linked candidates are excluded from automatic retention. Validate retention, consent and evidence-preservation requirements with counsel before production use.
+
+## Talent Acquisition milestone C
+
+Local interviews, panelist scorecards and recruitment reports are implemented. Interview times are stored as instants; panelist reservations use half-open intervals, allowing adjacent interviews while rejecting overlaps. The calendar adapter is a stub and creates no external event, invitation or meeting link. Scorecards use the screening criteria captured when the interview was scheduled, require the signed-in author to be an actual panelist, and are immutable after submission. A recommendation never changes an application stage or makes a hiring decision.
+
+Recruiter/admin reports are GET `/api/v1/reports/recruitment/funnel`, `/time-in-stage` and `/time-to-hire`. Each accepts only optional `jobId`, `from` and `to`. Timestamps require a timezone; periods are `[from,to)`, positive and at most 366 days. The default period is the 30 days ending now. An unknown or foreign-tenant job returns 404. Future end times are observed only through the response's `asOf` instant.
+
+- Funnel counts distinct applications entering each stage during the period, grouped by job and stage.
+- Time in stage follows chronological stage events, clips each visit to the period, excludes terminal HIRED/REJECTED dwell, and averages over positive-duration visits. Returning to a stage creates another visit.
+- Time to hire uses the first APPLIED and first HIRED events, with hiring in the period. Missing initial APPLIED evidence and reversed histories are excluded and counted separately; no zero-duration estimate is invented for legacy rows.
+
+Responses include `period`, `asOf` and `data`; durations are seconds. Empty groups are omitted. Migration 004 backfilled the then-current stage at `application.created_at`, so pre-Milestone-A dwell is reconstructed rather than recovered transition timing. The 366-day period bounds the report window; dwell and hire calculations can still scan full tenant history. Profile larger datasets before expanding analytics. The earlier `/reports/hiring-summary` endpoint is unchanged. See [Milestone C details and verification](docs/ta-milestone-c-report.md) and the [API examples](docs/api-examples.http).

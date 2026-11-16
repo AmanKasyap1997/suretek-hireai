@@ -1,4 +1,7 @@
 import {
+  InterviewMode,
+  InterviewStatus,
+  ScorecardRecommendation,
   DocumentScanStatus,
   AssignmentRole,
   RejectionReason,
@@ -56,6 +59,36 @@ export interface EnumSnapshot {
 
 export const enumSchema: EnumSchema = {
   columns: [
+    {
+      enumName: 'InterviewMode',
+      table: 'interviews',
+      column: 'mode',
+      constraintName: 'interviews_mode_check',
+      values: Object.values(InterviewMode),
+    },
+    {
+      enumName: 'InterviewStatus',
+      table: 'interviews',
+      column: 'status',
+      constraintName: 'interviews_status_check',
+      values: Object.values(InterviewStatus),
+      defaultValue: InterviewStatus.SCHEDULED,
+    },
+    {
+      enumName: 'InterviewStatus',
+      table: 'interview_panelists',
+      column: 'status',
+      constraintName: 'interview_panelists_status_check',
+      values: Object.values(InterviewStatus),
+      defaultValue: InterviewStatus.SCHEDULED,
+    },
+    {
+      enumName: 'ScorecardRecommendation',
+      table: 'interview_scorecards',
+      column: 'recommendation',
+      constraintName: 'interview_scorecards_recommendation_check',
+      values: Object.values(ScorecardRecommendation),
+    },
     {
       enumName: 'DocumentScanStatus',
       table: 'candidate_documents',

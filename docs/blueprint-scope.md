@@ -2,27 +2,27 @@
 
 This starter implements the shared backend foundation and a small set of complete staff workflows. The broader Suretek HireAI document and HireAI + HRMS platform map describe a multi-phase product; they are not a claim that all modules are implemented here.
 
-| Blueprint area                  | Starter behavior                                                                                  | Remaining work                                                                                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Authentication and organization | Tenant-scoped users, login and staff role checks                                                  | SSO, MFA, user invitations, richer membership/assignment policies                                                                                              |
-| Jobs and publishing             | Draft, approve and mark internally published                                                      | Careers CMS/API adapters, approval routing, public application intake, authorized job-board integrations                                                       |
-| Candidates and applications     | Candidate deduplication by tenant/email, paginated staff APIs, manual stages                      | Protected resume upload/download, parsing, rich profiles, candidate portal and search                                                                          |
-| AI screening and assistant      | Human-controlled hiring decisions; no AI model is called                                          | Provider gateway, evidence-based scoring, recruiter override evidence, permission-scoped assistant tools                                                       |
-| AI calling                      | Append-only scoped consent, policy-checked planning, cancellation                                 | Durable dispatch queue, provider adapters, consent recheck before dialing, retries, concurrency/cost caps, real emergency stop, supervised Hindi/English pilot |
-| Call details                    | No recordings or transcripts are generated or exposed                                             | Separate access rights, encrypted storage, provider signature verification, playback, retention and deletion                                                   |
-| Interviews                      | Application can enter the interview stage                                                         | Free/busy calendars, idempotent reservations, reminders, rescheduling and scorecards                                                                           |
-| Offers and hire-to-join         | Draft/approve/record acceptance, transactionally create one employee and initial onboarding tasks | Secure candidate acceptance, expiry, compensation approval chains, e-signature verification and offer documents                                                |
-| Core HR and onboarding          | Employee records, basic admin leave/attendance and initial tasks                                  | Employee self-service, department hierarchy, documents, lifecycle changes, balances/accruals, rosters, biometrics and richer checklists                        |
-| Payroll and compensation        | Offer CTC carried into employee record                                                            | Statutory calculations, salary structures, payroll runs, bank files, reimbursements and full/final settlement                                                  |
-| Performance, LMS and engagement | No implementation                                                                                 | Goals/reviews, training, surveys, recognition, helpdesk and assets                                                                                             |
-| Audit and reporting             | Transactional audit events and initial staff reporting APIs                                       | Report exports, scheduling, verified analytics, retention controls and monitored audit storage                                                                 |
-| Integrations                    | No provider credentials required and no external side effects                                     | Adapter contracts, OAuth/secrets, signed webhooks, retry/idempotency semantics and provider outage behavior                                                    |
+| Blueprint area                  | Starter behavior                                                                                                                       | Remaining work                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Authentication and organization | Tenant-scoped users, login, staff role checks and assignment-scoped manager/interviewer access                                         | SSO, MFA, invitations and richer ownership policies                                  |
+| Jobs and publishing             | Requirements, approvals, assignments, local publication and public careers listings                                                    | External careers CMS/job-board publishing and approval routing                       |
+| Candidates and applications     | Deduplication, filtered lists, stage evidence, private resume upload/download controls and erasure/retention                           | Resume parsing, rich profiles and candidate portal                                   |
+| AI screening and assistant      | Human-controlled hiring decisions; no AI model is called                                                                               | Provider gateway, evidence-based scoring and permission-scoped assistant tools       |
+| AI calling                      | Append-only scoped consent, policy-checked planning and cancellation                                                                   | Durable dispatch, provider adapters, dispatch-time checks, retries and cost limits   |
+| Call details                    | No recordings or transcripts are generated or exposed                                                                                  | Recording access, encrypted storage, playback, retention and deletion                |
+| Interviews and scorecards       | Local scheduling/rescheduling/cancellation, database panelist overlap protection, criteria snapshots and immutable panelist scorecards | External calendar free/busy, invitations, reminders and meeting-link creation        |
+| Offers and hire-to-join         | Approval/acceptance evidence, expiry, revision, maker-checker and transactional employee/onboarding creation                           | Candidate-verified acceptance, e-signature and offer documents                       |
+| Core HR and onboarding          | Employee records, basic administrative leave/attendance and initial tasks                                                              | Self-service, hierarchy, richer policies, balances, rosters and biometrics           |
+| Payroll and compensation        | Offer CTC carried into employee record                                                                                                 | Statutory calculations, payroll runs, bank files and settlements                     |
+| Performance, LMS and engagement | No implementation                                                                                                                      | Goals/reviews, training, surveys, recognition, helpdesk and assets                   |
+| Audit and reporting             | Transactional audit evidence and indexed stage-event funnel/dwell/time-to-hire reports                                                 | Exports, scheduled reporting and wider HR analytics                                  |
+| Integrations                    | Private local/S3-compatible storage, disabled CAPTCHA/malware ports and calendar stub                                                  | Real scanning/CAPTCHA/calendar providers, OAuth, signed webhooks and outage handling |
 
 ## Data and workflow rules
 
 - An authenticated user's database membership determines the tenant and role. No route grants cross-tenant access to a super administrator.
 - PostgreSQL composite foreign keys reject references to records in another tenant.
-- Administrative role checks do not substitute for candidate/employee ownership or interviewer assignment checks. Those portals are intentionally unfinished.
+- Administrative role checks do not substitute for candidate/employee ownership or actual interview panel membership. Candidate and employee portals remain unfinished.
 - Shortlisting, rejection, offer approval and acceptance recording require staff actions. AI does not choose a hiring outcome.
 - The accepted-offer conversion locks the offer and commits employee creation, onboarding tasks and audit data together. Unique source-offer and candidate constraints prevent duplicate employee records.
 - Call, recording and transcription consents are independent, append-only evidence records. A planning record is not evidence that a real call is compliant or authorized at dispatch time.
@@ -30,19 +30,25 @@ This starter implements the shared backend foundation and a small set of complet
 
 ## Suggested implementation order
 
-1. Add private object storage and signed, authorized resume access; define retention/deletion behavior.
-2. Complete careers-site application intake, consent wording and assignment-aware staff access.
+1. Connect and validate a real malware scanner before enabling resume downloads; review intake notices and retention policy.
+2. Add an external calendar adapter to the existing local scheduling workflow and candidate-verified offer acceptance.
 3. Add a model gateway with structured screening evidence and human review.
-4. Implement a durable dispatch worker and sandbox telephony adapter. Recheck consent and policy at dispatch, then test revocation, failures and emergency-stop behavior.
-5. Add calendar scheduling and candidate-verified offer acceptance.
-6. Expand employee self-service and HR policies before implementing payroll or later HRMS phases.
+4. Implement a durable dispatch worker and sandbox telephony adapter with dispatch-time consent/policy checks.
+5. Add report exports and scheduling from verified event metrics.
+6. Expand employee self-service and HR policies before payroll or later HRMS phases.
 
 Production integration choices and statutory payroll/telephony requirements require validation for the actual providers and deployment jurisdiction. This repository does not reproduce or validate prices from the planning document.
 
 ## Milestone A delivered
 
-Job requirements, assignment-scoped manager/interviewer visibility, stage history, reasoned rejection, offer revision/expiry/maker-checker and filtered lists are implemented. Migrations 004 and 005 are forward-only additions; the enum snapshot includes assignments, employment types, event stages and rejection reasons. Existing job/application state machines remain human-controlled. Intake, consent/resume/retention changes (B), interviews/scorecards/reports (C), and all AI/queue/provider work remain outside this delivery. [Roadmap](talent-acquisition-plan.md).
+Job requirements, assignment-scoped manager/interviewer visibility, stage history, reasoned rejection, offer revision/expiry/maker-checker and filtered lists are implemented. Migrations 004 and 005 are forward-only additions; the enum snapshot includes assignments, employment types, event stages and rejection reasons. Existing job/application state machines remain human-controlled. Milestones B and C extend this foundation below; AI/queue/provider work remains outside these milestones. [Roadmap](talent-acquisition-plan.md).
 
 ## Milestone B delivered
 
-Public published-job browsing and generic application intake are tenant-resolved without RLS bypass. Independent self-reported consent choices carry notice/IP/timestamp/user-agent evidence and do not replace staff-verified consent. Private PDF/DOCX uploads use local development storage or a signed S3-compatible adapter, with mandatory CLEAN scan status for audited API downloads. The malware/CAPTCHA ports are explicit stubs; there are no real scan/CAPTCHA provider calls. Admin erasure and a tenant-scoped retention CLI anonymize candidates, revoke consent, cancel planned calls and retry private document deletion while preserving evidence. See [operations](milestone-b-operations.md). Milestone C and all non-goals remain unimplemented.
+Public published-job browsing and generic application intake are tenant-resolved without RLS bypass. Independent self-reported consent choices carry notice/IP/timestamp/user-agent evidence and do not replace staff-verified consent. Private PDF/DOCX uploads use local development storage or a signed S3-compatible adapter, with mandatory CLEAN scan status for audited API downloads. The malware/CAPTCHA ports are explicit stubs; there are no real scan/CAPTCHA provider calls. Admin erasure and a tenant-scoped retention CLI anonymize candidates, revoke consent, cancel planned calls and retry private document deletion while preserving evidence. See [operations](milestone-b-operations.md). Milestone C extends this foundation below; the listed non-goals remain unimplemented.
+
+## Milestone C delivered
+
+Interview reservations use tenant-scoped composite relationships and database exclusion constraints to reject overlapping active reservations for the same panelist. Staff manage schedules; panel members receive scoped visibility and submit immutable scorecards against frozen criteria. The CalendarPort/DisabledCalendar pair is a stub only and no API calls it. Scheduling and recommendations never change application stages or hiring outcomes.
+
+Admin/recruiter reports derive funnel entries, clipped nonterminal stage dwell and first-APPLIED-to-first-HIRED duration from stage evidence. Query periods are bounded; incomplete legacy hire histories are excluded and counted rather than assigned zero duration. See [definitions and verification](ta-milestone-c-report.md).

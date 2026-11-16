@@ -13,3 +13,5 @@ export {
 export { validateResume } from './resume-validation';
 
 export type { StoredObject } from './storage';
+export { CalendarPort, DisabledCalendar } from './calendar';
+export type { CalendarInterview, CalendarResult } from './calendar';
