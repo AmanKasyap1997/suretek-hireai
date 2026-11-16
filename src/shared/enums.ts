@@ -32,6 +32,9 @@ export enum OfferStatus {
   DRAFT = 'DRAFT',
   APPROVED = 'APPROVED',
   ACCEPTED = 'ACCEPTED',
+  DECLINED = 'DECLINED',
+  WITHDRAWN = 'WITHDRAWN',
+  EXPIRED = 'EXPIRED',
 }
 
 export enum EmployeeStatus {
@@ -65,4 +68,22 @@ export enum LeaveStatus {
   PENDING = 'PENDING',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
+}
+
+export enum AssignmentRole {
+  HIRING_MANAGER = 'HIRING_MANAGER',
+  INTERVIEWER = 'INTERVIEWER',
+  RECRUITER_OWNER = 'RECRUITER_OWNER',
+}
+export enum RejectionReason {
+  QUALIFICATIONS = 'QUALIFICATIONS',
+  EXPERIENCE = 'EXPERIENCE',
+  COMPENSATION = 'COMPENSATION',
+  OTHER = 'OTHER',
+}
+export enum EmploymentType {
+  FULL_TIME = 'FULL_TIME',
+  PART_TIME = 'PART_TIME',
+  CONTRACT = 'CONTRACT',
+  INTERN = 'INTERN',
 }

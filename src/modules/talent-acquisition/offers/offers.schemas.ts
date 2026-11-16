@@ -4,6 +4,13 @@ export { paginationSchema };
 
 export const offerSchema = z
   .object({
+    expiresAt: z
+      .string()
+      .datetime({ offset: true })
+      .refine((v) => new Date(v).getTime() > Date.now(), {
+        message: 'Expiry must be in the future',
+      })
+      .optional(),
     applicationId: z.string().uuid(),
     annualCtc: z
       .string()

@@ -67,7 +67,7 @@ export function useApiFixture() {
   }
 
   function authorized(
-    method: 'get' | 'post' | 'patch',
+    method: 'get' | 'post' | 'patch' | 'delete',
     path: string,
     token = tokenA,
   ) {
@@ -162,6 +162,8 @@ export function useApiFixture() {
     if (pool && tenantA && tenantB) {
       // Delete only fixtures created by this suite, preserving unrelated local data.
       for (const table of [
+        'application_stage_events',
+        'job_assignments',
         'audit_events',
         'attendance',
         'leave_requests',

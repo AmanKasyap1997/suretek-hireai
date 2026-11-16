@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Actor, CurrentUser } from '../../../shared/actor';
+import { OfferStatus } from '../../../shared/enums';
 import { Roles } from '../../../shared/roles.decorator';
 import { ADMIN_ROLES } from '../../../shared/role-groups';
 import { BodySchema, parse } from '../../../platform/http/validation';
@@ -72,5 +73,25 @@ export class OffersController {
   })
   hire(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.hiring.hire(actor, id);
+  }
+  @Post(':id/decline')
+  @HttpCode(200)
+  decline(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.hiring.terminate(actor, id, OfferStatus.DECLINED);
+  }
+
+  @Post(':id/withdraw')
+  @HttpCode(200)
+  withdraw(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.hiring.terminate(actor, id, OfferStatus.WITHDRAWN);
+  }
+
+  @Post(':id/expire')
+  @HttpCode(200)
+  expire(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.hiring.terminate(actor, id, OfferStatus.EXPIRED);
   }
 }

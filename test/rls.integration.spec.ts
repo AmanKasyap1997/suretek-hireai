@@ -63,6 +63,14 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
     [applicationId, tenantId, jobId, candidateId, ApplicationStage.HIRED],
   );
   await client.query(
+    `INSERT INTO job_assignments(tenant_id,job_id,user_id,role) VALUES($1,$2,$3,'RECRUITER_OWNER')`,
+    [tenantId, jobId, userId],
+  );
+  await client.query(
+    `INSERT INTO application_stage_events(tenant_id,application_id,to_stage,actor_id) VALUES($1,$2,'HIRED',$3)`,
+    [tenantId, applicationId, userId],
+  );
+  await client.query(
     `INSERT INTO offers(id,tenant_id,application_id,status,annual_ctc,currency,joining_date,created_by,approved_by,accepted_at,acceptance_reference)
      VALUES($1,$2,$3,$4,'1000000.00','INR','2026-12-01',$5,$5,now(),'RLS acceptance fixture')`,
     [offerId, tenantId, applicationId, OfferStatus.ACCEPTED, userId],
@@ -172,6 +180,8 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
   afterAll(async () => {
     if (admin && first && second) {
       for (const table of [
+        'application_stage_events',
+        'job_assignments',
         'audit_events',
         'attendance',
         'leave_requests',

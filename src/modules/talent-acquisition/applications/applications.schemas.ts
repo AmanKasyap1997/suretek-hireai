@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ApplicationStage } from '../../../shared/enums';
-import { paginationSchema } from '../../../platform/http/validation';
+import { RejectionReason, ApplicationStage } from '../../../shared/enums';
+import { listSchema as paginationSchema } from '../../../shared/ta-list';
 export { paginationSchema };
 
 export const applicationSchema = z
@@ -12,6 +12,8 @@ export const applicationSchema = z
 
 export const stageSchema = z
   .object({
+    reasonCode: z.enum(RejectionReason).optional(),
+    note: z.string().trim().max(2000).optional(),
     stage: z
       .enum(ApplicationStage)
       .extract([
@@ -20,7 +22,11 @@ export const stageSchema = z
         ApplicationStage.REJECTED,
       ]),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.stage !== ApplicationStage.REJECTED || !!v.reasonCode, {
+    message: 'REJECTED requires reasonCode',
+    path: ['reasonCode'],
+  });
 
 export type ApplicationInput = z.infer<typeof applicationSchema>;
 
