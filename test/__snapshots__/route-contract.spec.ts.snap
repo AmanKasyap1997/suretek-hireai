@@ -287,6 +287,84 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
   },
   {
     "method": "GET",
+    "path": "/api/v1/interviews",
+    "public": false,
+    "roles": [
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "INTERVIEWER",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/interviews",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/interviews/:id",
+    "public": false,
+    "roles": [
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "INTERVIEWER",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/interviews/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/interviews/:id/cancel",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/interviews/:interviewId/scorecards",
+    "public": false,
+    "roles": [
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "INTERVIEWER",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/interviews/:interviewId/scorecards",
+    "public": false,
+    "roles": [
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "INTERVIEWER",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/jobs",
     "public": false,
     "roles": [
@@ -524,6 +602,36 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
   {
     "method": "GET",
     "path": "/api/v1/reports/hiring-summary",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reports/recruitment/funnel",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reports/recruitment/time-in-stage",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reports/recruitment/time-to-hire",
     "public": false,
     "roles": [
       "HR_ADMIN",

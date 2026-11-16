@@ -7,6 +7,9 @@ import {
   CallLanguage,
   ConsentScope,
   JobStatus,
+  InterviewMode,
+  InterviewStatus,
+  ScorecardRecommendation,
   LeaveType,
   OfferStatus,
   Role,
@@ -36,6 +39,7 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
   const candidateId = randomUUID();
   const jobId = randomUUID();
   const applicationId = randomUUID();
+  const interviewId = randomUUID();
   const offerId = randomUUID();
   const employeeId = randomUUID();
   const consentId = randomUUID();
@@ -70,6 +74,39 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
   await client.query(
     `INSERT INTO applications(id,tenant_id,job_id,candidate_id,stage) VALUES($1,$2,$3,$4,$5)`,
     [applicationId, tenantId, jobId, candidateId, ApplicationStage.HIRED],
+  );
+  const startsAt = new Date(Date.now() + 7 * 86400000).toISOString();
+  const endsAt = new Date(Date.parse(startsAt) + 3600000).toISOString();
+  await client.query(
+    `INSERT INTO interviews(id,tenant_id,application_id,round,mode,starts_at,ends_at,status,created_by)
+     VALUES($1,$2,$3,'RLS interview fixture',$4,$5,$6,$7,$8)`,
+    [
+      interviewId,
+      tenantId,
+      applicationId,
+      InterviewMode.PHONE,
+      startsAt,
+      endsAt,
+      InterviewStatus.SCHEDULED,
+      userId,
+    ],
+  );
+  await client.query(
+    `INSERT INTO interview_panelists(tenant_id,interview_id,user_id,starts_at,ends_at,status)
+     VALUES($1,$2,$3,$4,$5,$6)`,
+    [
+      tenantId,
+      interviewId,
+      userId,
+      startsAt,
+      endsAt,
+      InterviewStatus.SCHEDULED,
+    ],
+  );
+  await client.query(
+    `INSERT INTO interview_scorecards(tenant_id,interview_id,panelist_user_id,scores,recommendation)
+     VALUES($1,$2,$3,'[]'::jsonb,$4)`,
+    [tenantId, interviewId, userId, ScorecardRecommendation.HOLD],
   );
   await client.query(
     `INSERT INTO job_assignments(tenant_id,job_id,user_id,role) VALUES($1,$2,$3,'RECRUITER_OWNER')`,
@@ -189,6 +226,9 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
   afterAll(async () => {
     if (admin && first && second) {
       for (const table of [
+        'interview_scorecards',
+        'interview_panelists',
+        'interviews',
         'candidate_documents',
         'public_intake_limits',
         'application_stage_events',

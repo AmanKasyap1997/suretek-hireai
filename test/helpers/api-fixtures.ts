@@ -162,6 +162,9 @@ export function useApiFixture() {
     if (pool && tenantA && tenantB) {
       // Delete only fixtures created by this suite, preserving unrelated local data.
       for (const table of [
+        'interview_scorecards',
+        'interview_panelists',
+        'interviews',
         'candidate_documents',
         'public_intake_limits',
         'application_stage_events',
