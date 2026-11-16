@@ -1,23 +1,25 @@
 # Shared enum values
 
-[`src/common/enums.ts`](../src/common/enums.ts) is the canonical declaration for `Role`, `JobStatus`, `ApplicationStage`, `OfferStatus`, `EmployeeStatus`, `ConsentScope`, `CallLanguage`, `CallRequestStatus`, `LeaveType` and `LeaveStatus`.
+[`src/shared/enums.ts`](../src/shared/enums.ts) is the canonical declaration for `Role`, `JobStatus`, `ApplicationStage`, `OfferStatus`, `EmployeeStatus`, `ConsentScope`, `CallLanguage`, `CallRequestStatus`, `LeaveType` and `LeaveStatus`.
 
 Import enums instead of repeating string literals. Their string values remain the HTTP API and PostgreSQL values, such as `HR_ADMIN` and `SHORTLISTED`.
 
 ```ts
+// From src/modules/auth/auth.schemas.ts:
 import { z } from 'zod';
-import { Role } from '../common/enums';
+import { Role } from '../../shared/enums';
 
 const userSchema = z.object({ role: z.enum(Role) });
 const administratorRole: Role = Role.HR_ADMIN;
 ```
 
-Keep permissions explicit through [`src/auth/role-groups.ts`](../src/auth/role-groups.ts):
+Keep permissions explicit through [`src/shared/role-groups.ts`](../src/shared/role-groups.ts):
 
 ```ts
+// From src/modules/talent-acquisition/offers/offers.controller.ts:
 import { Controller } from '@nestjs/common';
-import { Roles } from '../auth/roles.decorator';
-import { ADMIN_ROLES } from '../auth/role-groups';
+import { Roles } from '../../../shared/roles.decorator';
+import { ADMIN_ROLES } from '../../../shared/role-groups';
 
 @Controller('offers')
 @Roles(...ADMIN_ROLES)
@@ -28,7 +30,7 @@ Adding a role makes it a valid stored role, without granting business access. `A
 
 ## Change values
 
-1. Edit the relevant enum in `src/common/enums.ts`.
+1. Edit the relevant enum in `src/shared/enums.ts`.
 2. Run `npm run enums:generate`. This runs offline and writes a new SQL migration plus `database/enums.snapshot.json`.
 3. Review and commit the enum source, generated migration and snapshot. Do not edit an already applied migration.
 4. Run `npm run enums:check` to detect enum changes that have not been generated, then `npm run db:migrate` to apply the migration.

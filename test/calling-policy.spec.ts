@@ -1,7 +1,7 @@
 import {
   callPolicyFromEnv,
   isWithinCallingWindow,
-} from '../src/calling/calling.policy';
+} from '../src/modules/talent-acquisition';
 
 describe('local calling policy', () => {
   it('defaults to disabled planning and the Asia/Kolkata business window', () => {

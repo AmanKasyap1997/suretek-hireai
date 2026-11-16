@@ -1,0 +1,450 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`HTTP route and access contract preserves every registered HTTP method, path and effective access policy 1`] = `
+[
+  {
+    "method": "GET",
+    "path": "/api/v1/applications",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/applications",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/applications/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/applications/:id/stage",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/attendance",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/attendance",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/audit-events",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/auth/login",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "public": false,
+    "roles": [
+      "CANDIDATE",
+      "EMPLOYEE",
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "INTERVIEWER",
+      "IT_ASSET_ADMIN",
+      "PAYROLL_FINANCE",
+      "RECRUITER",
+      "REPORTING_MANAGER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/auth/users",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/auth/users/:id/status",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/call-requests",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/call-requests",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/call-requests/:id/cancel",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/candidates",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/candidates",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/candidates/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/candidates/:id/consents",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/candidates/:id/consents",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/employees",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/employees/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/employees/:id/onboarding-tasks",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/health/live",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/health/ready",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/jobs",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/jobs",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/jobs/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/jobs/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/jobs/:id/approve",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/jobs/:id/close",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/jobs/:id/publish",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/leave-requests",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/leave-requests",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/leave-requests/:id/review",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/offers",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/offers",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/offers/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/offers/:id/accept",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/offers/:id/approve",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/offers/:id/hire",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/onboarding-tasks/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reports/hiring-summary",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/docs",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/docs-json",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/docs-yaml",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/docs/",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/docs/docs/swagger-ui-init.js",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/docs/index.html",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/docs/LICENSE",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/docs/swagger-ui-init.js",
+    "public": true,
+    "roles": [],
+  },
+]
+`;

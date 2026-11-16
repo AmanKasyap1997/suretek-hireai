@@ -2,9 +2,9 @@ import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
-import { ApiExceptionFilter } from './common/exception.filter';
-import { readConfig } from './common/config';
-import { tenantContextMiddleware } from './database/tenant-context';
+import { ApiExceptionFilter } from './platform/http/exception.filter';
+import { readConfig } from './platform/config';
+import { tenantContextMiddleware } from './platform/database/tenant-context';
 export function configureApp(app: INestApplication): void {
   const cfg = readConfig();
   app.use(tenantContextMiddleware);

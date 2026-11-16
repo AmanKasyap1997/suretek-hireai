@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { Request } from 'express';
 import request from 'supertest';
 import { configureApp } from '../src/app.setup';
-import { readConfig } from '../src/common/config';
+import { readConfig } from '../src/platform/config';
 
 @Controller('probe')
 class ProbeController {

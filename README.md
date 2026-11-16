@@ -16,6 +16,45 @@ The attached blueprint is requirements input. Vendor recommendations, prices, pu
 
 Live AI calls, resume parsing, file storage, calendar booking, payroll, e-signature and external publishing require further implementation. [Scope and next steps](docs/blueprint-scope.md) map the starter to the full blueprint.
 
+## Project layout
+
+```text
+src/
+  main.ts                         # API entrypoint
+  app.module.ts                   # Application module wiring
+  app.setup.ts                    # HTTP, Swagger and middleware setup
+  modules/
+    auth/                         # Controller, service, schemas, guard and passwords
+    talent-acquisition/
+      jobs/
+      candidates/
+      applications/
+      offers/
+      calling/
+      index.ts                    # Public recruitment module API
+    hr/
+      employees/
+      onboarding/
+      leave/
+      attendance/
+      hr-provisioning.service.ts  # Transactional hire-to-join handoff
+      index.ts                    # Public HR module and provisioner API
+  platform/
+    config.ts                     # Environment configuration
+    database/                     # Pool, tenant context and enum schema mapping
+    http/                         # HTTP helpers and health/report controllers/services
+    audit/                        # Transactional audit helper
+  shared/                         # Actor, enums and authorization contracts
+  integrations/                   # Future provider adapters
+database/                         # Immutable migrations, enum snapshot and role setup
+scripts/                          # Migrations, bootstrap and enum generation CLIs
+test/                             # API, database and contract verification
+```
+
+Each business feature keeps its controller, schemas and service together. Authentication separates request handling and validation from its service and guard. Health and reporting controllers delegate to platform services. Platform code supplies database, tenant-context, HTTP and audit infrastructure; shared contracts contain `Actor`, enums, role decorators and explicit permission groups.
+
+Import another module through its public `index.ts` barrel rather than its internal controllers or services. The offers feature uses HR's exported `HrProvisioningService` for employee and onboarding creation inside the existing hire transaction. HR controllers retain their original Swagger operation IDs when split into features, preserving the API documentation contract.
+
 ## Run locally
 
 Install Node.js 24, npm and Docker with Compose. Start Docker Desktop on Windows and wait for its engine to be ready; `docker version` should show both Client and Server. Run the commands from the project directory. Each command below is a separate step, so PowerShell does not need `&&`.
@@ -118,7 +157,7 @@ Use HTTPS, restrict database access, and configure backups and restore testing f
 
 ## Shared enums
 
-Define role, status, stage, consent, language and leave values in [`src/common/enums.ts`](src/common/enums.ts). Application code and validation import these enums; PostgreSQL stores the same strings and validates them with generated `CHECK` constraints.
+Define role, status, stage, consent, language and leave values in [`src/shared/enums.ts`](src/shared/enums.ts). Application code and validation import these enums; PostgreSQL stores the same strings and validates them with generated `CHECK` constraints.
 
 After changing an enum, generate and apply its database migration:
 
@@ -128,7 +167,7 @@ npm run enums:check
 npm run db:migrate
 ```
 
-Commit the enum change, generated SQL migration and `database/enums.snapshot.json`. New roles receive no business permissions until you deliberately add them to the grants in `src/auth/role-groups.ts`; they can read their own authenticated profile. Renaming or removing stored values requires a deliberate data migration. The generator never rewrites existing rows. See [enum usage and upgrades](docs/enums.md).
+Commit the enum change, generated SQL migration and `database/enums.snapshot.json`. New roles receive no business permissions until you deliberately add them to the grants in `src/shared/role-groups.ts`; they can read their own authenticated profile. Renaming or removing stored values requires a deliberate data migration. The generator never rewrites existing rows. See [enum usage and upgrades](docs/enums.md).
 
 If you already run an earlier starter version, keep your `.env` and database, follow the [ownership and RLS upgrade](docs/hardening.md#upgrade-an-existing-database), install dependencies with `npm ci`, then run `npm run db:migrate`. No database reset or repeat bootstrap is needed.
 

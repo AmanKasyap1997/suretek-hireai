@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { configureApp } from './app.setup';
-import { readConfig } from './common/config';
+import { readConfig } from './platform/config';
 async function bootstrap() {
   const cfg = readConfig();
   const app = await NestFactory.create(AppModule, { bodyParser: false });

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, PoolClient } from 'pg';
-import { DbService } from '../src/database/db.service';
-import { runWithTenant } from '../src/database/tenant-context';
+import { DbService } from '../src/platform/database/db.service';
+import { runWithTenant } from '../src/platform/database/tenant-context';
 import {
   ApplicationStage,
   CallLanguage,
@@ -10,7 +10,7 @@ import {
   LeaveType,
   OfferStatus,
   Role,
-} from '../src/common/enums';
+} from '../src/shared/enums';
 
 interface TenantFixture {
   tenantId: string;
