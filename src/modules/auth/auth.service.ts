@@ -11,7 +11,7 @@ import { audit } from '../../platform/audit/audit';
 import { readConfig } from '../../platform/config';
 import { Actor } from '../../shared/actor';
 import { Role } from '../../shared/enums';
-import { ADMIN_ROLES } from '../../shared/role-groups';
+import { ORGANIZATION_STAFF_ROLES } from '../../shared/role-groups';
 import { CreateUserInput, LoginInput, UserStatusInput } from './auth.schemas';
 import { hashPassword, verifyPassword } from './password';
 
@@ -23,10 +23,22 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
   async login(input: LoginInput) {
-    setTenantId(input.tenantId);
+    let tenantId = input.tenantId;
+    if (input.organizationSlug) {
+      const resolved = await this.db.one<{ id: string | null }>(
+        'SELECT resolve_public_tenant($1) AS id',
+        [input.organizationSlug],
+      );
+      tenantId = resolved?.id ?? undefined;
+    }
+    if (!tenantId) {
+      await verifyPassword(input.password, await this.dummyHash);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    setTenantId(tenantId);
     const user = await this.db.one(
       'SELECT id,tenant_id,password_hash,active FROM users WHERE tenant_id=$1 AND lower(email)=$2',
-      [input.tenantId, input.email],
+      [tenantId, input.email],
     );
     const verified = await verifyPassword(
       input.password,
@@ -49,15 +61,18 @@ export class AuthService {
 
   me(actor: Actor) {
     return this.db.one(
-      'SELECT id,tenant_id,full_name,email,role,active FROM users WHERE tenant_id=$1 AND id=$2',
+      "SELECT u.id,u.tenant_id,u.full_name,u.email,u.role,u.active,t.name AS organization_name,t.slug AS organization_slug,(t.is_platform AND u.role='SUPER_ADMIN') AS platform_admin FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.tenant_id=$1 AND u.id=$2",
       [actor.tenantId, actor.userId],
     );
   }
 
   async createUser(actor: Actor, input: CreateUserInput) {
-    if (actor.role !== Role.SUPER_ADMIN && ADMIN_ROLES.includes(input.role))
+    if (
+      actor.role !== Role.HR_ADMIN ||
+      !ORGANIZATION_STAFF_ROLES.some((role) => role === input.role)
+    )
       throw new ForbiddenException(
-        'Only a super admin can create administrator accounts',
+        'Organization administrators can create staff only; use organization provisioning for initial administrators',
       );
     const hash = await hashPassword(input.password);
     return this.db.transaction(async (tx) => {
@@ -73,6 +88,7 @@ export class AuthService {
   }
 
   async setStatus(actor: Actor, id: string, input: UserStatusInput) {
+    if (actor.role !== Role.HR_ADMIN) throw new ForbiddenException();
     if (id === actor.userId)
       throw new ForbiddenException(
         'Use another administrator to change your account status',
@@ -86,18 +102,27 @@ export class AuthService {
         [actor.tenantId, id],
       );
       if (!target) throw new NotFoundException('User not found');
-      if (actor.role !== Role.SUPER_ADMIN && ADMIN_ROLES.includes(target.role))
+      if (target.role === Role.SUPER_ADMIN || target.role === Role.HR_ADMIN)
         throw new ForbiddenException();
-      if (target.role === Role.SUPER_ADMIN && !input.active) {
-        const remaining = await tx.one(
-          'SELECT count(*)::int AS count FROM users WHERE tenant_id=$1 AND role=$2 AND active=true AND id<>$3',
-          [actor.tenantId, Role.SUPER_ADMIN, id],
+      const state = await tx.one(
+        'SELECT invitation_pending,password_hash FROM users WHERE tenant_id=$1 AND id=$2',
+        [actor.tenantId, id],
+      );
+      if (
+        input.active &&
+        (state?.invitation_pending ||
+          state?.password_hash === '!invitation-pending')
+      )
+        throw new ForbiddenException(
+          'Pending invitations must be accepted by the recipient',
         );
-        if (!remaining?.count)
-          throw new ForbiddenException('Keep at least one active super admin');
-      }
+      if (!input.active)
+        await tx.query(
+          'UPDATE user_invitations SET revoked_at=now() WHERE tenant_id=$1 AND user_id=$2 AND accepted_at IS NULL AND revoked_at IS NULL',
+          [actor.tenantId, id],
+        );
       const row = await tx.one(
-        'UPDATE users SET active=$3 WHERE tenant_id=$1 AND id=$2 RETURNING id,email,full_name,role,active',
+        'UPDATE users SET active=$3,invitation_pending=false WHERE tenant_id=$1 AND id=$2 RETURNING id,email,full_name,role,active',
         [actor.tenantId, id, input.active],
       );
       await audit(tx, actor, 'user.status_changed', 'user', id, {

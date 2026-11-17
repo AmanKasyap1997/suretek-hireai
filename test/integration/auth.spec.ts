@@ -33,7 +33,7 @@ describe('PostgreSQL-backed API invariants', () => {
     await authorized('get', '/jobs', employeeToken).expect(403);
   });
 
-  it('preserves one active super admin under concurrent account deactivations', async () => {
+  it('prevents platform super admins from modifying organization accounts', async () => {
     const { app, pool, tenantA, user, authorized } = fixture;
     const first = await user(tenantA, Role.SUPER_ADMIN);
     const second = await user(tenantA, Role.SUPER_ADMIN);
@@ -62,14 +62,14 @@ describe('PostgreSQL-backed API invariants', () => {
     ]);
     expect(
       responses.filter((response) => response.status === 200),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(
       responses.filter((response) => [401, 403].includes(response.status)),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     const remaining = await pool.query(
       'SELECT count(*)::int AS count FROM users WHERE tenant_id=$1 AND role=$2 AND active=true',
       [tenantA, Role.SUPER_ADMIN],
     );
-    expect(remaining.rows[0].count).toBe(1);
+    expect(remaining.rows[0].count).toBe(2);
   });
 });

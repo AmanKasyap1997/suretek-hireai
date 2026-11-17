@@ -1,3 +1,4 @@
+import { cookieToken, assertBrowserOrigin } from './browser-session';
 import {
   CanActivate,
   ExecutionContext,
@@ -17,6 +18,7 @@ import { PUBLIC_KEY, ROLES_KEY } from '../../shared/roles.decorator';
 const claimsSchema = z.object({
   sub: z.string().uuid(),
   tenantId: z.string().uuid(),
+  exp: z.number(),
 });
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -34,7 +36,16 @@ export class AuthGuard implements CanActivate {
     )
       return true;
     const request = ctx.switchToHttp().getRequest();
-    const header = request.headers.authorization;
+    const cookie = cookieToken(request);
+    const header =
+      request.headers.authorization ??
+      (cookie ? `Bearer ${cookie}` : undefined);
+    if (
+      !request.headers.authorization &&
+      cookie &&
+      !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
+    )
+      assertBrowserOrigin(request);
     if (typeof header !== 'string' || !header.startsWith('Bearer '))
       throw new UnauthorizedException();
     let token: z.infer<typeof claimsSchema>;
@@ -64,6 +75,7 @@ export class AuthGuard implements CanActivate {
       ctx.getClass(),
     ]);
     if (!allowed?.includes(user.role)) throw new ForbiddenException();
+    request.sessionExpiresAt = token.exp * 1000;
     request.actor = {
       userId: user.id,
       tenantId: user.tenant_id,

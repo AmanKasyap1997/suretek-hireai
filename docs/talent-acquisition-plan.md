@@ -1,12 +1,14 @@
 # Talent Acquisition plan
 
-| Milestone | Status   |
-| --------- | -------- |
-| A         | Complete |
-| B         | Complete |
-| C         | Complete |
-| D         | Complete |
-| E         | Complete |
+| Milestone       | Status      |
+| --------------- | ----------- |
+| A               | Complete    |
+| B               | Complete    |
+| C               | Complete    |
+| D               | Complete    |
+| E               | Complete    |
+| F1              | In progress |
+| SaaS onboarding | Implemented |
 
 ## Working rules (apply to every milestone)
 
@@ -76,3 +78,36 @@ AI screening calls, durable job queue, call dispatch, real telephony or calendar
 ## Acceptance for every milestone
 
 npm ci; npm run enums:check; npm run lint; npm run format:check; npm run build; migrations apply twice on a fresh DB with the owner role; npm test passes with the app connected as hireai_app; the RLS coverage guard test passes; Docker build if available (otherwise say not run).
+
+## Milestone F1: unified login and role-based console shell
+
+Scope: React/TypeScript/Vite in /web, unified login, cookie session handling and one configurable role shell at /console. No business screens, AI, queue, call dispatch or multi-tenant administration. Follow Working rules above. Validate backend isolation, browser session/CSRF, every role's guards/navigation, real-backend Playwright, deployment and existing checks.
+
+### Auth and roles (original F1 discovery; superseded by SaaS extension below)
+
+Existing POST /api/v1/auth/login accepts tenantId, email, password and returns {accessToken, tokenType:'Bearer', expiresIn}. GET /auth/me returns {id,tenant_id,full_name,email,role,active}. The JWT is HS256, issuer suretek-hireai, audience suretek-api; default expiry 900 seconds (configurable 60–86400). Each request reloads active membership and role from PostgreSQL. No cookies, refresh, logout/revocation, CSRF, password-reset, forced-change or account-lockout mechanism exists. Login is limited to 5/minute per IP; disabled and incorrect accounts both receive generic 401. CAPTCHA protects public intake only, not login.
+
+| Role              | Backend permission scope                                                                                                                      |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| SUPER_ADMIN       | Tenant administration; create/status-change administrators; recruitment, offers, privacy, HR operations; must retain one active super admin   |
+| HR_ADMIN          | Recruitment, offers, privacy, HR operations and non-admin user administration                                                                 |
+| RECRUITER         | Jobs (except admin-only approval/assignment actions), candidates/documents, applications, interviews, recruitment reports, call planning only |
+| HIRING_MANAGER    | Assigned jobs/applications/history; assigned-job shortlist/reject only; panel-scoped interviews/scorecards                                    |
+| INTERVIEWER       | Assigned jobs/applications/history and panel-scoped interviews/scorecards; no stage decisions                                                 |
+| CANDIDATE         | Own profile only; no candidate portal                                                                                                         |
+| EMPLOYEE          | Own profile only; no self-service                                                                                                             |
+| REPORTING_MANAGER | Own profile only; no manager self-service                                                                                                     |
+| PAYROLL_FINANCE   | Own profile only; no payroll access                                                                                                           |
+| IT_ASSET_ADMIN    | Own profile only; no asset access                                                                                                             |
+
+All permissions are tenant scoped with RLS, explicit filters and finer assignment/maker-checker policies. UI navigation is only a coarse visibility aid.
+
+Gaps/decision: add a separate-commit browser session adapter: POST /auth/session reuses login and sets an HttpOnly SameSite=Strict cookie (Secure in production), GET /auth/session returns {user,expiresAt}, DELETE /auth/session clears it. Existing bearer endpoints/shapes remain unchanged. Unsafe cookie requests and session login/logout require an exact allowed Origin (CSRF); cookies never reach JavaScript. No refresh token is introduced: expiry requires login again. Logout clears the browser credential but does not revoke a copied JWT before expiry, consistent with existing stateless auth. Configure the public pilot tenant UUID at web build time; no tenant/role picker. Password reset/lockout/first-login remain documented unsupported gaps. Branding uses the logo embedded in the supplied blueprint and Suretek website primary red/Poppins/Teko, served locally. White header/sidebar and red active navigation follow the retained dashboard designs.
+
+## SaaS onboarding: user-authorized scope extension
+
+The owner requested SaaS provisioning on the F1 branch: Super Admin creates organizations and their initial admins, invitation emails activate those accounts, then organization admins invite their own staff. This supersedes the earlier single-tenant/no-multi-tenant-admin limit for this extension.
+
+SUPER_ADMIN now has only platform organization operations plus its own profile/session. HR_ADMIN is the Organization Admin and retains current-organization business authority. Explicit staff roles remain unchanged. No enum migration is needed; the requested removal of platform Super Admin from business API grants is deliberate and covered by the updated route contract. No existing tenant is automatically promoted to platform authority.
+
+Migration 012 adds forced-RLS invitation/control-plane tables, tenant-first indexes, composite links to the created organization's admin/invitation, and one narrow role-checking organization-provisioning function. Atomic create, hashed expiring single-use links, accept/password setup, cancel/resend, scoped staff list/status controls, TLS SMTP delivery and one build for all organization sign-in keys are implemented. See [SaaS onboarding](saas-onboarding.md) for upgrade steps, role/API table, control-plane FK exception and verification. Billing, subscription tiers, business screens, AI/queue/calling remain outside this change.

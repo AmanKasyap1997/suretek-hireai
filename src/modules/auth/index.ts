@@ -1,3 +1,10 @@
 export { AuthModule } from './auth.module';
 export { AuthGuard } from './auth.guard';
 export { AuthService } from './auth.service';
+export { verifyPassword, hashPassword } from './password';
+
+export {
+  assertBrowserOrigin,
+  cookieToken,
+  sessionCookieOptions,
+} from './browser-session';

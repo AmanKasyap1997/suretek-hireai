@@ -9,11 +9,21 @@ const email = z
   .transform((v) => v.toLowerCase());
 export const loginSchema = z
   .object({
-    tenantId: z.string().uuid(),
+    tenantId: z.string().uuid().optional(),
+    organizationSlug: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/)
+      .optional(),
     email,
     password: z.string().min(1).max(1024),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) => Boolean(value.tenantId) !== Boolean(value.organizationSlug),
+    'Supply exactly one organizationSlug or legacy tenantId',
+  );
 export const createUserSchema = z
   .object({
     fullName: z.string().trim().min(1).max(200),

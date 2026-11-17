@@ -11,7 +11,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -21,7 +20,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -33,7 +31,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -45,7 +42,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -56,7 +52,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HIRING_MANAGER",
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -65,7 +60,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -74,7 +68,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -83,7 +76,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -110,12 +102,40 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     ],
   },
   {
+    "method": "DELETE",
+    "path": "/api/v1/auth/session",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/auth/session",
+    "public": false,
+    "roles": [
+      "CANDIDATE",
+      "EMPLOYEE",
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "INTERVIEWER",
+      "IT_ASSET_ADMIN",
+      "PAYROLL_FINANCE",
+      "RECRUITER",
+      "REPORTING_MANAGER",
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/auth/session",
+    "public": true,
+    "roles": [],
+  },
+  {
     "method": "POST",
     "path": "/api/v1/auth/users",
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -124,7 +144,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -134,7 +153,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -144,7 +162,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -154,7 +171,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -164,7 +180,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -174,7 +189,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -184,7 +198,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -194,7 +207,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -204,7 +216,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -214,7 +225,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -224,7 +234,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -234,7 +243,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -243,7 +251,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -252,7 +259,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -261,7 +267,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -270,7 +275,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -294,7 +298,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -304,7 +307,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -316,7 +318,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -326,7 +327,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -336,7 +336,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -348,7 +347,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -360,7 +358,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -372,7 +369,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -382,7 +378,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -394,7 +389,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
       "HR_ADMIN",
       "INTERVIEWER",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -404,7 +398,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -413,7 +406,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -423,7 +415,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -432,7 +423,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -441,7 +431,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -451,7 +440,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -461,7 +449,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -470,7 +457,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -479,7 +465,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -488,7 +473,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -497,7 +481,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -506,7 +489,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -515,7 +497,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -524,7 +505,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -533,7 +513,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -542,7 +521,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -551,7 +529,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -560,7 +537,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -569,7 +545,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -578,7 +553,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "public": false,
     "roles": [
       "HR_ADMIN",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -612,7 +586,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -622,7 +595,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -632,7 +604,6 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
-      "SUPER_ADMIN",
     ],
   },
   {
@@ -642,7 +613,60 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/saas/invitations",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/saas/invitations/accept",
+    "public": true,
+    "roles": [],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/saas/organizations",
+    "public": false,
+    "roles": [
       "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/saas/organizations",
+    "public": false,
+    "roles": [
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/saas/organizations/:id/admin-invitation",
+    "public": false,
+    "roles": [
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/saas/users",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/saas/users/:id/invitation",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
     ],
   },
   {

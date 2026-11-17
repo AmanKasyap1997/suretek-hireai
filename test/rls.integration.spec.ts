@@ -17,6 +17,7 @@ import {
 
 interface TenantFixture {
   tenantId: string;
+  organizationId: string;
   userId: string;
   candidateId: string;
   consentId: string;
@@ -166,7 +167,39 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
      VALUES($1,$2,$3,'rls.fixture','candidate',$4)`,
     [auditId, tenantId, userId, candidateId],
   );
-  return { tenantId, userId, candidateId, consentId, auditId };
+  const organizationId = randomUUID(),
+    organizationAdmin = randomUUID(),
+    organizationInvite = randomUUID();
+  await client.query(
+    "INSERT INTO user_invitations(tenant_id,user_id,token_hash,expires_at) VALUES($1,$2,$3,now()+interval '1 day')",
+    [tenantId, userId, '1'.repeat(64)],
+  );
+  await client.query('INSERT INTO tenants(id,name) VALUES($1,$2)', [
+    organizationId,
+    'RLS organization fixture',
+  ]);
+  await client.query(
+    "INSERT INTO users(id,tenant_id,email,password_hash,full_name,role,active,invitation_pending) VALUES($1,$2,$3,'!invitation-pending','RLS invited admin','HR_ADMIN',false,true)",
+    [organizationAdmin, organizationId, `${organizationAdmin}@example.test`],
+  );
+  await client.query(
+    "INSERT INTO user_invitations(id,tenant_id,user_id,token_hash,expires_at) VALUES($1,$2,$3,$4,now()+interval '1 day')",
+    [organizationInvite, organizationId, organizationAdmin, '2'.repeat(64)],
+  );
+  await client.query(
+    'INSERT INTO platform_organizations(tenant_id,organization_id,admin_user_id,name,slug,admin_email,admin_name,last_invitation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+    [
+      tenantId,
+      organizationId,
+      organizationAdmin,
+      'RLS organization',
+      `rls-${organizationId}`,
+      `${organizationAdmin}@example.test`,
+      'RLS admin',
+      organizationInvite,
+    ],
+  );
+  return { tenantId, organizationId, userId, candidateId, consentId, auditId };
 }
 
 async function restoreEnvironment(
@@ -231,9 +264,18 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
     if (admin && first && second) {
       await admin.query(
         'UPDATE consents SET verification_id=NULL,verification_method=NULL WHERE tenant_id=ANY($1::uuid[])',
-        [[first.tenantId, second.tenantId]],
+        [
+          [
+            first.tenantId,
+            second.tenantId,
+            first.organizationId,
+            second.organizationId,
+          ],
+        ],
       );
       for (const table of [
+        'platform_organizations',
+        'user_invitations',
         'interview_scorecards',
         'interview_panelists',
         'interviews',
@@ -257,11 +299,23 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
       ]) {
         await admin.query(
           `DELETE FROM ${identifier(table)} WHERE tenant_id=ANY($1::uuid[])`,
-          [[first.tenantId, second.tenantId]],
+          [
+            [
+              first.tenantId,
+              second.tenantId,
+              first.organizationId,
+              second.organizationId,
+            ],
+          ],
         );
       }
       await admin.query('DELETE FROM tenants WHERE id=ANY($1::uuid[])', [
-        [first.tenantId, second.tenantId],
+        [
+          first.tenantId,
+          second.tenantId,
+          first.organizationId,
+          second.organizationId,
+        ],
       ]);
     }
     if (db) await db.onModuleDestroy();

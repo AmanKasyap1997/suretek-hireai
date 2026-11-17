@@ -1,5 +1,14 @@
+import { Request, Response } from 'express';
+import {
+  assertBrowserOrigin,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+} from './browser-session';
 import {
   Body,
+  Delete,
+  Req,
+  Res,
   Controller,
   Get,
   HttpCode,
@@ -34,6 +43,49 @@ export class AuthController {
   @BodySchema(loginSchema)
   login(@Body() body: unknown) {
     return this.auth.login(parse(loginSchema, body));
+  }
+
+  @Post('session')
+  @Public()
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @BodySchema(loginSchema)
+  async browserLogin(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    assertBrowserOrigin(req);
+    const session = await this.auth.login(parse(loginSchema, body));
+    res.setHeader('Cache-Control', 'no-store');
+    res.cookie(SESSION_COOKIE, session.accessToken, {
+      ...sessionCookieOptions(),
+      maxAge: session.expiresIn * 1000,
+    });
+    return { expiresIn: session.expiresIn };
+  }
+
+  @Get('session')
+  @Roles(...ALL_ROLES)
+  async browserSession(
+    @CurrentUser() actor: Actor,
+    @Req() req: Request & { sessionExpiresAt: number },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader('Cache-Control', 'no-store');
+    return { user: await this.auth.me(actor), expiresAt: req.sessionExpiresAt };
+  }
+
+  @Delete('session')
+  @Public()
+  @HttpCode(204)
+  browserLogout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    assertBrowserOrigin(req);
+    res.setHeader('Cache-Control', 'no-store');
+    res.clearCookie(SESSION_COOKIE, sessionCookieOptions());
   }
 
   @Get('me')
