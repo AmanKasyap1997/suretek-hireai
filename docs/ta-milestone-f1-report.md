@@ -8,7 +8,7 @@ The full backend-derived ten-role permission table is in talent-acquisition-plan
 
 Existing bearer login/me remain intact. New POST/GET/DELETE auth/session adapt the existing JWT into an HttpOnly Strict cookie, with Secure in production and exact Origin checks on unsafe cookie requests, login and logout. Session GET exposes user and expiration, never a JWT. No persistent session table/migration or auth redesign. Logout clears browser credentials; copied JWT revocation is still absent. Refresh, password reset, forced first-login change, lockout and login CAPTCHA are absent and explicitly documented; UI does not invent them. Invalid/disabled accounts are indistinguishable. 423 support is future-facing only. Tenant is build-time public configuration, not user-selected. Routes preserve intended paths in router state and allowlist them after login; query strings are excluded.
 
-Brand assets/website URL were not supplied: provisional wordmark, deep teal/mint palette and system fonts are clearly marked in tokens.css and UI. Approved branding remains a manual step. Dependency justification is in web/README.md: requested React/Router/Query/form/zod stack, plus development lint/build/test tools. No telemetry or component framework.
+Branding now uses the original logo embedded in the blueprint and the red/Poppins/Teko brand choices from https://www.suretekinfosoft.com/. The shell follows the retained screen designs with a white header/sidebar, red active navigation and bordered white cards. Fonts and logo are self-hosted; licenses/provenance are in web/src/assets/README.md. Dependency justification is in web/README.md: requested React/Router/Query/form/zod stack, plus development lint/build/test tools. No telemetry or component framework.
 
 ## Screen descriptions
 
@@ -22,7 +22,7 @@ Validation results are recorded after the full local and CI runs. Web unit tests
 
 ## Manual server steps
 
-1. Supply approved logo/font/colour assets and replace labeled tokens.
+1. Review the supplied-blueprint logo and website-aligned red/font tokens in the login and role shell.
 2. Set Actions PILOT_TENANT_ID to the actual pilot UUID. Publish a version tag to ship API and web/Caddy together.
 3. Add the exact same-origin console HTTPS origin to CORS_ORIGINS; keep HTTPS, proxy count and existing hardening.
 4. Deploy via existing backup/migrate/health workflow. Open /console/login and test each provisioned role, forbidden routes, logout/back, expiry and reload.
@@ -31,4 +31,4 @@ Validation results are recorded after the full local and CI runs. Web unit tests
 
 ## PR description
 
-Add a same-origin /console login and shared role shell for all ten backend roles. Preserve existing bearer auth and add a separately committed HttpOnly cookie session adapter with exact-Origin CSRF checks. Provide role-filtered disabled navigation/cards, session startup/expiry/logout and error states, responsive placeholder branding, guarded test-user seeding and tagged static assets in the hardened Caddy companion. No business screens, refresh/reset redesign, AI, queue or call dispatch. See web/README.md for dependency rationale and operational boundaries.
+Add a same-origin /console login and shared role shell for all ten backend roles. Preserve existing bearer auth and add a separately committed HttpOnly cookie session adapter with exact-Origin CSRF checks. Provide role-filtered disabled navigation/cards, session startup/expiry/logout and error states, responsive Suretek branding, guarded test-user seeding and tagged static assets in the hardened Caddy companion. No business screens, refresh/reset redesign, AI, queue or call dispatch. See web/README.md for dependency rationale and operational boundaries.

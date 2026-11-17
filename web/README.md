@@ -4,9 +4,19 @@ Unified sign-in and role shell only, at `/console`. All ten backend roles are su
 
 ## Development
 
-Use Node 24. Run `npm ci` in root and web. Configure a dev/test database and backend as in the root README; set `CORS_ORIGINS=http://localhost:5173`. Set `VITE_TENANT_ID` to the pilot tenant UUID before `npm run dev` in web. Vite proxies `/api` to localhost:3000 (API_TARGET may override). The tenant UUID is public build configuration, never a secret or authorization mechanism. Authentication verifies membership in the backend.
+Use Node 24. Run `npm ci` in root and web. Configure a dev/test database and backend as in the root README; set `CORS_ORIGINS=http://localhost:5173`. Copy `web/.env.example` to `web/.env.local` and set `VITE_TENANT_ID` to the existing tenant UUID printed by bootstrap (normally your root `.env` value for `BOOTSTRAP_TENANT_ID`). Restart Vite after changing it, then run `npm run dev` in web. Vite proxies `/api` to localhost:3000 (API_TARGET may override). The tenant UUID is public build configuration, never a secret or authorization mechanism. Authentication verifies membership in the backend.
 
 For controlled fixtures, set NODE_ENV=test (or development), DATABASE_MIGRATION_URL to a database whose name ends in _test or _dev, SEED_TENANT_ID and SEED_PASSWORD (12–128 characters); run `npx tsx scripts/seed-console.ts` from root. This inserts one `ROLE@console.test` account per role (lowercase), and resets only their test passwords on retry. Never target real data. The script refuses production and missing passwords.
+
+## Diagnose invalid credentials locally
+
+The sign-in email/password must belong to an active user in the exact configured tenant and database. Bootstrap does not reset existing passwords; changing `BOOTSTRAP_ADMIN_PASSWORD` in `.env` does not change a saved account.
+
+From the project root, run `npm run auth:check`. This read-only local administrator command checks the development frontend env files (including Vite's local/mode overrides), compares the tenant with `BOOTSTRAP_TENANT_ID` if present, and queries the configured migration database inside a read-only, tenant-scoped transaction. It reports a missing tenant, missing/inactive account, password mismatch or matching credentials without printing passwords, hashes, user details or database URLs. It makes no database changes.
+
+The email comes from `AUTH_CHECK_EMAIL`, falling back to `BOOTSTRAP_ADMIN_EMAIL`. The optional password comes from `AUTH_CHECK_PASSWORD`, falling back to `BOOTSTRAP_ADMIN_PASSWORD`. If necessary, set `AUTH_CHECK_PASSWORD` locally in the ignored root `.env`, run the check, then remove it. Quote env values containing `#` so dotenv does not treat part of the password as a comment. Never put a password in a `VITE_` variable or share `.env` contents. If no password is supplied, the command checks the account only. It reads configuration files, not an already-running Vite process: restart Vite after corrections. Confirm the running API uses the same database checked by the command; a production build embeds its tenant at build time.
+
+If an existing password is unknown, use an authorized administrator recovery process or provision a different development admin email in the same saved tenant with bootstrap. Do not generate a new tenant UUID or reset/delete the database to repair an existing login. The public login response intentionally remains generic.
 
 ## Session/security
 
@@ -18,7 +28,7 @@ Open tabs synchronize sign-out and account changes using BroadcastChannel event 
 
 ## Branding and UI
 
-Approved website assets were not provided. `src/tokens.css` explicitly marks the provisional deep teal/mint colours, system-font stack, spacing and type tokens. The text Suretek wordmark is labeled a brand preview. Replace these with approved assets before launch. Login is a split welcome/form screen that stacks at 360px. The shared shell has a sidebar, account menu, role-specific overview, disabled coming-soon items and cards. Profile-only roles have an empty-workspace card. Forbidden, missing page, session-expired notice, startup loading/retry and error-boundary states use the same typography. User content is React-escaped; no HTML injection or client logging/error telemetry is used.
+Branding uses the original Suretek logo embedded in the supplied blueprint and the primary red (#a22426), Poppins body font and Teko display font from https://www.suretekinfosoft.com/. `src/tokens.css` centralizes the palette, spacing and type. Fonts are self-hosted, with their licenses and asset provenance in `src/assets/README.md`. The shell follows the document’s white header/sidebar, red active navigation and bordered white cards. Login shares that branding and hides the introduction panel on narrow screens so the form stays easy to reach at 360px. The shared shell has a sidebar, account menu, role-specific overview, disabled coming-soon items and cards. Profile-only roles have an empty-workspace card. Forbidden, missing page, session-expired notice, startup loading/retry and error-boundary states use the same typography. User content is React-escaped; no HTML injection or client logging/error telemetry is used.
 
 ## Build/release and server
 

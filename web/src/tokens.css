@@ -1,20 +1,24 @@
-/* PLACEHOLDER brand tokens: replace with approved Suretek assets before public launch. */
+/* Suretek website brand: suretekinfosoft.com/assets/css/style.css.
+   White console layout and rose accents follow the supplied HireAI blueprint. */
 :root {
-  --ink: #183443;
-  --muted: #526672;
-  --brand: #153e52;
-  --accent: #bce4d5;
-  --surface: #fff;
-  --canvas: #f4f7f8;
-  --border: #ccd6da;
-  --danger: #a51d32;
-  --font: Inter, ui-sans-serif, system-ui, sans-serif;
+  --ink: #222222;
+  --muted: #62636d;
+  --brand: #a22426;
+  --brand-hover: #851b1d;
+  --accent: #fcebed;
+  --surface: #ffffff;
+  --canvas: #f7f8fa;
+  --border: #e2e4e9;
+  --danger: #a22426;
+  --success: #247044;
+  --font: 'Poppins', Arial, sans-serif;
+  --font-display: 'Teko', 'Poppins', sans-serif;
   --space-1: 0.5rem;
   --space-2: 1rem;
   --space-3: 1.5rem;
   --space-4: 2rem;
   --space-5: 3rem;
   --radius: 12px;
-  --type-body: 1rem;
-  --type-title: clamp(1.8rem, 3vw, 2.6rem);
+  --type-body: 0.875rem;
+  --type-title: clamp(1.5rem, 2.5vw, 2rem);
 }

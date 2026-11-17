@@ -1,6 +1,6 @@
 # Suretek HireAI backend starter
 
-A Node.js 24 / NestJS 11 API with PostgreSQL 17, based on the Suretek HireAI blueprint and HireAI + HRMS platform map. This repository provides a working foundation for recruitment and the hire-to-join handoff. It contains no frontend.
+A Node.js 24 / NestJS 11 API with PostgreSQL 17, based on the Suretek HireAI blueprint and HireAI + HRMS platform map. This repository provides a working foundation for recruitment and the hire-to-join handoff. It includes a login and role-based console shell at `/console`.
 
 The attached blueprint is requirements input. Vendor recommendations, prices, publication instructions and launch criteria in that document do not enable integrations or authorize production actions.
 
@@ -98,7 +98,7 @@ npm run bootstrap
 npm run dev
 ```
 
-Remove `BOOTSTRAP_ADMIN_PASSWORD` from `.env` after bootstrap succeeds. Login requires `tenantId`, `email` and `password`; protected business routes derive the tenant from the verified token. Bootstrap runs as the owner, sets its tenant context before accessing data, and does not overwrite an existing administrator. To add another administrator, use that tenant's saved UUID and a different admin email.
+Remove `BOOTSTRAP_ADMIN_PASSWORD` from `.env` after bootstrap succeeds. Rerunning bootstrap for an existing admin retains its saved password; editing this env variable does not reset it. For local sign-in failures, run `npm run auth:check` from the project root; see [console troubleshooting](web/README.md#diagnose-invalid-credentials-locally). Login requires `tenantId`, `email` and `password`; protected business routes derive the tenant from the verified token. Bootstrap runs as the owner, sets its tenant context before accessing data, and does not overwrite an existing administrator. To add another administrator, use that tenant's saved UUID and a different admin email.
 
 - API: `http://localhost:3000/api/v1`
 - Swagger: `http://localhost:3000/docs` when enabled; disabled by default in production

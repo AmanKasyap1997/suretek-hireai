@@ -14,6 +14,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from './auth';
 import { loginError } from './api';
+import { Brand, WorkspaceIcon } from './Brand';
 import {
   allowedDestination,
   homePath,
@@ -94,19 +95,44 @@ function Login() {
   }
   return (
     <main className="login-grid">
+      <header className="login-header">
+        <Brand />
+        <span className="platform-label">
+          Recruitment &amp; People Platform
+        </span>
+      </header>
       <section className="welcome">
-        <div className="wordmark">
-          SURETEK<span>Workspace</span>
-        </div>
-        <p className="eyebrow">PEOPLE. OPPORTUNITY. PROGRESS.</p>
+        <p className="eyebrow">WELCOME TO SURETEK HIREAI</p>
         <h1>
-          A shared place
+          Great people.
           <br />
-          to move forward.
+          <span>New possibilities.</span>
         </h1>
-        <p>Sign in to your Suretek workspace.</p>
-        <div className="brand-note">
-          Brand preview · logo, colours and type awaiting approved assets
+        <p className="welcome-copy">
+          Your recruitment and people workspace, together in one place. Sign in
+          to continue where you left off.
+        </p>
+        <div className="workspace-preview" aria-label="Workspace introduction">
+          <div className="preview-heading">
+            <WorkspaceIcon name="home" />
+            <strong>Your Suretek workspace</strong>
+          </div>
+          <div className="preview-modules">
+            {[
+              ['jobs', 'Recruitment'],
+              ['interviews', 'Interviews'],
+              ['people', 'People'],
+            ].map(([id, label]) => (
+              <div key={id}>
+                <span className="icon-tile">
+                  <WorkspaceIcon name={id} />
+                </span>
+                <strong>{label}</strong>
+                <small>Coming soon</small>
+              </div>
+            ))}
+          </div>
+          <p>One account. A workspace tailored to your role.</p>
         </div>
       </section>
       <section className="login-panel">
@@ -185,8 +211,13 @@ function Login() {
             Need access or password help? Contact your administrator.
           </p>
         </form>
-        <small>Suretek · People operations</small>
+        <small>
+          <WorkspaceIcon name="lock" /> Your workspace. Securely connected.
+        </small>
       </section>
+      <footer className="login-footer">
+        Suretek Infosoft · HireAI &amp; HRMS
+      </footer>
     </main>
   );
 }
@@ -201,47 +232,64 @@ function Shell() {
       <a className="skip" href="#main">
         Skip to content
       </a>
+      <header className="app-header">
+        <Brand />
+        <span className="platform-label">
+          Recruitment &amp; People Platform
+        </span>
+        <details>
+          <summary>
+            <span className="avatar" aria-hidden="true">
+              {user.full_name.slice(0, 1).toUpperCase()}
+            </span>
+            <span>
+              {user.full_name}
+              <span className="role">{roleLabel(user.role)}</span>
+            </span>
+            <span aria-hidden="true">⌄</span>
+          </summary>
+          <button
+            onClick={async () => {
+              try {
+                await logout();
+                navigate('/login', { replace: true });
+              } catch {
+                setError(
+                  'Signed out locally. Server sign-out failed; close this browser and retry when connected.',
+                );
+              }
+            }}
+          >
+            Sign out
+          </button>
+        </details>
+      </header>
       <aside>
-        <div className="wordmark">
-          SURETEK<span>Console · brand preview</span>
+        <div className="sidebar-title">
+          Suretek <strong>HireAI</strong>
+          <span>by Suretek Infosoft</span>
         </div>
         <nav aria-label="Main navigation">
           <Link className="nav-home" to={homePath(user.role)}>
-            Overview
+            <WorkspaceIcon name="home" /> Overview
           </Link>
           {visibleNavigation(user.role).map((item) => (
             <button disabled key={item.id}>
-              {item.label}
-              <small>Coming soon</small>
+              <WorkspaceIcon name={item.id} />
+              <span>
+                {item.label}
+                <small>Coming soon</small>
+              </span>
             </button>
           ))}
         </nav>
-        <p className="sidebar-footer">A workspace for your role.</p>
+        <div className="sidebar-footer">
+          <WorkspaceIcon name="lock" />
+          <strong>Your role workspace</strong>
+          <p>Access is managed by your administrator.</p>
+        </div>
       </aside>
       <div className="workspace">
-        <header>
-          <span className="workspace-title">Your workspace</span>
-          <details>
-            <summary>
-              {user.full_name}
-              <span className="role">{roleLabel(user.role)}</span>
-            </summary>
-            <button
-              onClick={async () => {
-                try {
-                  await logout();
-                  navigate('/login', { replace: true });
-                } catch {
-                  setError(
-                    'Signed out locally. Server sign-out failed; close this browser and retry when connected.',
-                  );
-                }
-              }}
-            >
-              Sign out
-            </button>
-          </details>
-        </header>
         {error && <p role="alert">{error}</p>}
         <main id="main" tabIndex={-1}>
           <Outlet />
@@ -275,18 +323,25 @@ function Home() {
         role.
       </p>
       <div className="welcome-card">
-        <span className="status-dot" />
-        Your account is ready
-        <p>
-          We are building your workspace. New tools will appear here as they
-          become available.
-        </p>
+        <span className="icon-tile">
+          <WorkspaceIcon name="lock" />
+        </span>
+        <div>
+          <strong>Your account is ready</strong>
+          <p>
+            We are building your workspace. New tools will appear here as they
+            become available.
+          </p>
+        </div>
       </div>
       <h2>Your workspace</h2>
       <div className="cards">
         {items.length ? (
           items.map((item) => (
             <article key={item.id}>
+              <span className="icon-tile">
+                <WorkspaceIcon name={item.id} />
+              </span>
               <span className="badge">Coming soon</span>
               <h3>{item.label}</h3>
               <p>

@@ -83,7 +83,7 @@ async function main(): Promise<void> {
     if (existing.rows.length) {
       await client.query('COMMIT');
       console.log(
-        `Admin email already exists; no changes made. Tenant ID: ${tenantId}`,
+        `Admin email already exists; no changes made and the existing password was retained. Tenant ID: ${tenantId}`,
       );
       return;
     }
