@@ -1,3 +1,4 @@
+import { ProviderAvailability } from './OrganizationIntegrations';
 import {
   createContext,
   useContext,
@@ -832,6 +833,7 @@ function Reports() {
                 'users',
                 'call_minutes',
                 'unmetered_calls',
+                'integration_errors',
                 'storage_mb',
               ]}
             />
@@ -851,6 +853,8 @@ function Integrations() {
   return (
     <>
       <h1>Integrations</h1>
+      <ProviderAvailability />
+      <h2>Platform connections</h2>
       <p>
         Credentials are encrypted. Verify sandbox before enabling production.
         Saving replaces credentials and resets verification.

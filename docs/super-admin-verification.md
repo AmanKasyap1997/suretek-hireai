@@ -1,5 +1,7 @@
 # Super Admin completion review
 
+This records the earlier completion review. For the subsequent organization-owned integrations and 404 investigation on the same branch, see [the current review](super-admin-review.md).
+
 Reviewed latest main `8df6ac8` on 2026-11-17. Work branch: `feature/super-admin-completion`. The existing implementation already supplied the module; this review preserves it and closes the gaps recorded in [the audit](super-admin-audit.md).
 
 ## Changes

@@ -15,7 +15,9 @@ describe('Platform menu', () => {
   it('does not give organization roles platform navigation', () => {
     expect(allowedDestination('/super-admin/settings', 'HR_ADMIN')).toBe(false);
     expect(
-      visibleNavigation('HR_ADMIN').some((v) => v.id === 'integrations'),
+      visibleNavigation('HR_ADMIN').some(
+        (v) => v.id === 'integrations' && v.path?.startsWith('/super-admin'),
+      ),
     ).toBe(false);
   });
   it('hides disabled organization modules', () => {

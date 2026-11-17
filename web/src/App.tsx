@@ -1,4 +1,8 @@
 import {
+  OrganizationIntegrations,
+  IntegrationOAuthCallback,
+} from './OrganizationIntegrations';
+import {
   SuperAdminPage,
   SuperAdminDetail,
   PasswordChange,
@@ -524,10 +528,17 @@ export default function App() {
             path="super-admin/organizations/:id"
             element={<SuperAdminDetail />}
           />
+          <Route path="integrations" element={<OrganizationIntegrations />} />
+          <Route
+            path="integrations/oauth"
+            element={<IntegrationOAuthCallback />}
+          />
           <Route path="home/:role" element={<Home />} />
-          {navigation.map((n) => (
-            <Route key={n.id} path={n.id} element={<Future id={n.id} />} />
-          ))}
+          {navigation
+            .filter((n) => n.id !== 'integrations')
+            .map((n) => (
+              <Route key={n.id} path={n.id} element={<Future id={n.id} />} />
+            ))}
           <Route path="forbidden" element={<Forbidden />} />
           <Route
             path="*"

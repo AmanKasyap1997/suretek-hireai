@@ -38,7 +38,9 @@ test('Super Admin console exposes six sections and submits a validated organizat
           attention: [],
           recent_events: [],
         }
-      : path.endsWith('/integrations') || path.endsWith('/admins')
+      : path.endsWith('/integrations') ||
+          path.endsWith('/integration-providers') ||
+          path.endsWith('/admins')
         ? []
         : path.endsWith('/reports')
           ? { organizations: [], integrations: [] }

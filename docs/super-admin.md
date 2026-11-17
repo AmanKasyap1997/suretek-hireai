@@ -40,6 +40,51 @@ Add the stable module ID to `super-admin.schemas.ts` and the organization module
 
 - Optional TOTP and recovery enrollment: the current custom auth system has no recovery-factor or enrollment workflow. Strongly recommended before external production platform administration; implement audited enrollment, replay prevention and recovery together rather than accepting an unverified OTP field. No claim of MFA protection is made.
 - Optional support access: intentionally disabled. There is no impersonation or bypass route. A future implementation must be read-only, reason-logged, expiring and tenant-approved where appropriate.
-- Provider-specific OAuth acquisition/refresh, non-bearer adapters and measured telephony delivery callbacks require provider contracts/credentials. The registry refuses unconfigured verification instead of claiming readiness.
+- Proprietary provider authentication, service-account delegation and measured telephony delivery callbacks require provider-specific contracts/adapters. Google/Microsoft delegated OAuth and standard methods are implemented below; unconfigured verification fails explicitly.
 
 See `super-admin-audit.md` for the pre-implementation audit and `super-admin-verification.md` for test results and environment limits.
+
+## Organization-owned integrations (migration 017)
+
+Super Admin → Integrations → **Available to organizations** controls the non-secret provider catalog. Every provider starts disabled; enabling one does not share platform credentials or connect any organization. Organization Admin → **Integrations** then shows only enabled providers. The admin chooses sandbox/production and a supported method, supplies their organization's credentials, tests, and enables the connection. Production requires successful current sandbox and production verification. Disconnect removes the encrypted credentials and invalidates dependent production approval. Disabling a provider blocks save, OAuth, test and enable APIs immediately; re-enabling requires fresh verification. Organization IDs are derived exclusively from the authenticated session, never submitted by the browser. Super Admin cannot read those credentials, including ciphertext. Aggregate error counts and health are included in platform reports/dashboard.
+
+| Provider                            | Supported connection methods                                              |
+| ----------------------------------- | ------------------------------------------------------------------------- |
+| OpenAI, Anthropic                   | API key, with each vendor's required headers                              |
+| Google Calendar, Microsoft Calendar | OAuth consent with PKCE, existing OAuth refresh token, or an access token |
+| Telephony, careers CMS/API, HRIS    | API key, bearer token, username/password, OAuth client credentials        |
+| E-signature                         | API key, bearer token, OAuth client credentials                           |
+| Email                               | SMTP over verified TLS, API key, bearer token                             |
+
+Methods are provider-specific; the API rejects incompatible methods and unknown credential fields. Tokens/secrets are write-only and encrypted together using the existing AES-GCM key, bound to organization/provider/environment. OAuth state is hashed, bound to the initiating user and tenant, expires after ten minutes and is consumed once. PKCE verifier and client secrets are encrypted. Refresh-token rotation is retained during verification. A plain access token must be replaced when it expires; use OAuth consent/refresh for renewable authorization. Verification reads metadata (or performs SMTP AUTH); it does not send mail, place calls, sign documents or execute AI requests. This registry does not add future business workflows automatically.
+
+For OAuth, each organization registers its own Google/Microsoft application with callback `https://YOUR_DOMAIN/console/integrations/oauth`, then enters its client ID/secret and grants consent. Set `PUBLIC_WEB_BASE_URL` to that same origin. The callback page removes the authorization query from the address bar and completes the exchange through the authenticated, origin-checked API. A declined, expired or reused authorization must be restarted. Google/Microsoft delegated calendar scopes are requested; enterprise admin consent may be required by the provider. Provider-specific service accounts, application-only calendar permissions and proprietary authentication require separate adapters; unsupported methods are never shown as working connections.
+
+Custom provider verification uses the existing operator-owned `INTEGRATION_<PROVIDER>_VERIFY_URL` (HTTPS, no redirects). OAuth client credentials additionally require `INTEGRATION_<PROVIDER>_TOKEN_URL`; token endpoints accept standard form-encoded client credentials. API keys default to `X-API-Key`; configure `INTEGRATION_<PROVIDER>_API_KEY_HEADER` if needed. Custom verification endpoints must genuinely authenticate the account and return success only for valid credentials. SMTP requires `INTEGRATION_EMAIL_SMTP_HOST` and optional `INTEGRATION_EMAIL_SMTP_PORT` (465 default, or 587 STARTTLS). Endpoint/SMTP host configuration is platform-operated to prevent browser-supplied addresses reaching internal services. Organizations supply their own account credentials, but cannot select arbitrary network destinations. All variables are forwarded in development and production Compose. Do not reuse invitation SMTP credentials automatically.
+
+New APIs:
+
+- `GET /api/v1/super-admin/integration-providers`, `PATCH .../:provider` with `{ "enabled": true }` (Super Admin).
+- `GET /api/v1/organization/integrations/providers` and `GET /api/v1/organization/integrations` (Organization Admin).
+- `POST /api/v1/organization/integrations` with provider, environment, method and credentials; no organization ID.
+- `POST .../:id/test`, `POST .../:id/enable`, `DELETE .../:id` (disconnect, retaining audit evidence).
+- `POST .../oauth/start` and `POST .../oauth/complete` for the user-bound consent flow.
+
+The existing `/super-admin/integrations` API remains compatible for platform-owned connections/legacy overrides. Those records are not copied to organizations and are not returned by organization connection APIs. Organization integration changes are append-only audited in their own tenant scope; availability changes are audited in the platform scope.
+
+## Diagnosing `/api/v1/super-admin/*` 404s
+
+Both reported GET routes (`organizations`, `integrations`) are registered in `SaasModule`, imported by `AppModule`. An unauthenticated request must return **401**, not 404. A signed-in organization admin gets **403**. A fresh Super Admin must first change their initial password.
+
+From the repository root, after pulling this branch:
+
+```sh
+npm ci
+npm run db:migrate
+npm run build
+npm start
+```
+
+In another terminal run `npm run api:check`. It tests the running API on `http://localhost:3000` without credentials. To check the frontend proxy or deployment, set `API_CHECK_ORIGIN=http://localhost:5173` or your HTTPS site origin and run it again. The check prints only route names/status codes. A passing direct API check with a failing proxy check identifies proxy routing; a direct 404 indicates an old/different API process or image. Stop the old process and restart the newly built API. Set `API_TARGET` when starting Vite if the API is not on port 3000. `vite preview` is not the supported development proxy; use `npm --prefix web run dev`. Do not prepend `/console` to API URLs.
+
+For Compose deployments, rebuild/pull **both API and web images**, apply migration 017, and recreate the API service using the existing deployment runbook. Rebuilding only the frontend cannot update backend routes. Migration 017 preserves all existing platform connections and tenant IDs; back up the database and encryption key before deployment.

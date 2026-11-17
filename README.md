@@ -289,3 +289,9 @@ Apply migrations with `npm run db:migrate`, set `SUPER_ADMIN_EMAIL`, `SUPER_ADMI
 See [Super Admin operations](docs/super-admin.md) for organization onboarding, migration compatibility, all new environment variables, module/menu extensions, security boundaries and explicit optional TODOs. The [repository audit](docs/super-admin-audit.md) documents the original architecture.
 
 The latest completion review fixes sandbox approval invalidation, suspended/deleted invitation handling, anonymous unresolved-login audits, password-policy enforcement and console validation/filtering. Apply forward-only migration **016** before starting the updated API. No new environment variables or dependencies were added in this review. See [verification and server checklist](docs/super-admin-verification.md) for commands, results and deployment steps.
+
+### Organization-owned provider connections
+
+Super Admin enables providers under Integrations → Available to organizations. Organization Admins then connect their own accounts under Integrations using the provider's supported API key, OAuth, token, basic-auth or SMTP method. Apply migration 017 and configure the stable integration encryption key first. See [setup, methods and OAuth callback registration](docs/super-admin.md#organization-owned-integrations-migration-017).
+
+If Super Admin APIs return 404, rebuild/restart the backend from this branch and run `npm run api:check`; the registered protected routes return 401 without credentials. See [API/proxy troubleshooting](docs/super-admin.md#diagnosing-apiv1super-admin-404s).

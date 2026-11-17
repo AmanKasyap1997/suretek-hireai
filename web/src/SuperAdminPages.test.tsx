@@ -24,6 +24,8 @@ function setup(path: string) {
       });
     if (init.method === 'POST')
       return Response.json({ id: 'new', deliveryStatus: 'SENT' });
+    if (url === '/api/v1/super-admin/integration-providers')
+      return Response.json([]);
     if (url === '/api/v1/super-admin/integrations') return Response.json([]);
     return Response.json({ data: [], pagination: { total: 0 } });
   });

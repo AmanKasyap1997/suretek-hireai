@@ -22,6 +22,7 @@ export const permissionMap: Record<Role, readonly string[]> = {
     'platform-reports',
   ],
   HR_ADMIN: [
+    'integrations',
     'team',
     'jobs',
     'applications',
@@ -122,6 +123,7 @@ export const navigation: {
 }[] = [
   { id: 'organizations', label: 'Organizations', built: true },
   { id: 'team', label: 'Team & invitations', built: true },
+  { id: 'integrations', label: 'Integrations', built: true },
   { id: 'jobs', label: 'Jobs' },
   { id: 'applications', label: 'Applications' },
   { id: 'candidates', label: 'Candidates' },
