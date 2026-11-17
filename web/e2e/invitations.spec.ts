@@ -95,20 +95,20 @@ test('platform creates organization; emailed admin and staff invitations activat
   expect(
     (await context.request.get('http://localhost:3000/api/v1/jobs')).status(),
   ).toBe(403);
-  await page.getByRole('link',{name:'Organizations',exact:true}).click();
-  await page.getByText('Add organization',{exact:true}).click();
+  await page.getByRole('link', { name: 'Organizations', exact: true }).click();
+  await page.getByText('Add organization', { exact: true }).click();
   await page.getByLabel('Name', { exact: true }).fill(orgName);
   await page.getByLabel('Slug', { exact: true }).fill(key);
   await page
     .getByLabel('First HR Admin name', { exact: true })
     .fill('Invited organization admin');
-  await page.getByLabel('First HR Admin email', { exact: true }).fill(adminEmail);
+  await page
+    .getByLabel('First HR Admin email', { exact: true })
+    .fill(adminEmail);
   await page
     .getByRole('button', { name: 'Create organization & invite admin' })
     .click();
-  await expect(
-    page.getByText('Saved successfully.'),
-  ).toBeVisible();
+  await expect(page.getByText('Saved successfully.')).toBeVisible();
   const adminLink = await invitation(context.request, adminEmail);
   const adminContext = await browser.newContext();
   const admin = await adminContext.newPage();

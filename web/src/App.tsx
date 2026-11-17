@@ -333,7 +333,18 @@ function Shell() {
           </button>
         </details>
       </header>
-      <aside>
+      <aside
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setMenuOpen(false);
+            document.querySelector<HTMLButtonElement>('.menu-toggle')?.focus();
+          }
+        }}
+        onClick={(e) => {
+          if (window.innerWidth <= 900 && (e.target as Element).closest('a'))
+            setMenuOpen(false);
+        }}
+      >
         <div className="sidebar-title">
           Suretek <strong>HireAI</strong>
           <span>{user.organization_name ?? 'by Suretek Infosoft'}</span>

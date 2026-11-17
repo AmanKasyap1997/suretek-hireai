@@ -1,5 +1,12 @@
-import { useState, type ReactNode, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import {
+  createContext,
+  useContext,
+  useState,
+  type ReactNode,
+  type FormEvent,
+  type ComponentProps,
+} from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import { useAuth } from './auth';
@@ -22,7 +29,24 @@ const moduleNames = [
 type Row = Record<string, unknown>;
 type Page = { data: Row[]; pagination: { total: number } };
 const label = (v: string) =>
-  ({adminName:'First HR Admin name',adminEmail:'First HR Admin email',fullName:'Full name',currentPassword:'Current password',organization_id:'Organization',credential_hint:'Credential',max_users:'Maximum users',call_minutes_per_month:'Monthly call minutes',storage_mb:'Storage (MB)',calling_start:'Calling starts (hour)',calling_end:'Calling ends (hour)',call_quota:'Monthly planned call quota',password_min_length:'Minimum password length',session_seconds:'Session duration (seconds)'} as Record<string,string>)[v] ?? v.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
+  (
+    ({
+      adminName: 'First HR Admin name',
+      adminEmail: 'First HR Admin email',
+      fullName: 'Full name',
+      currentPassword: 'Current password',
+      organization_id: 'Organization',
+      credential_hint: 'Credential',
+      max_users: 'Maximum users',
+      call_minutes_per_month: 'Monthly call minutes',
+      storage_mb: 'Storage (MB)',
+      calling_start: 'Calling starts (hour)',
+      calling_end: 'Calling ends (hour)',
+      call_quota: 'Monthly planned call quota',
+      password_min_length: 'Minimum password length',
+      session_seconds: 'Session duration (seconds)',
+    }) as Record<string, string>
+  )[v] ?? v.replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
 const display = (v: unknown): string =>
   v === null || v === undefined
     ? '—'
@@ -62,11 +86,32 @@ function useAction() {
     },
   };
 }
-function Notice({ children }: { children: ReactNode }) {
+function Notice({
+  children,
+  result = false,
+}: {
+  children: ReactNode;
+  result?: boolean;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
   return (
-    <p role="status" aria-live="polite" className="notice">
+    <div
+      role="status"
+      aria-live="polite"
+      className={result ? 'notice result-toast' : 'notice'}
+    >
       {children}
-    </p>
+      {result && (
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          aria-label="Dismiss notification"
+        >
+          Dismiss
+        </button>
+      )}
+    </div>
   );
 }
 function Data({
@@ -159,8 +204,55 @@ type Field = {
   required?: boolean;
   min?: number;
   max?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
 };
+const FormErrors = createContext<Record<string, string>>({});
+function PlatformForm({
+  onSubmit,
+  children,
+  ...props
+}: ComponentProps<'form'>) {
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  return (
+    <FormErrors.Provider value={errors}>
+      <form
+        {...props}
+        noValidate
+        onSubmit={(e) => {
+          const next: Record<string, string> = {};
+          for (const field of Array.from(e.currentTarget.elements)) {
+            if (!(field instanceof HTMLInputElement)) continue;
+            if (!field.validity.valid)
+              next[field.name] = field.validationMessage;
+            if (field.name === 'timezone') {
+              try {
+                new Intl.DateTimeFormat('en', { timeZone: field.value });
+              } catch {
+                next[field.name] =
+                  'Enter a valid timezone, for example Asia/Kolkata.';
+              }
+            }
+          }
+          setErrors(next);
+          if (Object.keys(next).length) {
+            e.preventDefault();
+            (
+              e.currentTarget.elements.namedItem(
+                Object.keys(next)[0],
+              ) as HTMLElement
+            )?.focus();
+          } else void onSubmit?.(e);
+        }}
+      >
+        {children}
+      </form>
+    </FormErrors.Provider>
+  );
+}
 function Fields({ fields, value = {} }: { fields: Field[]; value?: Row }) {
+  const errors = useContext(FormErrors);
   return (
     <>
       {fields.map((f) => (
@@ -180,15 +272,26 @@ function Fields({ fields, value = {} }: { fields: Field[]; value?: Row }) {
           ) : (
             <input
               name={f.name}
+              aria-label={label(f.name)}
+              aria-invalid={!!errors[f.name]}
+              aria-describedby={errors[f.name] ? `error-${f.name}` : undefined}
               type={f.type ?? 'text'}
               defaultValue={String(value[f.name] ?? '')}
               required={f.required ?? true}
               min={f.min}
               max={f.max}
-              minLength={f.type === 'password' ? 12 : undefined}
-              maxLength={f.type === 'password' ? 128 : 200}
+              minLength={
+                f.minLength ?? (f.type === 'password' ? 12 : undefined)
+              }
+              maxLength={f.maxLength ?? (f.type === 'password' ? 128 : 200)}
+              pattern={f.pattern}
               autoComplete={f.type === 'password' ? 'new-password' : undefined}
             />
+          )}
+          {errors[f.name] && (
+            <span role="alert" id={`error-${f.name}`}>
+              {errors[f.name]}
+            </span>
           )}
         </label>
       ))}
@@ -197,13 +300,25 @@ function Fields({ fields, value = {} }: { fields: Field[]; value?: Row }) {
 }
 const profileFields: Field[] = [
   { name: 'name' },
-  { name: 'domain', required: false },
+  {
+    name: 'domain',
+    required: false,
+    maxLength: 253,
+    pattern: '(?:[a-zA-Z0-9](?:[a-zA-Z0-9\\-]*[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,63}',
+  },
   { name: 'country', required: false },
   { name: 'timezone' },
   { name: 'plan' },
   { name: 'status', options: ['active', 'trial'] },
   { name: 'trial_ends_at', type: 'datetime-local', required: false },
 ];
+export function localDateTime(value: unknown) {
+  if (!value) return '';
+  const date = new Date(String(value));
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+}
 function OrganizationForm({
   value = {},
   onSubmit,
@@ -223,7 +338,7 @@ function OrganizationForm({
   const enabled = (value.enabled_modules ??
     moduleNames.slice(0, 5)) as string[];
   return (
-    <form
+    <PlatformForm
       className="platform-form"
       onSubmit={async (e) => {
         e.preventDefault();
@@ -251,14 +366,19 @@ function OrganizationForm({
             ...value,
             status: value.status === 'suspended' ? 'active' : value.status,
             trial_ends_at: value.trial_ends_at
-              ? String(value.trial_ends_at).slice(0, 16)
+              ? localDateTime(value.trial_ends_at)
               : '',
           }}
         />
         {creating && (
           <Fields
             fields={[
-              { name: 'slug' },
+              {
+                name: 'slug',
+                pattern: '[a-z0-9][a-z0-9\\-]{1,61}[a-z0-9]',
+                minLength: 3,
+                maxLength: 63,
+              },
               { name: 'adminName' },
               { name: 'adminEmail', type: 'email' },
             ]}
@@ -296,10 +416,11 @@ function OrganizationForm({
             ? 'Create organization & invite admin'
             : 'Save organization'}
       </button>
-    </form>
+    </PlatformForm>
   );
 }
 export function PlatformOrganizations() {
+  const location = useLocation();
   const [offset, setOffset] = useState(0),
     [search, setSearch] = useState(''),
     [status, setStatus] = useState(''),
@@ -314,10 +435,14 @@ export function PlatformOrganizations() {
       ...(status ? { status } : {}),
       ...(plan ? { plan } : {}),
       sort,
+      direction: sort === 'name' ? 'asc' : 'desc',
     });
   return (
     <>
       <h1>Organizations</h1>
+      {location.state?.notice && (
+        <Notice result>{String(location.state.notice)}</Notice>
+      )}
       <p>Manage access, rollout and usage across organizations.</p>
       <details className="management-panel">
         <summary>Add organization</summary>
@@ -327,7 +452,11 @@ export function PlatformOrganizations() {
           onSubmit={(v) => action.run('/organizations', 'POST', v)}
         />
       </details>
-      {action.message && <Notice>{action.message}</Notice>}
+      {action.message && (
+        <Notice key={action.message} result>
+          {action.message}
+        </Notice>
+      )}
       <div className="platform-filters">
         <label>
           Search
@@ -366,7 +495,13 @@ export function PlatformOrganizations() {
         </label>
         <label>
           Sort
-          <select value={sort} onChange={(e) => setSort(e.target.value)}>
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value);
+              setOffset(0);
+            }}
+          >
             <option value="created_at">Newest</option>
             <option value="name">Name</option>
           </select>
@@ -407,11 +542,12 @@ function OrganizationDetail() {
   const { id } = useParams();
   return (
     <Data path={`/organizations/${id}`}>
-      {(d) => <DetailContent key={String(d.updated_at)} value={d} />}
+      {(d) => <DetailContent key={String(d.id)} value={d} />}
     </Data>
   );
 }
 function DetailContent({ value }: { value: Row }) {
+  const navigate = useNavigate();
   const action = useAction(),
     [confirmation, setConfirmation] = useState(''),
     [reason, setReason] = useState('');
@@ -423,11 +559,16 @@ function DetailContent({ value }: { value: Row }) {
       <span className="badge">{String(value.status)}</span>
       <h2>Profile, modules and limits</h2>
       <OrganizationForm
+        key={String(value.updated_at)}
         value={value}
         busy={action.busy}
         onSubmit={(v) => action.run(path, 'PATCH', v)}
       />
-      {action.message && <Notice>{action.message}</Notice>}
+      {action.message && (
+        <Notice key={action.message} result>
+          {action.message}
+        </Notice>
+      )}
       <h2>Usage this month</h2>
       <Table
         rows={[value.usage as Row]}
@@ -439,7 +580,11 @@ function DetailContent({ value }: { value: Row }) {
         columns={['full_name', 'email', 'status', 'last_login_at']}
       />
       <button
-        disabled={action.busy || !value.last_invitation_id}
+        disabled={
+          action.busy ||
+          !value.last_invitation_id ||
+          value.status === 'suspended'
+        }
         onClick={() => void action.run(path + '/invitation', 'POST')}
       >
         Resend initial admin invitation
@@ -487,9 +632,16 @@ function DetailContent({ value }: { value: Row }) {
         />
         <button
           disabled={action.busy || confirmation !== value.name}
-          onClick={() => {
-            if (window.confirm('Soft delete this organization?'))
-              void action.run(path, 'DELETE', { confirmation });
+          onClick={async () => {
+            if (
+              window.confirm('Soft delete this organization?') &&
+              (await action.run(path, 'DELETE', { confirmation }))
+            )
+              navigate('/super-admin/organizations', {
+                state: {
+                  notice: 'Organization deleted. Data has been retained.',
+                },
+              });
           }}
         >
           Confirm soft delete
@@ -547,11 +699,20 @@ function AuditLogs({ organization }: { organization?: string }) {
   const [offset, setOffset] = useState(0),
     [action, setAction] = useState(''),
     [from, setFrom] = useState(''),
-    [to, setTo] = useState('');
+    [to, setTo] = useState(''),
+    [organizationFilter, setOrganizationFilter] = useState('');
+  const selectedOrganization = organization ?? organizationFilter;
+  const validOrganization =
+    !selectedOrganization ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      selectedOrganization,
+    );
   const params = new URLSearchParams({
     offset: String(offset),
     ...(action ? { action } : {}),
-    ...(organization ? { organization_id: organization } : {}),
+    ...(selectedOrganization && validOrganization
+      ? { organization_id: selectedOrganization }
+      : {}),
     ...(from ? { from: new Date(from).toISOString() } : {}),
     ...(to ? { to: new Date(to).toISOString() } : {}),
     limit: '25',
@@ -559,6 +720,26 @@ function AuditLogs({ organization }: { organization?: string }) {
   return (
     <>
       <div className="platform-filters">
+        {!organization && (
+          <label>
+            Organization ID
+            <input
+              aria-label="Organization ID"
+              value={organizationFilter}
+              aria-invalid={!validOrganization}
+              aria-describedby="audit-organization-help"
+              onChange={(e) => {
+                setOrganizationFilter(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <small id="audit-organization-help">
+              {validOrganization
+                ? 'Leave empty for all organizations.'
+                : 'Enter a valid organization UUID.'}
+            </small>
+          </label>
+        )}
         <label>
           Action
           <input
@@ -591,32 +772,41 @@ function AuditLogs({ organization }: { organization?: string }) {
             }}
           />
         </label>
-        <a href={`/api/v1${base}/audit-logs/export?${params}`} download>
+        <a
+          aria-disabled={!validOrganization}
+          onClick={(e) => {
+            if (!validOrganization) e.preventDefault();
+          }}
+          href={`/api/v1${base}/audit-logs/export?${params}`}
+          download
+        >
           Export current page (CSV)
         </a>
       </div>
-      <Data path={'/audit-logs?' + params}>
-        {(d) => (
-          <>
-            <Table
-              rows={d.data as Row[]}
-              columns={[
-                'created_at',
-                'action',
-                'entity_type',
-                'entity_id',
-                'actor_id',
-                'metadata',
-              ]}
-            />
-            <Pager
-              offset={offset}
-              total={(d.pagination as Page['pagination']).total}
-              onChange={setOffset}
-            />
-          </>
-        )}
-      </Data>
+      {validOrganization && (
+        <Data path={'/audit-logs?' + params}>
+          {(d) => (
+            <>
+              <Table
+                rows={d.data as Row[]}
+                columns={[
+                  'created_at',
+                  'action',
+                  'entity_type',
+                  'entity_id',
+                  'actor_id',
+                  'metadata',
+                ]}
+              />
+              <Pager
+                offset={offset}
+                total={(d.pagination as Page['pagination']).total}
+                onChange={setOffset}
+              />
+            </>
+          )}
+        </Data>
+      )}
     </>
   );
 }
@@ -665,7 +855,7 @@ function Integrations() {
         Credentials are encrypted. Verify sandbox before enabling production.
         Saving replaces credentials and resets verification.
       </p>
-      <form
+      <PlatformForm
         className="platform-form"
         onSubmit={async (e) => {
           e.preventDefault();
@@ -697,7 +887,12 @@ function Integrations() {
             },
             { name: 'environment', options: ['sandbox', 'production'] },
             { name: 'organization_id', required: false },
-            { name: 'credential', type: 'password' },
+            {
+              name: 'credential',
+              type: 'password',
+              minLength: 8,
+              maxLength: 8192,
+            },
           ]}
         />
         <small>
@@ -705,8 +900,12 @@ function Integrations() {
           connections use OAuth access tokens.
         </small>
         <button disabled={action.busy}>Save connection</button>
-      </form>
-      {action.message && <Notice>{action.message}</Notice>}
+      </PlatformForm>
+      {action.message && (
+        <Notice key={action.message} result>
+          {action.message}
+        </Notice>
+      )}
       <IntegrationList action={action} />
     </>
   );
@@ -773,7 +972,7 @@ function SettingsContent({ data }: { data: Row }) {
   return (
     <>
       <h2>Global defaults and calling controls</h2>
-      <form
+      <PlatformForm
         className="platform-form"
         onSubmit={(e) => {
           e.preventDefault();
@@ -806,11 +1005,18 @@ function SettingsContent({ data }: { data: Row }) {
           Emergency calling pause
         </label>
         <button disabled={action.busy}>Save defaults</button>
-      </form>
+      </PlatformForm>
       <h2>Role templates</h2>
       <ul>
         {(data.roles as string[]).map((r) => (
-          <li key={r}>{label(r.toLowerCase())}: {display((data.role_templates as Record<string,unknown> | undefined)?.[r]??'Own role workspace')}</li>
+          <li key={r}>
+            {label(r.toLowerCase())}:{' '}
+            {display(
+              (data.role_templates as Record<string, unknown> | undefined)?.[
+                r
+              ] ?? 'Own role workspace',
+            )}
+          </li>
         ))}
       </ul>
       <h2>Super Admin accounts</h2>
@@ -846,7 +1052,7 @@ function SettingsContent({ data }: { data: Row }) {
       )}
       <details>
         <summary>Add Super Admin</summary>
-        <form
+        <PlatformForm
           className="platform-form"
           onSubmit={async (e) => {
             e.preventDefault();
@@ -873,9 +1079,13 @@ function SettingsContent({ data }: { data: Row }) {
             is required on first sign-in.
           </p>
           <button disabled={action.busy}>Add administrator</button>
-        </form>
+        </PlatformForm>
       </details>
-      {action.message && <Notice>{action.message}</Notice>}
+      {action.message && (
+        <Notice key={action.message} result>
+          {action.message}
+        </Notice>
+      )}
     </>
   );
 }
@@ -904,7 +1114,7 @@ export function PasswordChange() {
     <section>
       <h1>Change your initial password</h1>
       <p>Choose a new password before accessing your workspace.</p>
-      <form className="platform-form" onSubmit={submit}>
+      <PlatformForm className="platform-form" onSubmit={submit}>
         <Fields
           fields={[
             { name: 'currentPassword', type: 'password' },
@@ -912,7 +1122,7 @@ export function PasswordChange() {
           ]}
         />
         <button disabled={busy}>Change password</button>
-      </form>
+      </PlatformForm>
       {message && <Notice>{message}</Notice>}
     </section>
   );
