@@ -380,3 +380,17 @@ POST {{baseUrl}}/public/{{tenantSlug}}/contact-verification
 Content-Type: application/json
 
 {"token":"{{verificationToken}}"}
+
+### Browser session (same-origin only; HttpOnly cookie issued, no token body)
+POST {{baseUrl}}/auth/session
+Origin: http://localhost:5173
+Content-Type: application/json
+
+{"tenantId":"{{tenantId}}","email":"{{email}}","password":"{{password}}"}
+
+### Browser who-am-I and expiration
+GET {{baseUrl}}/auth/session
+
+### Browser logout (clears cookie)
+DELETE {{baseUrl}}/auth/session
+Origin: http://localhost:5173

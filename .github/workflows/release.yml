@@ -41,6 +41,7 @@ jobs:
         with:
           context: .
           file: deploy/Dockerfile.caddy
+          build-args: VITE_TENANT_ID=${{ vars.PILOT_TENANT_ID }}
           push: true
           tags: ${{ steps.release.outputs.repository }}-caddy:${{ github.ref_name }}
           provenance: mode=max

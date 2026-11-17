@@ -6,6 +6,7 @@ source "$(dirname "$0")/common.sh"
 base=${1:?Usage: smoke.sh https://deployed-domain}
 [[ $base =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?$ ]] || exit 1
 : "${SMOKE_TENANT_SLUG:?}" "${SMOKE_JOB_ID:?}" "${SMOKE_EMAIL:?Use a controlled test mailbox}" "${SMOKE_CAPTCHA_TOKEN:?Fresh Turnstile token for apply}"
+curl --proto '=https' -fsS --max-time 20 "$base/console/login" | grep -q '<div id="root"'
 work=$(mktemp -d "$STATE_DIR/smoke.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 curl --proto '=https' -fsS --max-time 20 "$base/api/v1/health/ready" > /dev/null

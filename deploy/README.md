@@ -121,3 +121,7 @@ API logs are JSON with generated request IDs, status and duration; correlate wit
 - Restrict access, rotate compromised secrets, assess affected evidence with counsel and reconcile orphaned private objects after failed erasure.
 - Restore to scratch, verify counts and document inventory, follow outage recovery and tenant-isolation checks before reopening.
 - Record downtime/data loss, review monitoring gaps and rehearse recovery after remediation.
+
+## F1 console rollout
+
+The tagged Caddy companion now contains the `/console` React shell. Set Actions repository variable `PILOT_TENANT_ID` before release, equal to the bootstrapped pilot tenant. Include `https://$DOMAIN` in exact CORS_ORIGINS so cookie session login/logout passes Origin checks. See [web/README.md](../web/README.md) for branding placeholders, absent password-reset/refresh flows, role homes and browser acceptance. Verify HTML no-store, hashed assets immutable, CSP with no inline scripts, Secure/HttpOnly cookie and logout/back-button behavior after upgrade. Do not run the dev/test seed on this server.

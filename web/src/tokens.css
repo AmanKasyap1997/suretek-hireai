@@ -1,0 +1,20 @@
+/* PLACEHOLDER brand tokens: replace with approved Suretek assets before public launch. */
+:root {
+  --ink: #183443;
+  --muted: #526672;
+  --brand: #153e52;
+  --accent: #bce4d5;
+  --surface: #fff;
+  --canvas: #f4f7f8;
+  --border: #ccd6da;
+  --danger: #a51d32;
+  --font: Inter, ui-sans-serif, system-ui, sans-serif;
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2rem;
+  --space-5: 3rem;
+  --radius: 12px;
+  --type-body: 1rem;
+  --type-title: clamp(1.8rem, 3vw, 2.6rem);
+}

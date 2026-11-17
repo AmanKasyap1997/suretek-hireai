@@ -32,7 +32,20 @@
 	}
 	@docs path /docs* /api/v1/docs*
 	respond @docs 404
-	reverse_proxy api:3000
+	@console path /console /console/*
+	handle @console {
+		header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+		root * /srv
+		@assets path /console/assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@page not path /console/assets/*
+		header @page Cache-Control "no-store"
+		try_files {path} /console/index.html
+		file_server
+	}
+	handle {
+		reverse_proxy api:3000
+	}
 	# Access logs intentionally disabled. API emits IDs/status/duration only,
 	# never URLs, queries, addresses, headers or bodies.
 }

@@ -1,0 +1,48 @@
+name: hireai-console-test
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?}
+      POSTGRES_DB: postgres
+      HIREAI_DATABASE: hireai_test
+      HIREAI_OWNER_PASSWORD: ${HIREAI_OWNER_PASSWORD:?}
+      HIREAI_APP_PASSWORD: ${HIREAI_APP_PASSWORD:?}
+    volumes:
+      [
+        '../database/init/01-create-roles.sh:/docker-entrypoint-initdb.d/01-create-roles.sh:ro',
+      ]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 2s
+      retries: 30
+  migrate:
+    build: ..
+    image: hireai-console-test
+    command: ['node', 'dist/scripts/migrate.js']
+    environment: &migration
+      NODE_ENV: test
+      DATABASE_MIGRATION_URL: postgresql://hireai_owner:${HIREAI_OWNER_PASSWORD}@postgres:5432/hireai_test
+    depends_on:
+      postgres: { condition: service_healthy }
+  seed:
+    image: hireai-console-test
+    command: ['node', 'dist/scripts/seed-console.js']
+    environment:
+      <<: *migration
+      SEED_PASSWORD: ${SEED_PASSWORD:?}
+      SEED_TENANT_ID: ${SEED_TENANT_ID:?}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  api:
+    image: hireai-console-test
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://hireai_app:${HIREAI_APP_PASSWORD}@postgres:5432/hireai_test
+      JWT_SECRET: ${JWT_SECRET:?}
+      JWT_EXPIRES_IN_SECONDS: '60'
+      CORS_ORIGINS: http://localhost:5173
+      EMAIL_ADAPTER: disabled
+    ports: ['127.0.0.1:3000:3000']
+    depends_on:
+      seed: { condition: service_completed_successfully }

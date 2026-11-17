@@ -1,5 +1,15 @@
+FROM node:24-bookworm-slim AS web-build
+WORKDIR /web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ ./
+ARG VITE_TENANT_ID
+ENV VITE_TENANT_ID=$VITE_TENANT_ID
+RUN npm run build
+
 FROM caddy:2.10-alpine
 # The upstream binary has cap_net_bind_service in its file xattrs. An empty
 # capability bounding set rejects exec of that binary even on high ports.
 RUN setcap -r /usr/bin/caddy
+COPY --from=web-build --chown=1000:1000 /web/dist/ /srv/console/
 USER 1000:1000

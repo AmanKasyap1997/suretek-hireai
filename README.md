@@ -271,3 +271,7 @@ ClamAV scanning and a bounded cron sweep, permanent infected-document quarantine
 ## Milestone E: single-server deployment
 
 See [the production runbook](deploy/README.md) for Ubuntu 24.04, versioned GHCR releases, Caddy HTTPS, private persistent local resumes, systemd maintenance, encrypted offsite backups and scratch restore drills. Migrations are forward-only; rollback requires restoring a backup. Production email requires SMTP or EMAIL_DISABLED_ACKNOWLEDGED=true; the pilot preflight requires real SMTP and CAPTCHA. Verification links use a fragment at PUBLIC_WEB_BASE_URL; the verification web client is outside this backend milestone. JSON request logs omit URLs, bodies and personal data. No schema or API contract changes.
+
+## F1 console
+
+The React console is served at `/console` on the API origin. See [console operations](web/README.md) for development, test users and deployment. Browser authentication uses HttpOnly cookies with exact Origin CSRF checks; existing bearer clients remain supported. Password reset and refresh are not provided. Role homes are placeholders only.
