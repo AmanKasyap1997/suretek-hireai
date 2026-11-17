@@ -11,3 +11,6 @@ docs
 test
 
 var
+work
+deploy/secrets
+*.age

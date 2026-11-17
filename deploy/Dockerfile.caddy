@@ -1,0 +1,5 @@
+FROM caddy:2.10-alpine
+# The upstream binary has cap_net_bind_service in its file xattrs. An empty
+# capability bounding set rejects exec of that binary even on high ports.
+RUN setcap -r /usr/bin/caddy
+USER 1000:1000

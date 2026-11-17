@@ -1,3 +1,4 @@
+import { SmtpEmail } from './smtp-email';
 import { ClamAvScanner } from './clamav';
 import { TurnstileCaptcha } from './turnstile';
 import { EmailPort, DevelopmentLogEmail, DisabledEmail } from './email';
@@ -59,10 +60,23 @@ import { CalendarPort, DisabledCalendar } from './calendar';
     },
     {
       provide: EmailPort,
-      useFactory: () =>
-        readConfig().NODE_ENV === 'production'
-          ? new DisabledEmail()
-          : new DevelopmentLogEmail(),
+      useFactory: () => {
+        const c = readConfig();
+        if (c.EMAIL_ADAPTER === 'smtp')
+          return new SmtpEmail({
+            host: c.SMTP_HOST!,
+            port: c.SMTP_PORT,
+            secure: c.SMTP_SECURE === 'true',
+            user: c.SMTP_USER!,
+            password: c.SMTP_PASSWORD!,
+            from: c.SMTP_FROM!,
+            publicWebBaseUrl: c.PUBLIC_WEB_BASE_URL!,
+            timeoutMs: c.SMTP_TIMEOUT_MS,
+          });
+        return c.EMAIL_ADAPTER === 'log' && c.NODE_ENV !== 'production'
+          ? new DevelopmentLogEmail()
+          : new DisabledEmail();
+      },
     },
     {
       provide: MalwareScanPort,

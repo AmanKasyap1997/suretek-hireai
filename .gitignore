@@ -13,3 +13,7 @@ coverage/
 *.key
 
 var/
+
+# Production secrets and encrypted backups remain private, outside build context.
+deploy/secrets/
+work/

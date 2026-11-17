@@ -5,4 +5,6 @@
 - CaptchaPort: explicitly disabled stub. Persistent rate limits and a honeypot remain active; no CAPTCHA provider is contacted.
 - CalendarPort: disabled schedule/cancel stub. Interview APIs store local schedules and do not call a calendar provider or create external events.
 
-See docs/milestone-b-operations.md for configuration, quarantine, erasure retry and storage-inventory recovery, and docs/ta-milestone-c-report.md for local interviews. Real AI/voice/calendar/email/queue integrations remain out of scope.
+See docs/milestone-b-operations.md for configuration, quarantine, erasure retry and storage-inventory recovery, and docs/ta-milestone-c-report.md for local interviews. Real AI/voice/calendar/queue integrations remain out of scope.
+
+SMTP email uses Nodemailer with required authenticated TLS, bounded timeouts and text/HTML templates. See [production operations](../../deploy/README.md); the verification web client is out of scope.
