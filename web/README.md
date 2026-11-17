@@ -14,6 +14,8 @@ POST /api/v1/auth/session accepts the existing login body and issues an HttpOnly
 
 No reset, first-login change, account lockout or login CAPTCHA exists in this backend. Disabled and invalid users have the same 401. UI handles 423 if a future server supplies it and 429/network errors distinctly. Password help directs users to their administrator. No fabricated reset route or CAPTCHA widget is shown.
 
+Open tabs synchronize sign-out and account changes using BroadcastChannel event names only; no tokens or personal data are sent between tabs. Focus, pageshow and returning to a visible tab revalidate the HttpOnly-cookie session with the backend, including when BroadcastChannel is unavailable. A changed user, tenant or role clears cached data before the new session is shown. Failed revalidation hides the previous user until retry succeeds. A local or broadcast sign-out suppresses automatic revalidation so a failed server logout cannot silently restore the old account; explicit sign-in or a sign-in notification from another tab resumes it.
+
 ## Branding and UI
 
 Approved website assets were not provided. `src/tokens.css` explicitly marks the provisional deep teal/mint colours, system-font stack, spacing and type tokens. The text Suretek wordmark is labeled a brand preview. Replace these with approved assets before launch. Login is a split welcome/form screen that stacks at 360px. The shared shell has a sidebar, account menu, role-specific overview, disabled coming-soon items and cards. Profile-only roles have an empty-workspace card. Forbidden, missing page, session-expired notice, startup loading/retry and error-boundary states use the same typography. User content is React-escaped; no HTML injection or client logging/error telemetry is used.

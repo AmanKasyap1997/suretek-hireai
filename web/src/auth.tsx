@@ -40,8 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [logoutError, setLogoutError] = useState('');
   const cache = useQueryClient(),
     generation = useRef(0);
+  const currentSession = useRef<Session | null>(null);
+  const signedOut = useRef(false);
+  const channel = useRef<BroadcastChannel | null>(null);
   function clear(expiry: boolean) {
     generation.current++;
+    currentSession.current = null;
     setSession(null);
     setStatus('ready');
     setExpired(expiry);
@@ -49,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   async function load() {
     const current = ++generation.current;
+    const previous = currentSession.current;
     setStatus('loading');
     try {
       const value = sessionSchema.parse(await api('/auth/session', {}, true));
@@ -57,12 +62,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clear(true);
         return;
       }
+      if (
+        previous?.user.id !== value.user.id ||
+        previous?.user.tenant_id !== value.user.tenant_id ||
+        previous?.user.role !== value.user.role
+      )
+        cache.clear();
+      currentSession.current = value;
       setSession(value);
       setStatus('ready');
+      setExpired(false);
     } catch (error) {
       if (current !== generation.current) return;
-      if (error instanceof ApiError && error.status === 401) clear(false);
-      else setStatus('error');
+      if (error instanceof ApiError && error.status === 401) clear(!!previous);
+      else {
+        currentSession.current = null;
+        setSession(null);
+        cache.clear();
+        setStatus('error');
+      }
     }
   }
   useEffect(() => {
@@ -71,6 +89,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       generation.current++;
     };
   }, []); // Startup only; requests carry generation guards.
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const connection = new BroadcastChannel('hireai-session');
+    channel.current = connection;
+    connection.onmessage = ({ data }) => {
+      if (data === 'signed-out') {
+        signedOut.current = true;
+        clear(false);
+      } else if (data === 'session-changed') {
+        signedOut.current = false;
+        void load();
+      }
+    };
+    return () => {
+      channel.current = null;
+      connection.close();
+    };
+  }, []); // Messages contain event names only, never credentials or user data.
   useEffect(() => onUnauthorized(() => clear(true)), [cache]);
   useEffect(() => {
     if (!session) return;
@@ -82,32 +118,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
   useEffect(() => {
     const check = () => {
-      if (session && session.expiresAt <= Date.now()) clear(true);
+      if (signedOut.current) return;
+      if (
+        currentSession.current &&
+        currentSession.current.expiresAt <= Date.now()
+      )
+        clear(true);
+      else void load();
+    };
+    const visible = () => {
+      if (document.visibilityState === 'visible') check();
     };
     window.addEventListener('pageshow', check);
     window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', visible);
     return () => {
       window.removeEventListener('pageshow', check);
       window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', visible);
     };
-  }, [session]);
+  }, []); // Read refs so listeners always see the latest session/logout state.
   async function login(email: string, password: string) {
     const tenantId = import.meta.env.VITE_TENANT_ID;
     if (!z.uuid().safeParse(tenantId).success) throw new ApiError(503);
+    const current = ++generation.current;
+    signedOut.current = true;
+    setStatus('ready');
     await api(
       '/auth/session',
       { method: 'POST', body: JSON.stringify({ tenantId, email, password }) },
       true,
     );
+    if (current !== generation.current) return;
     const value = sessionSchema.parse(await api('/auth/session', {}, true));
+    if (current !== generation.current) return;
     generation.current++;
     cache.clear();
+    signedOut.current = false;
+    currentSession.current = value;
     setSession(value);
     setStatus('ready');
     setExpired(false);
+    setLogoutError('');
+    channel.current?.postMessage('session-changed');
   }
   async function logout() {
+    signedOut.current = true;
     clear(false);
+    channel.current?.postMessage('signed-out');
     try {
       await api('/auth/session', { method: 'DELETE' }, true);
       setLogoutError('');

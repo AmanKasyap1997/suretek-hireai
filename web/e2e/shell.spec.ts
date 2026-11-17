@@ -57,3 +57,43 @@ test('session expiry removes protected content', async ({ page }) => {
     page.getByText('Your session expired. Sign in again to continue.'),
   ).toBeVisible({ timeout: 65000 });
 });
+
+test('logout and account changes synchronize across open tabs', async ({
+  page,
+  context,
+}) => {
+  await page.waitForTimeout(61000);
+  await page.goto('login');
+  await page
+    .getByLabel('Email', { exact: true })
+    .fill('super_admin@console.test');
+  await page
+    .getByLabel('Password', { exact: true })
+    .fill(process.env.SEED_PASSWORD!);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('Super Admin overview')).toBeVisible();
+  const other = await context.newPage();
+  await other.goto('http://localhost:5173/console/home/super_admin');
+  await expect(other.getByText('Super Admin overview')).toBeVisible();
+  await page.bringToFront();
+  await page.locator('summary').click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  for (const tab of [page, other]) {
+    await expect(
+      tab.getByRole('heading', { name: 'Sign in', exact: true }),
+    ).toBeVisible();
+    await expect(tab.locator('summary')).toHaveCount(0);
+  }
+  await page.getByLabel('Email', { exact: true }).fill('employee@console.test');
+  await page
+    .getByLabel('Password', { exact: true })
+    .fill(process.env.SEED_PASSWORD!);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  for (const tab of [page, other]) {
+    await expect(tab.getByText('Employee overview')).toBeVisible();
+    await expect(tab.getByText('Super Admin overview')).toHaveCount(0);
+    await expect(tab.getByRole('navigation').getByRole('button')).toHaveCount(
+      0,
+    );
+  }
+});
