@@ -104,7 +104,10 @@ export class AuthGuard implements CanActivate {
         'Organization is suspended. Contact your administrator.',
         423,
       );
-    const path = String(request.route?.path ?? request.path).toLowerCase().replace('/api/v1/', '').replace(/\/+$/, '');
+    const path = String(request.route?.path ?? request.path)
+      .toLowerCase()
+      .replace('/api/v1/', '')
+      .replace(/\/+$/, '');
     if (
       user.must_change_password &&
       !['auth/password', 'auth/me', 'auth/session'].includes(path)
