@@ -43,6 +43,8 @@ The unmodified initial image-build attempt hit the managed filesystem's 8 GB/VFS
 
 ## Verification limits
 
+CI follow-up: the first PR run passed the lint/build/PostgreSQL integration job, but Compose validation failed because its implicit environment-file lookup did not load the copied repository-root `.env` for the file under `deploy/`. The workflow now passes `--env-file deploy/ci.env` explicitly. The original failure was reproduced in an isolated directory; the corrected command passed there with both default services and the optional resume-storage profile, and also passed in the checkout.
+
 No real server was deployed and no release tag/image was pushed to GHCR. GitHub Actions execution, GHCR package permissions/attestation inspection, real DNS/ACME issuance, SMTP deliverability/SPF/DKIM/DMARC, production Turnstile and the deployed-URL smoke remain operator checks. Caddy TLS tests used a local trusted CA, not public ACME. The backup destination was an independent local SSH container, not a remote offsite provider. Optional SeaweedFS/S3 was syntax-checked, not started. Live ClamAV signature download failed behind the managed network's proxy; the real scan used the image's existing current signature database. systemd unit installation/execution was not verified: `systemd-analyze verify` was blocked by read-only `/run/systemd`; calendar parsing succeeded. Production instructions target ordinary Docker; rootless UID/host-backup-read adaptations require separate validation.
 
 ## Manual real-server checklist
