@@ -30,3 +30,5 @@ Concrete gaps found during source review:
 - The verification document linked by the runbook is absent. Several pushed files are not formatted. Existing tests need to be rerun against the latest migrations before claiming completion.
 
 Completion plan: fix the service/state transitions and UI defects in place; add focused unit, API and frontend regression coverage; update operations/scope/API/hardening documentation and record actual validation. Do not implement optional impersonation or partial MFA. Preserve tenant IDs and use forward-only migrations only if schema changes are necessary. Verify the existing production deployment configuration can carry the new encryption/verification settings.
+
+Additional review finding: a login with a nonexistent tenant UUID attempts an audit insert with an invalid foreign key, producing an invalid-reference 400 instead of generic 401; unknown slugs leave no audit event. Migration 016 adds a fixed, parameterless, narrowly privileged anonymous failure event in the platform scope. It never stores the submitted email/slug/password. Organization staff creation also needs to honor the configured password policy.

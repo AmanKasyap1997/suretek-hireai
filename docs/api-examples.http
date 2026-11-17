@@ -1,5 +1,7 @@
 @baseUrl = http://localhost:3000/api/v1
 @tenantId = REPLACE_WITH_BOOTSTRAP_TENANT_ID
+@organizationId = REPLACE_WITH_ORGANIZATION_UUID
+@integrationId = REPLACE_WITH_INTEGRATION_UUID
 @token = REPLACE_WITH_LOGIN_ACCESS_TOKEN
 @jobId = REPLACE_WITH_JOB_ID
 @candidateId = REPLACE_WITH_CANDIDATE_ID
@@ -424,4 +426,16 @@ Content-Type: application/json
 
 ### Organization Admin: current-organization team (pagination)
 GET {{baseUrl}}/saas/users?limit=25&offset=0
+Authorization: Bearer {{token}}
+
+### Filter platform audit evidence, including integration overrides for an organization
+GET {{baseUrl}}/super-admin/audit-logs?organization_id={{organizationId}}&limit=25&offset=0
+Authorization: Bearer {{token}}
+
+### CSV exports the same filtered page (read-only)
+GET {{baseUrl}}/super-admin/audit-logs/export?organization_id={{organizationId}}&limit=25&offset=0
+Authorization: Bearer {{token}}
+
+### A failed sandbox test revokes corresponding production approval
+POST {{baseUrl}}/super-admin/integrations/{{integrationId}}/test
 Authorization: Bearer {{token}}
