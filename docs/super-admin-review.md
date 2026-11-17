@@ -20,7 +20,7 @@ Supported provider methods and the exact operator setup are documented in `super
 
 ## Changed file groups
 
-- `database/migrations/017_organization_integrations.sql`: provider availability/revisions, connection method/version fields and tenant-isolated encrypted OAuth state. No previously shipped migration is edited.
+- `database/migrations/017_organization_integrations.sql`: provider availability/revisions, connection method/version fields and tenant-isolated encrypted OAuth state. Migration 018 indexes tenant-scoped OAuth cleanup and provider ownership lookups. No previously shipped migration is edited.
 - `src/modules/organization-integrations/*`: provider catalog, schemas, authenticated controllers, encrypted connection lifecycle, OAuth consent/exchange and provider-specific verification.
 - `src/modules/saas/saas.module.ts`, `src/modules/super-admin/super-admin.service.ts`: route registration and aggregate health/usage.
 - `web/src/OrganizationIntegrations.tsx`, `App.tsx`, `SuperAdminPages.tsx`, `permissions.ts`, `styles.css`: provider controls, organization connection screens, OAuth callback and shared navigation/theme.
@@ -34,7 +34,7 @@ Both reported routes were already registered in the branch. Tested against the r
 
 ## Rollout
 
-1. Back up the database and stable encryption key. Apply migration 017 with the owner connection (`npm run db:migrate`); application credentials remain non-owner/non-BYPASSRLS.
+1. Back up the database and stable encryption key. Apply migrations 017–018 with the owner connection (`npm run db:migrate`); application credentials remain non-owner/non-BYPASSRLS.
 2. Build/restart the API and frontend together. Verify direct and proxied routes with `npm run api:check` and `API_CHECK_ORIGIN`.
 3. Sign in as Super Admin with organization `platform` and the previously bootstrapped credentials. New accounts must change the initial password; bootstrap retry does not reset existing passwords.
 4. Configure `INTEGRATION_ENCRYPTION_KEY`, enable a provider, then use an Organization Admin session to connect its own account. Configure trusted custom endpoints/SMTP and register OAuth callback URLs as applicable.
@@ -44,7 +44,7 @@ Real provider consent, credentials, SMTP authentication and vendor permissions m
 
 ## Validation performed locally
 
-- Fresh PostgreSQL migration through 017 and a second no-op migration run: passed.
+- Fresh PostgreSQL migration through 017 and a second no-op migration run: passed. The subsequent index-only migration 018 was applied and retried successfully.
 - Backend lint/build/format and enum checks: passed. Full non-MinIO suite: **228 tests passed**, including real PostgreSQL API/RLS tests under the restricted runtime role. The one unchanged real-MinIO test is left to the PR's MinIO-enabled CI job.
 - Frontend lint/type-check/production build and **56 unit tests**: passed.
 - Existing Super Admin six-screen mocked browser test and the new **actual-backend** provider enable / organization connection / disable / disconnect browser test: passed. The latter also checks mobile overflow at 360px. Complete invitation/session browser regression remains included in PR CI.
