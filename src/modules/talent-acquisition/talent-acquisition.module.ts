@@ -25,6 +25,6 @@ import { InterviewsModule } from './interviews';
     ReportsModule,
     InterviewsModule,
   ],
-  exports: [CallingModule, PrivacyModule],
+  exports: [CallingModule, PrivacyModule, DocumentsModule],
 })
 export class TalentAcquisitionModule {}

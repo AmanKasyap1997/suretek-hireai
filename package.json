@@ -18,7 +18,8 @@
     "format:check": "prettier --check .",
     "test": "jest --runInBand",
     "enums:generate": "tsx scripts/generate-enum-migration.ts",
-    "enums:check": "tsx scripts/generate-enum-migration.ts --check"
+    "enums:check": "tsx scripts/generate-enum-migration.ts --check",
+    "documents:scan": "node dist/scripts/documents-scan.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",

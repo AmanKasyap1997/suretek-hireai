@@ -7,6 +7,45 @@ const postgresUrlSchema = z
 
 const schema = z
   .object({
+    MALWARE_SCANNER: z.enum(['clamav', 'pending']).optional(),
+    CLAMAV_HOST: z.string().min(1).default('127.0.0.1'),
+    CLAMAV_PORT: z.coerce.number().int().min(1).max(65535).default(3310),
+    CLAMAV_TIMEOUT_MS: z.coerce.number().int().min(100).max(8000).default(5000),
+    DOCUMENT_SCAN_MAX_ATTEMPTS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(10)
+      .default(3),
+    RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: z
+      .enum(['true', 'false'])
+      .default('false'),
+    CAPTCHA_PROVIDER: z.enum(['disabled', 'turnstile']).default('disabled'),
+    CAPTCHA_DISABLED_ACKNOWLEDGED: z.enum(['true', 'false']).default('false'),
+    TURNSTILE_SECRET_KEY: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(1).optional(),
+    ),
+    TURNSTILE_EXPECTED_HOSTNAME: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(1).optional(),
+    ),
+    TURNSTILE_EXPECTED_ACTION: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(1).optional(),
+    ),
+    TURNSTILE_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .max(10000)
+      .default(5000),
+    CONTACT_VERIFICATION_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(60)
+      .max(86400)
+      .default(1800),
     INTAKE_NOTICE_VERSION: z
       .string()
       .trim()
@@ -108,6 +147,26 @@ export function readConfig(): AppConfig {
     );
   }
   const cfg = result.data;
+  if (cfg.NODE_ENV === 'production') {
+    if (!cfg.MALWARE_SCANNER)
+      throw new Error('Production requires explicit MALWARE_SCANNER');
+    if (
+      cfg.CAPTCHA_PROVIDER === 'disabled' &&
+      cfg.CAPTCHA_DISABLED_ACKNOWLEDGED !== 'true'
+    )
+      throw new Error(
+        'Production requires CAPTCHA adapter or CAPTCHA_DISABLED_ACKNOWLEDGED=true',
+      );
+    if (
+      cfg.RESUME_STORAGE !== 's3' &&
+      cfg.RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION !== 'true'
+    )
+      throw new Error(
+        'Production resumes require private S3 storage or explicit persistent-local override',
+      );
+  }
+  if (cfg.CAPTCHA_PROVIDER === 'turnstile' && !cfg.TURNSTILE_SECRET_KEY)
+    throw new Error('Turnstile requires TURNSTILE_SECRET_KEY');
   if (cfg.RESUME_STORAGE === 's3') {
     if (
       !cfg.S3_ENDPOINT ||

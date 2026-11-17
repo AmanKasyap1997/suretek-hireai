@@ -1,3 +1,5 @@
+import { ContactVerificationService } from './contact-verification.service';
+import type { ContactEmail } from '../../../integrations';
 import {
   BadRequestException,
   ForbiddenException,
@@ -30,6 +32,7 @@ export class CareersService {
     private readonly db: DbService,
     private readonly captcha: CaptchaPort,
     private readonly documents: DocumentsService,
+    private readonly verification: ContactVerificationService,
   ) {}
   private async tenant(slug: string) {
     const row = await this.db.one<{ id: string | null }>(
@@ -70,7 +73,7 @@ export class CareersService {
       );
       for (const [key, limit] of [
         [`ip:${ip}`, c.INTAKE_IP_LIMIT],
-        [`email:${email}`, c.INTAKE_EMAIL_LIMIT],
+        [`email-client:${email}:${ip}`, c.INTAKE_EMAIL_LIMIT],
       ] as const) {
         const digest = createHmac('sha256', c.JWT_SECRET)
           .update(key)
@@ -98,7 +101,6 @@ export class CareersService {
   ) {
     const tenantId = await this.tenant(slug);
     return runWithTenant(tenantId, async () => {
-      await this.limit(tenantId, input.email, ip);
       if (input.website) return accepted;
       const c = readConfig();
       if (input.noticeVersion !== c.INTAKE_NOTICE_VERSION)
@@ -115,9 +117,11 @@ export class CareersService {
       // cannot reveal whether an email address has already applied.
       if (resume)
         validateResume(resume.originalname, resume.buffer, c.RESUME_MAX_BYTES);
+      await this.limit(tenantId, input.email, ip);
+      let email: ContactEmail | undefined;
       const keys: StoredObject[] = [];
       try {
-        return await this.db.transaction(async (tx) => {
+        const result = await this.db.transaction(async (tx) => {
           const job = await tx.one(
             "SELECT id FROM jobs WHERE tenant_id=$1 AND id=$2 AND status='PUBLISHED' FOR SHARE",
             [tenantId, jobId],
@@ -148,6 +152,7 @@ export class CareersService {
             null,
             ApplicationStage.APPLIED,
           );
+          const consentIds: string[] = [];
           for (const scope of Object.values(ConsentScope)) {
             const consent = await tx.one<{ id: string }>(
               `INSERT INTO consents(tenant_id,candidate_id,scope,granted,source,captured_by,notice_version,ip_address,user_agent_hash,verified) VALUES($1,$2,$3,$4,'public-careers',NULL,$5,$6,$7,false) RETURNING id`,
@@ -163,6 +168,7 @@ export class CareersService {
                   .digest('hex'),
               ],
             );
+            consentIds.push(consent!.id);
             await audit(
               tx,
               actor,
@@ -177,6 +183,15 @@ export class CareersService {
               },
             );
           }
+          email = await this.verification.issue(
+            tx,
+            tenantId,
+            candidate.id,
+            application.id,
+            input.email,
+            slug,
+            consentIds,
+          );
           if (resume)
             await this.documents.write(tx, actor, candidate.id, resume, (key) =>
               keys.push(key),
@@ -190,6 +205,8 @@ export class CareersService {
           );
           return accepted;
         });
+        if (email) await this.verification.dispatch(email);
+        return result;
       } catch (error) {
         await this.documents.cleanup(keys);
         throw error;

@@ -24,6 +24,9 @@ describe('Production configuration', () => {
   beforeEach(() => {
     process.env = {
       NODE_ENV: 'production',
+      MALWARE_SCANNER: 'pending',
+      CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
+      RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
       DATABASE_URL: 'postgresql://runtime:password@localhost:5432/hireai',
       JWT_SECRET: 'a-test-only-secret-with-at-least-thirty-two-characters',
     };
@@ -42,6 +45,20 @@ describe('Production configuration', () => {
     return app;
   }
 
+  it('requires explicit scanner, captcha acknowledgement and persistent local override in production', () => {
+    delete process.env.MALWARE_SCANNER;
+    expect(() => readConfig()).toThrow(/MALWARE_SCANNER/);
+    process.env.MALWARE_SCANNER = 'pending';
+    delete process.env.CAPTCHA_DISABLED_ACKNOWLEDGED;
+    expect(() => readConfig()).toThrow(/CAPTCHA/);
+    process.env.CAPTCHA_DISABLED_ACKNOWLEDGED = 'true';
+    delete process.env.RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION;
+    expect(() => readConfig()).toThrow(/S3/);
+    process.env.RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION = 'true';
+    expect(readConfig().RESUME_STORAGE).toBe('local');
+    process.env.CAPTCHA_PROVIDER = 'turnstile';
+    expect(() => readConfig()).toThrow(/TURNSTILE_SECRET_KEY/);
+  });
   it('defaults maker-checker on in production and accepts explicit overrides', () => {
     expect(readConfig().OFFER_MAKER_CHECKER).toBe(true);
     process.env.OFFER_MAKER_CHECKER = 'false';

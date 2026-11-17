@@ -205,3 +205,7 @@ Recruitment reports are available only to recruiter/admin roles, with strict opt
 The CalendarPort and DisabledCalendar are integration contracts only. The stub returns disabled and the API does not invoke it. No external calendar, AI, queue or telephony provider is called.
 
 The A/B review also corrected Compose's production storage/policy variable forwarding, treats an empty optional S3 session token as omitted, and validates public resume bytes before duplicate-identity branching. DOCX checks validate local/central ZIP metadata, bounded expansion and payload CRC; these format checks remain separate from the unimplemented malware scanner.
+
+## Milestone D readiness
+
+ClamAV scanning and a bounded cron sweep, permanent infected-document quarantine, explicit production storage/scanner/CAPTCHA choices, real MinIO protocol tests, hashed single-use contact verification and Turnstile are implemented. See [readiness operations](milestone-b-operations.md#milestone-d-readiness) for configuration, local-volume persistence, verification limitations and real ClamAV checks. Email delivery remains a development log adapter; production needs an EmailPort provider before contact verification can be used. Email/client rate buckets are charged after validation and CAPTCHA, preventing unrelated clients from exhausting a victim's email allowance.

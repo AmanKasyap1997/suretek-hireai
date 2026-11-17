@@ -20,6 +20,20 @@ services:
       timeout: 5s
       retries: 10
 
+  minio:
+    profiles: ['readiness']
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r3
+    environment:
+      MINIO_DEFAULT_BUCKETS: private-resumes
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-hireai_dev}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hireai_minio_dev_only}
+    ports: ['127.0.0.1:9000:9000', '127.0.0.1:9001:9001']
+    volumes: ['minio_data:/bitnami/minio/data']
+  clamav:
+    profiles: ['readiness']
+    image: clamav/clamav:1.4.3
+    ports: ['127.0.0.1:3310:3310']
+    volumes: ['clamav_signatures:/var/lib/clamav']
   migrate:
     profiles: ['app']
     build: .
@@ -62,6 +76,20 @@ services:
       CANDIDATE_RETENTION_DAYS: ${CANDIDATE_RETENTION_DAYS:-365}
       RESUME_MAX_BYTES: ${RESUME_MAX_BYTES:-5242880}
       # The API runs in production mode and requires private S3 storage.
+      MALWARE_SCANNER: ${MALWARE_SCANNER:?Set MALWARE_SCANNER explicitly}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      CLAMAV_TIMEOUT_MS: ${CLAMAV_TIMEOUT_MS:-5000}
+      DOCUMENT_SCAN_MAX_ATTEMPTS: ${DOCUMENT_SCAN_MAX_ATTEMPTS:-3}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-disabled}
+      CAPTCHA_DISABLED_ACKNOWLEDGED: ${CAPTCHA_DISABLED_ACKNOWLEDGED:-false}
+      TURNSTILE_EXPECTED_HOSTNAME: ${TURNSTILE_EXPECTED_HOSTNAME:-}
+      TURNSTILE_EXPECTED_ACTION: ${TURNSTILE_EXPECTED_ACTION:-}
+      TURNSTILE_TIMEOUT_MS: ${TURNSTILE_TIMEOUT_MS:-5000}
+      CONTACT_VERIFICATION_TTL_SECONDS: ${CONTACT_VERIFICATION_TTL_SECONDS:-1800}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: ${RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION:-false}
+      RESUME_STORAGE_ROOT: /app/var/private/resumes
       RESUME_STORAGE: ${RESUME_STORAGE:-s3}
       S3_ENDPOINT: ${S3_ENDPOINT:-}
       S3_BUCKET: ${S3_BUCKET:-}
@@ -85,4 +113,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  minio_data:
+  clamav_signatures:
   postgres_data:

@@ -161,10 +161,15 @@ export function useApiFixture() {
   afterAll(async () => {
     if (pool && tenantA && tenantB) {
       // Delete only fixtures created by this suite, preserving unrelated local data.
+      await pool.query(
+        'UPDATE consents SET verification_id=NULL,verification_method=NULL WHERE tenant_id=ANY($1::uuid[])',
+        [[tenantA, tenantB]],
+      );
       for (const table of [
         'interview_scorecards',
         'interview_panelists',
         'interviews',
+        'contact_verifications',
         'candidate_documents',
         'public_intake_limits',
         'application_stage_events',

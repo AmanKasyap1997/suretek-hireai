@@ -93,6 +93,7 @@ export enum DocumentScanStatus {
   CLEAN = 'CLEAN',
   INFECTED = 'INFECTED',
   ERROR = 'ERROR',
+  FAILED = 'FAILED',
 }
 
 export enum InterviewMode {
@@ -112,4 +113,8 @@ export enum ScorecardRecommendation {
   HOLD = 'HOLD',
   NO_HIRE = 'NO_HIRE',
   STRONG_NO_HIRE = 'STRONG_NO_HIRE',
+}
+
+export enum VerificationMethod {
+  EMAIL_TOKEN = 'EMAIL_TOKEN',
 }

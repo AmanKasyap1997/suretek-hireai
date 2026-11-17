@@ -17,3 +17,5 @@ export { intakeSchema } from './careers';
 export { ScorecardsService } from './scorecards';
 export { ReportsService } from './reports';
 export { InterviewsService } from './interviews';
+
+export { DocumentsScanService } from './documents';
