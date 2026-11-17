@@ -169,6 +169,29 @@ export class CallingService {
         }
         return existing;
       }
+      const global = await tx.one(
+        "SELECT value FROM platform_settings WHERE key='defaults'",
+      );
+      if (global?.value.emergency_pause)
+        throw new ForbiddenException('Calling is paused by the platform');
+      if (global) {
+        const policy = {
+          ...this.policy,
+          startMinute: global.value.calling_start * 60,
+          endMinute: global.value.calling_end * 60,
+        };
+        if (!isWithinCallingWindow(policy, this.clock.now()))
+          throw new ForbiddenException('Outside platform calling hours');
+        await tx.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE', [
+          actor.tenantId,
+        ]);
+        const used = await tx.one(
+          "SELECT count(*)::int AS count FROM call_requests WHERE tenant_id=$1 AND status='PLANNED' AND created_at>=date_trunc('month',now())",
+          [actor.tenantId],
+        );
+        if (used!.count >= global.value.call_quota)
+          throw new ForbiddenException('Monthly platform call quota reached');
+      }
       if (!this.policy.enabled)
         throw new ForbiddenException('Call planning is disabled');
       if (!isWithinCallingWindow(this.policy, this.clock.now())) {

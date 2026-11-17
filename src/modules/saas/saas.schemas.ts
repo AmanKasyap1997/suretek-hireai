@@ -1,3 +1,4 @@
+import { organizationFields } from '../super-admin/super-admin.schemas';
 import { z } from 'zod';
 import { ORGANIZATION_STAFF_ROLES } from '../../shared/role-groups';
 export { ORGANIZATION_STAFF_ROLES } from '../../shared/role-groups';
@@ -20,6 +21,7 @@ export const organizationSlug = z
   .regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/);
 export const createOrganizationSchema = z
   .object({
+    ...organizationFields,
     name,
     slug: organizationSlug,
     adminName: name,
@@ -58,3 +60,7 @@ export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
 export type InviteStaffInput = z.infer<typeof inviteStaffSchema>;
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
 export type ListInput = z.infer<typeof listSchema>;
+
+export const staffRolesSchema = z
+  .object({ roles: z.array(z.enum(ORGANIZATION_STAFF_ROLES)).min(1).max(8) })
+  .strict();

@@ -4,6 +4,8 @@ import { z } from 'zod';
 
 export interface TenantContext {
   tenantId?: string;
+  ip?: string;
+  userAgent?: string;
 }
 
 /** A fresh store per HTTP request prevents tenant state crossing requests. */
@@ -21,7 +23,13 @@ export function tenantContextMiddleware(
   _response: Response,
   next: NextFunction,
 ): void {
-  tenantContext.run({}, next);
+  tenantContext.run(
+    {
+      ip: _request.ip?.slice(0, 100),
+      userAgent: _request.get('user-agent')?.slice(0, 500),
+    },
+    next,
+  );
 }
 
 /** Assign only within an existing request; never create ambient global state. */

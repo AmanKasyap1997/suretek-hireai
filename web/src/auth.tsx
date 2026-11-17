@@ -17,10 +17,13 @@ const sessionSchema = z.object({
     full_name: z.string(),
     email: z.string(),
     role: z.enum(roles),
+    roles: z.array(z.enum(roles)).optional(),
     active: z.literal(true),
     organization_name: z.string().optional(),
     organization_slug: z.string().optional(),
     platform_admin: z.boolean().optional(),
+    enabled_modules: z.array(z.string()).optional(),
+    must_change_password: z.boolean().optional(),
   }),
   expiresAt: z.number(),
 });

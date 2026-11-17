@@ -22,7 +22,7 @@ for (const [index, role] of roles.entries())
         level: 1,
         name:
           role === 'SUPER_ADMIN'
-            ? 'Organizations'
+            ? 'Platform dashboard'
             : `${roleLabel(role)} overview`,
       }),
     ).toBeVisible();
@@ -43,7 +43,7 @@ for (const [index, role] of roles.entries())
         level: 1,
         name:
           role === 'SUPER_ADMIN'
-            ? 'Organizations'
+            ? 'Platform dashboard'
             : `${roleLabel(role)} overview`,
       }),
     ).toBeVisible();
@@ -51,7 +51,7 @@ for (const [index, role] of roles.entries())
       `home/${role === 'SUPER_ADMIN' ? 'employee' : 'super_admin'}`,
     );
     await expect(
-      page.getByRole('heading', { name: 'Not permitted' }),
+      page.getByRole('heading', { name: 'Not authorized' }),
     ).toBeVisible();
     await page.locator('summary').click();
     await page.getByRole('button', { name: 'Sign out' }).click();
@@ -94,12 +94,12 @@ test('logout and account changes synchronize across open tabs', async ({
     .fill(process.env.SEED_PASSWORD!);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(
-    page.getByRole('heading', { name: 'Organizations', exact: true }),
+    page.getByRole('heading', { name: 'Platform dashboard', exact: true }),
   ).toBeVisible();
   const other = await context.newPage();
   await other.goto('http://localhost:5173/console/home/super_admin');
   await expect(
-    other.getByRole('heading', { name: 'Organizations', exact: true }),
+    other.getByRole('heading', { name: 'Platform dashboard', exact: true }),
   ).toBeVisible();
   await page.bringToFront();
   await page.locator('summary').click();
@@ -119,7 +119,7 @@ test('logout and account changes synchronize across open tabs', async ({
   for (const tab of [page, other]) {
     await expect(tab.getByText('Employee overview')).toBeVisible();
     await expect(
-      tab.getByRole('heading', { name: 'Organizations', exact: true }),
+      tab.getByRole('heading', { name: 'Platform dashboard', exact: true }),
     ).toHaveCount(0);
     await expect(tab.getByRole('navigation').getByRole('button')).toHaveCount(
       0,

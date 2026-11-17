@@ -17,10 +17,23 @@ async function main(): Promise<void> {
     throw new Error(
       'BOOTSTRAP_TENANT_SLUG must be a lowercase URL slug, 3–63 characters',
     );
-  const tenantName = process.env.BOOTSTRAP_TENANT_NAME?.trim();
-  const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
-  const fullName = process.env.BOOTSTRAP_ADMIN_NAME?.trim();
-  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  const tenantName =
+    process.env.BOOTSTRAP_TENANT_NAME?.trim() ||
+    (platform ? 'Suretek Platform' : undefined);
+  const email = (
+    platform
+      ? (process.env.SUPER_ADMIN_EMAIL ?? process.env.BOOTSTRAP_ADMIN_EMAIL)
+      : process.env.BOOTSTRAP_ADMIN_EMAIL
+  )
+    ?.trim()
+    .toLowerCase();
+  const fullName =
+    process.env.BOOTSTRAP_ADMIN_NAME?.trim() ||
+    (platform ? 'Platform Owner' : undefined);
+  const password = platform
+    ? (process.env.SUPER_ADMIN_INITIAL_PASSWORD ??
+      process.env.BOOTSTRAP_ADMIN_PASSWORD)
+    : process.env.BOOTSTRAP_ADMIN_PASSWORD;
   const suppliedTenantId = process.env.BOOTSTRAP_TENANT_ID?.trim() || undefined;
   if (!tenantName || !email || !fullName || !password) {
     throw new Error(
@@ -106,6 +119,10 @@ async function main(): Promise<void> {
         throw new Error(
           'Platform bootstrap requires a Super Admin account; use a new administrator email.',
         );
+      if (platform)
+        await client.query('SELECT register_existing_organizations($1)', [
+          existing.rows[0].id,
+        ]);
       await client.query('COMMIT');
       console.log(
         `Organization sign-in key: ${tenantSlug ?? tenant.rows[0]?.slug ?? 'tenant-' + tenantId}`,
@@ -131,11 +148,20 @@ async function main(): Promise<void> {
         platform ? Role.SUPER_ADMIN : Role.HR_ADMIN,
       ],
     );
+    if (platform)
+      await client.query(
+        'UPDATE users SET must_change_password=true WHERE tenant_id=$1 AND id=$2',
+        [tenantId, userId],
+      );
     await client.query(
       `INSERT INTO audit_events (tenant_id, actor_id, action, entity_type, entity_id)
        VALUES ($1, $2, 'bootstrap.admin_created', 'user', $2)`,
       [tenantId, userId],
     );
+    if (platform)
+      await client.query('SELECT register_existing_organizations($1)', [
+        userId,
+      ]);
     await client.query('COMMIT');
     console.log(`Tenant ID: ${tenantId}`);
     console.log(

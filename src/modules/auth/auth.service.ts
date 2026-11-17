@@ -1,5 +1,7 @@
 import {
   ForbiddenException,
+  HttpException,
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -44,9 +46,43 @@ export class AuthService {
       input.password,
       user?.password_hash ?? (await this.dummyHash),
     );
-    if (!user?.active || !verified)
+    if (!user?.active || !verified) {
+      await audit(
+        this.db,
+        { tenantId, userId: null },
+        'auth.login_failed',
+        'user',
+        null,
+      );
       throw new UnauthorizedException('Invalid credentials');
-    const expiresIn = readConfig().JWT_EXPIRES_IN_SECONDS;
+    }
+    const tenant = await this.db.one(
+      'SELECT status,deleted_at FROM tenants WHERE id=$1',
+      [tenantId],
+    );
+    if (!tenant || tenant.status === 'suspended' || tenant.deleted_at)
+      throw new HttpException(
+        'Organization is suspended. Contact your administrator.',
+        423,
+      );
+    await this.db.query(
+      'UPDATE users SET last_login_at=now() WHERE tenant_id=$1 AND id=$2',
+      [tenantId, user.id],
+    );
+    await audit(
+      this.db,
+      { tenantId, userId: user.id },
+      'auth.login',
+      'user',
+      user.id,
+    );
+    const policy = await this.db.one(
+      "SELECT value FROM platform_settings WHERE key='defaults'",
+    );
+    const expiresIn = Math.min(
+      readConfig().JWT_EXPIRES_IN_SECONDS,
+      policy?.value.session_seconds ?? 86400,
+    );
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, tenantId: user.tenant_id },
       {
@@ -61,11 +97,63 @@ export class AuthService {
 
   me(actor: Actor) {
     return this.db.one(
-      "SELECT u.id,u.tenant_id,u.full_name,u.email,u.role,u.active,t.name AS organization_name,t.slug AS organization_slug,(t.is_platform AND u.role='SUPER_ADMIN') AS platform_admin FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.tenant_id=$1 AND u.id=$2",
+      "SELECT u.id,u.tenant_id,u.full_name,u.email,u.role,u.active,ARRAY(SELECT role FROM user_roles WHERE user_id=u.id AND tenant_id=u.tenant_id) AS roles,u.must_change_password,t.enabled_modules,t.name AS organization_name,t.slug AS organization_slug,(t.is_platform AND u.role='SUPER_ADMIN') AS platform_admin FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.tenant_id=$1 AND u.id=$2",
       [actor.tenantId, actor.userId],
     );
   }
 
+  async changePassword(
+    actor: Actor,
+    currentPassword: string,
+    password: string,
+  ) {
+    const user = await this.db.one(
+      'SELECT password_hash FROM users WHERE tenant_id=$1 AND id=$2',
+      [actor.tenantId, actor.userId],
+    );
+    if (!user || !(await verifyPassword(currentPassword, user.password_hash)))
+      throw new UnauthorizedException('Current password is incorrect');
+    const policy = await this.db.one(
+      "SELECT value FROM platform_settings WHERE key='defaults'",
+    );
+    if (password.length < (policy?.value.password_min_length ?? 12))
+      throw new BadRequestException('Password is shorter than platform policy');
+    const hash = await hashPassword(password);
+    await this.db.transaction(async (tx) => {
+      await tx.query(
+        'UPDATE users SET password_hash=$3,must_change_password=false WHERE tenant_id=$1 AND id=$2',
+        [actor.tenantId, actor.userId, hash],
+      );
+      await audit(tx, actor, 'auth.password_changed', 'user', actor.userId);
+    });
+    return { changed: true };
+  }
+  async logoutToken(token?: string) {
+    if (!token) return;
+    let claims: { sub: string; tenantId: string };
+    try {
+      claims = await this.jwt.verifyAsync(token, {
+        algorithms: ['HS256'],
+        issuer: 'suretek-hireai',
+        audience: 'suretek-api',
+      });
+    } catch {
+      return;
+    }
+    setTenantId(claims.tenantId);
+    const user = await this.db.one(
+      'SELECT id FROM users WHERE tenant_id=$1 AND id=$2',
+      [claims.tenantId, claims.sub],
+    );
+    if (user)
+      await audit(
+        this.db,
+        { tenantId: claims.tenantId, userId: claims.sub },
+        'auth.logout',
+        'user',
+        claims.sub,
+      );
+  }
   async createUser(actor: Actor, input: CreateUserInput) {
     if (
       actor.role !== Role.HR_ADMIN ||

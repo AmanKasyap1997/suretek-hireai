@@ -279,3 +279,11 @@ The React console is served at `/console` on the API origin. See [console operat
 ## SaaS organizations and staff invitations
 
 The user-requested SaaS extension replaces the single-tenant console model. SUPER_ADMIN manages organizations and initial admin invitations only; HR_ADMIN is Organization Admin and manages that organization's staff/business access. Apply migration 012 and bootstrap a dedicated platform owner with npm run bootstrap:platform. Existing business tenants are never automatically promoted. Recipients follow a one-time email link to set their password, then sign in using their organization key. One frontend build supports every organization; VITE_TENANT_ID/PILOT_TENANT_ID are no longer used. Configure authenticated TLS SMTP and PUBLIC_WEB_BASE_URL before inviting customers. See [setup, upgrade, APIs and permissions](docs/saas-onboarding.md) and [console operations](web/README.md).
+
+## Super Admin platform module
+
+The platform owner console provides Dashboard, Organizations, Integrations, Settings, Audit Logs and Platform Reports. Super Admins manage governance and aggregate usage without access to tenant candidate/employee records.
+
+Apply migrations with `npm run db:migrate`, set `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_INITIAL_PASSWORD` and a stable `BOOTSTRAP_TENANT_ID`, then run `npm run bootstrap:platform`. Sign in at `/console/login` using organization `platform`; new owners must change their initial password. Configure `INTEGRATION_ENCRYPTION_KEY` before saving provider credentials and existing SMTP settings before inviting organization admins.
+
+See [Super Admin operations](docs/super-admin.md) for organization onboarding, migration compatibility, all new environment variables, module/menu extensions, security boundaries and explicit optional TODOs. The [repository audit](docs/super-admin-audit.md) documents the original architecture.

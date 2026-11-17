@@ -87,7 +87,7 @@ test('platform creates organization; emailed admin and staff invitations activat
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(
-    page.getByRole('heading', { name: 'Organizations', exact: true }),
+    page.getByRole('heading', { name: 'Platform dashboard', exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole('navigation').getByText('Jobs', { exact: true }),
@@ -95,17 +95,19 @@ test('platform creates organization; emailed admin and staff invitations activat
   expect(
     (await context.request.get('http://localhost:3000/api/v1/jobs')).status(),
   ).toBe(403);
-  await page.getByLabel('Organization name', { exact: true }).fill(orgName);
-  await page.getByLabel('Organization key', { exact: true }).fill(key);
+  await page.getByRole('link',{name:'Organizations',exact:true}).click();
+  await page.getByText('Add organization',{exact:true}).click();
+  await page.getByLabel('Name', { exact: true }).fill(orgName);
+  await page.getByLabel('Slug', { exact: true }).fill(key);
   await page
-    .getByLabel('Admin name', { exact: true })
+    .getByLabel('First HR Admin name', { exact: true })
     .fill('Invited organization admin');
-  await page.getByLabel('Admin email', { exact: true }).fill(adminEmail);
+  await page.getByLabel('First HR Admin email', { exact: true }).fill(adminEmail);
   await page
     .getByRole('button', { name: 'Create organization & invite admin' })
     .click();
   await expect(
-    page.getByText('Organization created. The admin invitation was emailed.'),
+    page.getByText('Saved successfully.'),
   ).toBeVisible();
   const adminLink = await invitation(context.request, adminEmail);
   const adminContext = await browser.newContext();
@@ -164,7 +166,7 @@ test('platform creates organization; emailed admin and staff invitations activat
         ).toBe(403);
         await staff.goto('http://localhost:5173/console/organizations');
         await expect(
-          staff.getByRole('heading', { name: 'Not permitted' }),
+          staff.getByRole('heading', { name: 'Not authorized' }),
         ).toBeVisible();
         if (role === 'RECRUITER') {
           await admin

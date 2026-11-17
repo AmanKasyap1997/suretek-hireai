@@ -166,6 +166,8 @@ export function useApiFixture() {
         [[tenantA, tenantB]],
       );
       for (const table of [
+        'integration_configs',
+        'platform_settings',
         'platform_organizations',
         'user_invitations',
         'interview_scorecards',

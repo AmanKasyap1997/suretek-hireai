@@ -30,12 +30,14 @@ function setup(path = '/', role?: Role, expiresAt?: number) {
   vi.stubGlobal(
     'fetch',
     vi.fn(
-      async () =>
+      async (url) =>
         new Response(
           JSON.stringify(
-            role
-              ? { ...session(role), ...(expiresAt ? { expiresAt } : {}) }
-              : {},
+            String(url).includes('/super-admin/dashboard')
+              ? { attention: [], recent_events: [], total_organizations: 0 }
+              : role
+                ? { ...session(role), ...(expiresAt ? { expiresAt } : {}) }
+                : {},
           ),
           {
             status: role ? 200 : 401,
@@ -68,7 +70,7 @@ describe('role shell and sessions', () => {
         await screen.findByRole('heading', {
           name:
             role === 'SUPER_ADMIN'
-              ? 'Organizations'
+              ? 'Platform dashboard'
               : `${roleLabel(role)} overview`,
         }),
       ).toBeVisible();
@@ -80,7 +82,7 @@ describe('role shell and sessions', () => {
   it.each(roles)('guards forbidden home for %s', async (role) => {
     setup(homePath(role === 'SUPER_ADMIN' ? 'EMPLOYEE' : 'SUPER_ADMIN'), role);
     expect(
-      await screen.findByRole('heading', { name: 'Not permitted' }),
+      await screen.findByRole('heading', { name: 'Not authorized' }),
     ).toBeVisible();
   });
   it('validates login without sending credentials, supports password visibility', async () => {
@@ -122,7 +124,7 @@ describe('role shell and sessions', () => {
   });
   it.each([
     [401, 'Email or password'],
-    [423, 'locked'],
+    [423, 'suspended'],
     [429, 'Too many'],
     [0, 'Cannot reach'],
     [503, 'temporarily unavailable'],

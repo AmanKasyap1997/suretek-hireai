@@ -88,18 +88,55 @@ export class SaasService {
       invitation_id: string;
     };
     try {
-      result = (await this.db.one(
-        'SELECT * FROM provision_organization($1,$2,$3,$4,$5,$6,$7)',
-        [
+      result = await this.db.transaction(async (tx) => {
+        const created = (await tx.one(
+          'SELECT * FROM provision_organization($1,$2,$3,$4,$5,$6,$7)',
+          [
+            actor.userId,
+            input.name,
+            input.slug,
+            input.adminName,
+            input.adminEmail,
+            invitation.hash,
+            invitation.expiresAt,
+          ],
+        ))!;
+        await tx.query("SELECT set_config('app.tenant_id',$1,true)",[created.organization_id]);
+        await tx.query('UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',[created.organization_id,created.invitation_id,actor.userId]);
+        await tx.query("SELECT set_config('app.tenant_id',$1,true)",[actor.tenantId]);
+        await tx.query(
+          'UPDATE platform_organizations SET domain=$3,country=$4,timezone=$5,status=$6,plan=$7,enabled_modules=$8,limits=$9,trial_ends_at=$10,created_by=$11 WHERE tenant_id=$1 AND organization_id=$2',
+          [
+            actor.tenantId,
+            created.organization_id,
+            input.domain,
+            input.country,
+            input.timezone,
+            input.status,
+            input.plan,
+            JSON.stringify(input.enabled_modules),
+            JSON.stringify(input.limits),
+            input.trial_ends_at,
+            actor.userId,
+          ],
+        );
+        await tx.query('SELECT govern_organization($1,$2,$3,$4,$5,$6)', [
           actor.userId,
+          created.organization_id,
           input.name,
-          input.slug,
-          input.adminName,
-          input.adminEmail,
-          invitation.hash,
-          invitation.expiresAt,
-        ],
-      ))!;
+          input.status,
+          JSON.stringify(input.enabled_modules),
+          null,
+        ]);
+        await audit(
+          tx,
+          actor,
+          'invitation.sent',
+          'organization',
+          created.organization_id,
+        );
+        return created;
+      });
     } catch (error) {
       return conflict(error);
     }
@@ -156,9 +193,8 @@ export class SaasService {
         row.admin_user_id,
         null,
       );
-      await tx.query("SELECT set_config('app.tenant_id',$1,true)", [
-        actor.tenantId,
-      ]);
+      await tx.query('UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',[row.organization_id,invite.id,actor.userId]);
+      await tx.query("SELECT set_config('app.tenant_id',$1,true)", [actor.tenantId]);
       await tx.query(
         'UPDATE platform_organizations SET last_invitation_id=$3,delivery_status=$4 WHERE tenant_id=$1 AND organization_id=$2',
         [actor.tenantId, organizationId, invite.id, 'PENDING'],
@@ -186,6 +222,40 @@ export class SaasService {
       [actor.tenantId, organizationId, deliveryStatus, invite.id],
     );
     return { deliveryStatus };
+  }
+  async changeRoles(actor: Actor, id: string, roles: Role[]) {
+    await this.organization(actor);
+    if (
+      roles.some(
+        (role) => !ORGANIZATION_STAFF_ROLES.some((allowed) => allowed === role),
+      )
+    )
+      throw new ForbiddenException();
+    return this.db.transaction(async (tx) => {
+      const user = await tx.one(
+        'SELECT role FROM users WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
+        [actor.tenantId, id],
+      );
+      if (!user) throw new NotFoundException();
+      if (!ORGANIZATION_STAFF_ROLES.includes(user.role))
+        throw new ForbiddenException();
+      await tx.query(
+        'DELETE FROM user_roles WHERE tenant_id=$1 AND user_id=$2',
+        [actor.tenantId, id],
+      );
+      await tx.query('UPDATE users SET role=$3 WHERE tenant_id=$1 AND id=$2', [
+        actor.tenantId,
+        id,
+        roles[0],
+      ]);
+      for (const role of new Set(roles))
+        await tx.query(
+          'INSERT INTO user_roles(tenant_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',
+          [actor.tenantId, id, role],
+        );
+      await audit(tx, actor, 'user.roles_changed', 'user', id, { roles });
+      return { id, roles };
+    });
   }
   async users(actor: Actor, page: ListInput) {
     await this.organization(actor);
@@ -227,6 +297,7 @@ export class SaasService {
           'INSERT INTO user_invitations(tenant_id,user_id,token_hash,expires_at) VALUES($1,$2,$3,$4) RETURNING id',
           [actor.tenantId, user!.id, invitation.hash, invitation.expiresAt],
         );
+        await tx.query('UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',[actor.tenantId,row!.id,actor.userId]);
         await audit(tx, actor, 'user.invited', 'user', user!.id, {
           role: input.role,
         });
@@ -309,6 +380,7 @@ export class SaasService {
       'INSERT INTO user_invitations(tenant_id,user_id,token_hash,expires_at) VALUES($1,$2,$3,$4) RETURNING id',
       [tenantId, userId, invitation.hash, invitation.expiresAt],
     );
+    await tx.query('UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',[tenantId,row!.id,actorId]);
     await audit(
       tx,
       { tenantId, userId: actorId },
@@ -347,6 +419,17 @@ export class SaasService {
       throw new BadRequestException('Invitation is invalid or expired');
     const tenantId = resolved.id;
     setTenantId(tenantId);
+    const tenant = await this.db.one(
+      'SELECT status,deleted_at FROM tenants WHERE id=$1',
+      [tenantId],
+    );
+    if (!tenant || tenant.status === 'suspended' || tenant.deleted_at)
+      throw new ForbiddenException('Organization is suspended');
+    const policy = await this.db.one(
+      "SELECT value FROM platform_settings WHERE key='defaults'",
+    );
+    if (input.password.length < (policy?.value.password_min_length ?? 12))
+      throw new BadRequestException('Password is shorter than platform policy');
     const hash = await hashPassword(input.password);
     await this.db.transaction(async (tx) => {
       const candidate = await tx.one(

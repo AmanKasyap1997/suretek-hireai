@@ -4,6 +4,7 @@ export default defineConfig({
   workers: 1,
   timeout: 180000,
   use: {
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
     baseURL: 'http://localhost:5173/console/',
     trace: 'off',
     screenshot: 'off',

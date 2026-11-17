@@ -13,7 +13,7 @@ const schema = z
       .int()
       .min(60)
       .max(604800)
-      .default(86400),
+      .default(604800),
     EMAIL_DISABLED_ACKNOWLEDGED: z.enum(['true', 'false']).default('false'),
     PUBLIC_WEB_BASE_URL: z.string().url().optional(),
     SMTP_HOST: z.string().min(1).optional(),

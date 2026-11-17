@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Param,
   ParseUUIDPipe,
   Query,
@@ -22,6 +23,7 @@ import {
   createOrganizationSchema,
   inviteStaffSchema,
   listSchema,
+  staffRolesSchema,
 } from './saas.schemas';
 @ApiTags('SaaS organizations and invitations')
 @ApiBearerAuth()
@@ -50,6 +52,20 @@ export class SaasController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.saas.resendOrganizationAdmin(actor, id);
+  }
+  @Patch('users/:id/roles')
+  @Roles(Role.HR_ADMIN)
+  @BodySchema(staffRolesSchema)
+  changeRoles(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.saas.changeRoles(
+      actor,
+      id,
+      parse(staffRolesSchema, body).roles,
+    );
   }
   @Get('users')
   @Roles(Role.HR_ADMIN)

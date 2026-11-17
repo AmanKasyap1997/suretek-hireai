@@ -1,3 +1,8 @@
+import {
+  SuperAdminPage,
+  SuperAdminDetail,
+  PasswordChange,
+} from './SuperAdminPages';
 import { Component, useState, type ReactNode } from 'react';
 import {
   Navigate,
@@ -16,7 +21,7 @@ import { z } from 'zod';
 import { useAuth } from './auth';
 import { loginError } from './api';
 import { Brand, WorkspaceIcon } from './Brand';
-import { Organizations, Team, AcceptInvitation } from './SaasPages';
+import { Team, AcceptInvitation } from './SaasPages';
 import {
   allowedDestination,
   homePath,
@@ -24,6 +29,7 @@ import {
   permissionMap,
   roleLabel,
   visibleNavigation,
+  moduleForMenu,
 } from './permissions';
 const schema = z.object({
   organizationSlug: z
@@ -71,6 +77,12 @@ export function Guard() {
       <main className="standalone">
         <h1>Unable to load your session</h1>
         <button onClick={auth.retry}>Try again</button>
+      </main>
+    );
+  if (auth.session?.user.must_change_password)
+    return (
+      <main className="standalone">
+        <PasswordChange />
       </main>
     );
   return auth.session ? (
@@ -269,14 +281,25 @@ function Shell() {
   const { session, logout } = useAuth(),
     navigate = useNavigate();
   const [error, setError] = useState('');
+  const [menuOpen, setMenuOpen] = useState(
+    typeof window !== 'undefined' && window.innerWidth > 900,
+  );
   if (!session) return null;
   const user = session.user;
   return (
-    <div className="shell">
+    <div className={`shell ${menuOpen ? 'menu-open' : 'menu-closed'}`}>
       <a className="skip" href="#main">
         Skip to content
       </a>
       <header className="app-header">
+        <button
+          className="menu-toggle"
+          aria-label="Toggle navigation"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          Menu
+        </button>
         <Brand />
         <span className="platform-label">
           Recruitment &amp; People Platform
@@ -288,7 +311,9 @@ function Shell() {
             </span>
             <span>
               {user.full_name}
-              <span className="role">{roleLabel(user.role)}</span>
+              <span className="role">
+                {roleLabel(user.role)} | {user.organization_name}
+              </span>
             </span>
             <span aria-hidden="true">⌄</span>
           </summary>
@@ -324,27 +349,28 @@ function Shell() {
               <WorkspaceIcon name="home" /> Overview
             </NavLink>
           )}
-          {visibleNavigation(user.role).map((item) =>
-            item.built ? (
-              <NavLink
-                key={item.id}
-                className={({ isActive }) =>
-                  isActive ? 'nav-home' : 'nav-feature'
-                }
-                to={`/${item.id}`}
-              >
-                <WorkspaceIcon name={item.id} />
-                {item.label}
-              </NavLink>
-            ) : (
-              <button disabled key={item.id}>
-                <WorkspaceIcon name={item.id} />
-                <span>
+          {visibleNavigation(user.role, user.enabled_modules, user.roles).map(
+            (item) =>
+              item.built ? (
+                <NavLink
+                  key={item.id}
+                  className={({ isActive }) =>
+                    isActive ? 'nav-home' : 'nav-feature'
+                  }
+                  to={item.path ?? `/${item.id}`}
+                >
+                  <WorkspaceIcon name={item.id} />
                   {item.label}
-                  <small>Coming soon</small>
-                </span>
-              </button>
-            ),
+                </NavLink>
+              ) : (
+                <button disabled key={item.id}>
+                  <WorkspaceIcon name={item.id} />
+                  <span>
+                    {item.label}
+                    <small>Coming soon</small>
+                  </span>
+                </button>
+              ),
           )}
         </nav>
         <div className="sidebar-footer">
@@ -366,7 +392,7 @@ function Forbidden() {
   return (
     <section className="state">
       <p className="eyebrow">ACCESS RESTRICTED</p>
-      <h1>Not permitted</h1>
+      <h1>Not authorized</h1>
       <p>Your account does not have access to this page.</p>
       <Link to="/">Back to your overview</Link>
     </section>
@@ -378,8 +404,12 @@ function Home() {
   if (!session) return null;
   if (role !== session.user.role.toLowerCase()) return <Forbidden />;
   if (session.user.role === 'SUPER_ADMIN')
-    return <Navigate replace to="/organizations" />;
-  const items = visibleNavigation(session.user.role);
+    return <Navigate replace to="/super-admin/dashboard" />;
+  const items = visibleNavigation(
+    session.user.role,
+    session.user.enabled_modules,
+    session.user.roles,
+  );
   return (
     <>
       <p className="eyebrow">YOUR CONSOLE</p>
@@ -440,8 +470,20 @@ function Home() {
 }
 function Future({ id }: { id: string }) {
   const { session } = useAuth();
-  if (session && permissionMap[session.user.role].includes(id)) {
-    if (id === 'organizations') return <Organizations />;
+  if (
+    session?.user.enabled_modules &&
+    moduleForMenu[id] &&
+    !session.user.enabled_modules.includes(moduleForMenu[id])
+  )
+    return <Forbidden />;
+  if (
+    session &&
+    [session.user.role, ...(session.user.roles ?? [])].some((r) =>
+      permissionMap[r].includes(id),
+    )
+  ) {
+    if (id === 'organizations')
+      return <Navigate replace to="/super-admin/organizations" />;
     if (id === 'team') return <Team />;
   }
   return session && permissionMap[session.user.role].includes(id) ? (
@@ -466,6 +508,11 @@ export default function App() {
       <Route element={<Guard />}>
         <Route element={<Shell />}>
           <Route index element={<Index />} />
+          <Route path="super-admin/:section" element={<SuperAdminPage />} />
+          <Route
+            path="super-admin/organizations/:id"
+            element={<SuperAdminDetail />}
+          />
           <Route path="home/:role" element={<Home />} />
           {navigation.map((n) => (
             <Route key={n.id} path={n.id} element={<Future id={n.id} />} />

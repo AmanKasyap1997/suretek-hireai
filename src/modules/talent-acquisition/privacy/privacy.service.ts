@@ -114,8 +114,14 @@ export class PrivacyService {
     this.authorize(actor);
     if (!Number.isInteger(limit) || limit < 1 || limit > 1000)
       throw new Error('Retention limit must be 1–1000');
-    const c = readConfig(),
-      cutoff = new Date(Date.now() - c.CANDIDATE_RETENTION_DAYS * 86400000);
+    const c = readConfig();
+    const global = await this.db.one(
+      "SELECT value FROM platform_settings WHERE key='defaults'",
+    );
+    const cutoff = new Date(
+      Date.now() -
+        (global?.value.retention_days ?? c.CANDIDATE_RETENTION_DAYS) * 86400000,
+    );
     if (!dryRun)
       await this.db.query(
         "DELETE FROM public_intake_limits WHERE tenant_id=$1 AND window_start<now()-($2::int*2)*interval '1 second'",

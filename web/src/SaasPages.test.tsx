@@ -64,27 +64,24 @@ it('gives Super Admin organization provisioning only and reports email failure a
   await screen.findByRole('heading', { name: 'Organizations' });
   expect(screen.getByRole('navigation')).not.toHaveTextContent('Jobs');
   expect(screen.queryByLabelText('Password')).toBeNull();
-  await screen.findByText(
-    'No organizations yet. Create your first organization to get started.',
-  );
-  await userEvent.type(screen.getByLabelText('Organization name'), 'Acme');
-  await userEvent.type(screen.getByLabelText('Organization key'), 'acme');
+  await screen.findByText('No records found.');
+  await userEvent.click(screen.getByText('Add organization'));
+  await userEvent.type(screen.getByLabelText('Name'), 'Acme');
+  await userEvent.type(screen.getByLabelText('Slug'), 'acme');
   await userEvent.type(
-    screen.getByLabelText('Admin name'),
+    screen.getByLabelText('First HR Admin name'),
     'Acme administrator',
   );
-  await userEvent.type(screen.getByLabelText('Admin email'), 'admin@acme.test');
+  await userEvent.type(screen.getByLabelText('First HR Admin email'), 'admin@acme.test');
   await userEvent.click(
     screen.getByRole('button', { name: 'Create organization & invite admin' }),
   );
-  await screen.findByText(
-    /Organization created, but the invitation email could not be sent/,
-  );
+  await screen.findByText(/Saved, but invitation email failed/);
   const request = fetcher.mock.calls.find(
     ([url, init]) =>
-      url === '/api/v1/saas/organizations' && init.method === 'POST',
+      url === '/api/v1/super-admin/organizations' && init.method === 'POST',
   );
-  expect(JSON.parse(request![1].body as string)).toEqual({
+  expect(JSON.parse(request![1].body as string)).toMatchObject({
     name: 'Acme',
     slug: 'acme',
     adminName: 'Acme administrator',
@@ -124,7 +121,7 @@ it('lets an organization admin invite staff without offering platform or admin e
 it('keeps the platform user out of direct recruitment URLs', async () => {
   setup('SUPER_ADMIN', '/jobs');
   expect(
-    await screen.findByRole('heading', { name: 'Not permitted' }),
+    await screen.findByRole('heading', { name: 'Not authorized' }),
   ).toBeVisible();
 });
 it('removes the invitation fragment, validates confirmation and sends no client role', async () => {

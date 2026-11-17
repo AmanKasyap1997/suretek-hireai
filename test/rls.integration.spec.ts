@@ -199,6 +199,14 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
       organizationInvite,
     ],
   );
+  await client.query(
+    "INSERT INTO integration_configs(tenant_id,scope,provider,environment,encrypted_credentials,credential_hint,updated_by) VALUES($1,'platform','openai','sandbox','fixture-ciphertext','****test',$2)",
+    [tenantId, userId],
+  );
+  await client.query(
+    "INSERT INTO platform_settings(tenant_id,key,value,updated_by) VALUES($1,'rls_fixture','{}',$2)",
+    [tenantId, userId],
+  );
   return { tenantId, organizationId, userId, candidateId, consentId, auditId };
 }
 
@@ -274,6 +282,8 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
         ],
       );
       for (const table of [
+        'integration_configs',
+        'platform_settings',
         'platform_organizations',
         'user_invitations',
         'interview_scorecards',
@@ -358,7 +368,7 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
       }).toEqual({ table: table.name, enabled: true, forced: true });
       const tenantColumn = table.name === 'tenants' ? 'id' : 'tenant_id';
       const fixtures = await admin.query(
-        `SELECT id FROM ${identifier(table.name)} WHERE ${identifier(tenantColumn)}=ANY($1::uuid[])`,
+        `SELECT 1 FROM ${identifier(table.name)} WHERE ${identifier(tenantColumn)}=ANY($1::uuid[])`,
         [[first.tenantId, second.tenantId]],
       );
       expect(fixtures.rows.length).toBeGreaterThanOrEqual(2);

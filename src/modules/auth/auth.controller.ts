@@ -1,6 +1,8 @@
+import { passwordChangeSchema } from '../super-admin/super-admin.schemas';
 import { Request, Response } from 'express';
 import {
   assertBrowserOrigin,
+  cookieToken,
   SESSION_COOKIE,
   sessionCookieOptions,
 } from './browser-session';
@@ -79,15 +81,28 @@ export class AuthController {
   @Delete('session')
   @Public()
   @HttpCode(204)
-  browserLogout(
+  async browserLogout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     assertBrowserOrigin(req);
     res.setHeader('Cache-Control', 'no-store');
+    await this.auth.logoutToken(cookieToken(req));
     res.clearCookie(SESSION_COOKIE, sessionCookieOptions());
   }
 
+  @Post('password')
+  @Roles(...ALL_ROLES)
+  @BodySchema(passwordChangeSchema)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  changePassword(@CurrentUser() actor: Actor, @Body() body: unknown) {
+    const input = parse(passwordChangeSchema, body);
+    return this.auth.changePassword(
+      actor,
+      input.currentPassword,
+      input.password,
+    );
+  }
   @Get('me')
   @Roles(...ALL_ROLES)
   me(@CurrentUser() actor: Actor) {
