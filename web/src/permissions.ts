@@ -13,17 +13,9 @@ export const roles = [
 ] as const;
 export type Role = (typeof roles)[number];
 export const permissionMap: Record<Role, readonly string[]> = {
-  SUPER_ADMIN: [
-    'jobs',
-    'applications',
-    'candidates',
-    'interviews',
-    'reports',
-    'offers',
-    'people',
-    'settings',
-  ],
+  SUPER_ADMIN: ['organizations'],
   HR_ADMIN: [
+    'team',
     'jobs',
     'applications',
     'candidates',
@@ -43,6 +35,8 @@ export const permissionMap: Record<Role, readonly string[]> = {
   IT_ASSET_ADMIN: [],
 };
 export const navigation = [
+  { id: 'organizations', label: 'Organizations', built: true },
+  { id: 'team', label: 'Team & invitations', built: true },
   { id: 'jobs', label: 'Jobs' },
   { id: 'applications', label: 'Applications' },
   { id: 'candidates', label: 'Candidates' },
@@ -53,12 +47,15 @@ export const navigation = [
   { id: 'settings', label: 'Administration' },
 ];
 export const roleLabel = (role: Role) =>
-  role
-    .toLowerCase()
-    .split('_')
-    .map((word) => word[0].toUpperCase() + word.slice(1))
-    .join(' ');
-export const homePath = (role: Role) => `/home/${role.toLowerCase()}`;
+  role === 'HR_ADMIN'
+    ? 'Organization Admin'
+    : role
+        .toLowerCase()
+        .split('_')
+        .map((word) => word[0].toUpperCase() + word.slice(1))
+        .join(' ');
+export const homePath = (role: Role) =>
+  role === 'SUPER_ADMIN' ? '/organizations' : `/home/${role.toLowerCase()}`;
 export const visibleNavigation = (role: Role) =>
   navigation.filter((n) => permissionMap[role].includes(n.id));
 export function allowedDestination(path: string, role: Role) {

@@ -61,6 +61,7 @@ services:
     environment:
       DATABASE_URL: postgresql://hireai_app:${HIREAI_APP_PASSWORD:-hireai_app_dev_only}@postgres:5432/hireai
       NODE_ENV: production
+      INVITATION_TTL_SECONDS: ${INVITATION_TTL_SECONDS:-86400}
       EMAIL_ADAPTER: ${EMAIL_ADAPTER:-disabled}
       EMAIL_DISABLED_ACKNOWLEDGED: ${EMAIL_DISABLED_ACKNOWLEDGED:-false}
       PUBLIC_WEB_BASE_URL: ${PUBLIC_WEB_BASE_URL:-https://localhost}

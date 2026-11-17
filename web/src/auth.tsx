@@ -18,6 +18,9 @@ const sessionSchema = z.object({
     email: z.string(),
     role: z.enum(roles),
     active: z.literal(true),
+    organization_name: z.string().optional(),
+    organization_slug: z.string().optional(),
+    platform_admin: z.boolean().optional(),
   }),
   expiresAt: z.number(),
 });
@@ -28,7 +31,11 @@ type Auth = {
   status: Status;
   expired: boolean;
   logoutError: string;
-  login: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string,
+    organizationSlug?: string,
+  ) => Promise<void>;
   logout: () => Promise<void>;
   retry: () => void;
 };
@@ -138,15 +145,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', visible);
     };
   }, []); // Read refs so listeners always see the latest session/logout state.
-  async function login(email: string, password: string) {
-    const tenantId = import.meta.env.VITE_TENANT_ID;
-    if (!z.uuid().safeParse(tenantId).success) throw new ApiError(503);
+  async function login(
+    email: string,
+    password: string,
+    organizationSlug = import.meta.env.VITE_ORGANIZATION_SLUG || 'platform',
+  ) {
     const current = ++generation.current;
     signedOut.current = true;
     setStatus('ready');
     await api(
       '/auth/session',
-      { method: 'POST', body: JSON.stringify({ tenantId, email, password }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({ organizationSlug, email, password }),
+      },
       true,
     );
     if (current !== generation.current) return;

@@ -567,3 +567,152 @@ summary::-webkit-details-marker {
     scroll-behavior: auto !important;
   }
 }
+/* SaaS organization and staff management share the Suretek console shell. */
+.shell nav a.nav-feature {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 400;
+}
+.shell nav a.nav-feature:hover {
+  background: var(--accent);
+  color: var(--brand);
+}
+.management-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 350px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  margin-top: 1.5rem;
+}
+.management-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  min-width: 0;
+}
+.management-panel h2 {
+  margin-top: 0;
+}
+.form-field {
+  margin: 1rem 0;
+}
+.form-field label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+.form-field input,
+.form-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.7rem;
+  border: 1px solid #babdc5;
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.form-field small,
+#organization-help {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.73rem;
+}
+.table-scroll th {
+  text-align: left;
+  font-weight: 500;
+  background: var(--canvas);
+}
+.table-scroll td,
+.table-scroll th {
+  padding: 0.8rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.table-scroll td small {
+  display: block;
+  color: var(--muted);
+  margin-top: 0.3rem;
+  overflow-wrap: anywhere;
+}
+.table-scroll button {
+  font-size: 0.65rem;
+  padding: 0.35rem 0.5rem;
+}
+.row-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.delivery {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.6rem;
+  white-space: nowrap;
+}
+.delivered {
+  color: var(--success);
+  background: #eaf6ee;
+}
+.not-delivered {
+  color: var(--brand);
+  background: var(--accent);
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  font-size: 0.7rem;
+}
+.pagination button {
+  padding: 0.3rem 0.6rem;
+  font-size: inherit;
+}
+.empty-state {
+  padding: 1.5rem 0;
+  color: var(--muted);
+}
+.invitation-page {
+  min-height: 100dvh;
+}
+.invitation-page .login-header {
+  background: var(--surface);
+}
+.invitation-panel {
+  width: min(480px, calc(100% - 2rem));
+  margin: 3rem auto;
+  padding: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+@media (max-width: 1150px) {
+  .management-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: start;
+  justify-content: space-between;
+}
+.panel-heading button {
+  font-size: 0.7rem;
+}
+
+.invitation-panel p {
+  overflow-wrap: anywhere;
+}

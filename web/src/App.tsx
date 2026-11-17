@@ -1,6 +1,7 @@
 import { Component, useState, type ReactNode } from 'react';
 import {
   Navigate,
+  NavLink,
   Outlet,
   Route,
   Routes,
@@ -15,6 +16,7 @@ import { z } from 'zod';
 import { useAuth } from './auth';
 import { loginError } from './api';
 import { Brand, WorkspaceIcon } from './Brand';
+import { Organizations, Team, AcceptInvitation } from './SaasPages';
 import {
   allowedDestination,
   homePath,
@@ -24,6 +26,14 @@ import {
   visibleNavigation,
 } from './permissions';
 const schema = z.object({
+  organizationSlug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(
+      /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/,
+      'Enter the organization key from your invitation.',
+    ),
   email: z.email('Enter a valid email address.'),
   password: z.string().min(1, 'Enter your password.').max(1024),
 });
@@ -78,7 +88,17 @@ function Login() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema) });
+  } = useForm<z.infer<typeof schema>>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      organizationSlug:
+        typeof location.state?.organizationSlug === 'string'
+          ? location.state.organizationSlug
+          : (new URLSearchParams(location.hash.slice(1)).get('organization') ??
+            import.meta.env.VITE_ORGANIZATION_SLUG ??
+            'platform'),
+    },
+  });
   if (auth.session) {
     const from = location.state?.from;
     return (
@@ -146,7 +166,11 @@ function Login() {
           onSubmit={handleSubmit(async (values) => {
             setError('');
             try {
-              await auth.login(values.email, values.password);
+              await auth.login(
+                values.email,
+                values.password,
+                values.organizationSlug,
+              );
             } catch (e) {
               setError(loginError(e));
             }
@@ -159,6 +183,26 @@ function Login() {
           {auth.expired && (
             <p role="status" className="notice">
               Your session expired. Sign in again to continue.
+            </p>
+          )}
+          <label htmlFor="organization">Organization</label>
+          <input
+            id="organization"
+            autoComplete="organization"
+            {...register('organizationSlug')}
+            aria-invalid={!!errors.organizationSlug}
+            aria-describedby={
+              errors.organizationSlug
+                ? 'organization-help organization-error'
+                : 'organization-help'
+            }
+          />
+          <small id="organization-help">
+            Use the organization key in your invitation email.
+          </small>
+          {errors.organizationSlug && (
+            <p id="organization-error" className="error" role="alert">
+              {errors.organizationSlug.message}
             </p>
           )}
           <label htmlFor="email">Email</label>
@@ -267,21 +311,41 @@ function Shell() {
       <aside>
         <div className="sidebar-title">
           Suretek <strong>HireAI</strong>
-          <span>by Suretek Infosoft</span>
+          <span>{user.organization_name ?? 'by Suretek Infosoft'}</span>
         </div>
         <nav aria-label="Main navigation">
-          <Link className="nav-home" to={homePath(user.role)}>
-            <WorkspaceIcon name="home" /> Overview
-          </Link>
-          {visibleNavigation(user.role).map((item) => (
-            <button disabled key={item.id}>
-              <WorkspaceIcon name={item.id} />
-              <span>
+          {user.role !== 'SUPER_ADMIN' && (
+            <NavLink
+              className={({ isActive }) =>
+                isActive ? 'nav-home' : 'nav-feature'
+              }
+              to={homePath(user.role)}
+            >
+              <WorkspaceIcon name="home" /> Overview
+            </NavLink>
+          )}
+          {visibleNavigation(user.role).map((item) =>
+            item.built ? (
+              <NavLink
+                key={item.id}
+                className={({ isActive }) =>
+                  isActive ? 'nav-home' : 'nav-feature'
+                }
+                to={`/${item.id}`}
+              >
+                <WorkspaceIcon name={item.id} />
                 {item.label}
-                <small>Coming soon</small>
-              </span>
-            </button>
-          ))}
+              </NavLink>
+            ) : (
+              <button disabled key={item.id}>
+                <WorkspaceIcon name={item.id} />
+                <span>
+                  {item.label}
+                  <small>Coming soon</small>
+                </span>
+              </button>
+            ),
+          )}
         </nav>
         <div className="sidebar-footer">
           <WorkspaceIcon name="lock" />
@@ -313,6 +377,8 @@ function Home() {
     { role } = useParams();
   if (!session) return null;
   if (role !== session.user.role.toLowerCase()) return <Forbidden />;
+  if (session.user.role === 'SUPER_ADMIN')
+    return <Navigate replace to="/organizations" />;
   const items = visibleNavigation(session.user.role);
   return (
     <>
@@ -342,13 +408,20 @@ function Home() {
               <span className="icon-tile">
                 <WorkspaceIcon name={item.id} />
               </span>
-              <span className="badge">Coming soon</span>
+              <span className="badge">
+                {item.built ? 'Available' : 'Coming soon'}
+              </span>
               <h3>{item.label}</h3>
               <p>
-                Tools for your {item.label.toLowerCase()} workflow will be
-                available in a future update.
+                {item.built
+                  ? 'Invite staff and manage access within your organization.'
+                  : `Tools for your ${item.label.toLowerCase()} workflow will be available in a future update.`}
               </p>
-              <button disabled>Coming soon</button>
+              {item.built ? (
+                <Link to={`/${item.id}`}>Open {item.label}</Link>
+              ) : (
+                <button disabled>Coming soon</button>
+              )}
             </article>
           ))
         ) : (
@@ -367,6 +440,10 @@ function Home() {
 }
 function Future({ id }: { id: string }) {
   const { session } = useAuth();
+  if (session && permissionMap[session.user.role].includes(id)) {
+    if (id === 'organizations') return <Organizations />;
+    if (id === 'team') return <Team />;
+  }
   return session && permissionMap[session.user.role].includes(id) ? (
     <section className="state">
       <h1>Coming soon</h1>
@@ -385,6 +462,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/accept-invitation" element={<AcceptInvitation />} />
       <Route element={<Guard />}>
         <Route element={<Shell />}>
           <Route index element={<Index />} />

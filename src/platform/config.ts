@@ -8,6 +8,12 @@ const postgresUrlSchema = z
 const schema = z
   .object({
     EMAIL_ADAPTER: z.enum(['disabled', 'log', 'smtp']).default('log'),
+    INVITATION_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(60)
+      .max(604800)
+      .default(86400),
     EMAIL_DISABLED_ACKNOWLEDGED: z.enum(['true', 'false']).default('false'),
     PUBLIC_WEB_BASE_URL: z.string().url().optional(),
     SMTP_HOST: z.string().min(1).optional(),

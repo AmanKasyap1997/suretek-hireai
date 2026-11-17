@@ -66,7 +66,10 @@ describe('role shell and sessions', () => {
       setup(homePath(role), role);
       expect(
         await screen.findByRole('heading', {
-          name: `${roleLabel(role)} overview`,
+          name:
+            role === 'SUPER_ADMIN'
+              ? 'Organizations'
+              : `${roleLabel(role)} overview`,
         }),
       ).toBeVisible();
       const nav = screen.getByRole('navigation');
@@ -103,7 +106,7 @@ describe('role shell and sessions', () => {
   });
   it('any API 401 expires the session and clears cache', async () => {
     const cache = setup('/', 'HR_ADMIN');
-    await screen.findByText('Hr Admin overview');
+    await screen.findByText('Organization Admin overview');
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 401 }));
     await expect(api('/jobs')).rejects.toBeInstanceOf(ApiError);
     await screen.findByText('Your session expired. Sign in again to continue.');

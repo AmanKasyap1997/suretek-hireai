@@ -126,7 +126,6 @@ jobs:
       JWT_SECRET: ci-console-jwt-secret-0123456789abcdef
       SEED_PASSWORD: ci-console-password-0123456789
       SEED_TENANT_ID: 10000000-0000-4000-8000-000000000001
-      VITE_TENANT_ID: 10000000-0000-4000-8000-000000000001
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
@@ -138,6 +137,7 @@ jobs:
         working-directory: web
       - run: npx playwright install --with-deps chromium
         working-directory: web
+      - run: bash scripts/prepare-e2e-mail.sh
       - run: docker compose -f deploy/compose.e2e.yaml up -d --build --wait api
       - run: npm run e2e
         working-directory: web

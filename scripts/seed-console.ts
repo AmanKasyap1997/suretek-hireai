@@ -11,6 +11,14 @@ async function main() {
     throw new Error('Seed requires an explicitly named _test or _dev database');
   const password = z.string().min(12).max(128).parse(process.env.SEED_PASSWORD),
     tenant = z.uuid().parse(process.env.SEED_TENANT_ID);
+  const platformTenant = z
+    .uuid()
+    .parse(
+      process.env.SEED_PLATFORM_TENANT_ID ??
+        '00000000-0000-4000-8000-000000000001',
+    );
+  if (platformTenant === tenant)
+    throw new Error('Platform and organization fixtures must be separate');
   const pool = new Pool({ connectionString: url });
   const client = await pool.connect();
   try {
@@ -20,14 +28,23 @@ async function main() {
       "INSERT INTO tenants(id,name,slug) VALUES($1,'Console test tenant','console-test') ON CONFLICT(id) DO NOTHING",
       [tenant],
     );
+    await client.query("SELECT set_config('app.tenant_id',$1,true)", [
+      platformTenant,
+    ]);
+    await client.query(
+      "INSERT INTO tenants(id,name,slug,is_platform) VALUES($1,'Console platform','platform',true) ON CONFLICT(id) DO NOTHING",
+      [platformTenant],
+    );
     for (const role of Object.values(Role)) {
+      const scope = role === Role.SUPER_ADMIN ? platformTenant : tenant;
+      await client.query("SELECT set_config('app.tenant_id',$1,true)", [scope]);
       const salt = randomBytes(16).toString('hex'),
         hash = `scrypt:${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
       await client.query(
         'INSERT INTO users(id,tenant_id,email,password_hash,full_name,role) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,lower(email)) DO UPDATE SET password_hash=EXCLUDED.password_hash,active=true',
         [
           randomUUID(),
-          tenant,
+          scope,
           `${role.toLowerCase()}@console.test`,
           hash,
           `Test ${role}`,

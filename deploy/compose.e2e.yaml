@@ -16,6 +16,19 @@ services:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 2s
       retries: 30
+  mail:
+    image: axllent/mailpit:v1.34.0
+    environment:
+      MP_SMTP_TLS_CERT: /run/test-mail/cert.pem
+      MP_SMTP_TLS_KEY: /run/test-mail/key.pem
+      MP_SMTP_REQUIRE_TLS: 'true'
+      MP_SMTP_AUTH: e2e-user:e2e-mail-password
+    volumes: ['../work/e2e-mail:/run/test-mail:ro']
+    ports: ['127.0.0.1:8025:8025']
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 2s
+      retries: 30
   migrate:
     build: ..
     image: hireai-console-test
@@ -42,7 +55,17 @@ services:
       JWT_SECRET: ${JWT_SECRET:?}
       JWT_EXPIRES_IN_SECONDS: '60'
       CORS_ORIGINS: http://localhost:5173
-      EMAIL_ADAPTER: disabled
+      EMAIL_ADAPTER: smtp
+      SMTP_HOST: mail
+      SMTP_PORT: '1025'
+      SMTP_SECURE: 'true'
+      SMTP_USER: e2e-user
+      SMTP_PASSWORD: e2e-mail-password
+      SMTP_FROM: invites@console.test
+      PUBLIC_WEB_BASE_URL: http://localhost:5173
+      NODE_EXTRA_CA_CERTS: /run/test-mail/cert.pem
     ports: ['127.0.0.1:3000:3000']
+    volumes: ['../work/e2e-mail:/run/test-mail:ro']
     depends_on:
       seed: { condition: service_completed_successfully }
+      mail: { condition: service_healthy }

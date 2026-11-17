@@ -394,3 +394,34 @@ GET {{baseUrl}}/auth/session
 ### Browser logout (clears cookie)
 DELETE {{baseUrl}}/auth/session
 Origin: http://localhost:5173
+
+### SaaS platform sign-in (organization key, no build-time tenant UUID)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"organizationSlug":"platform","email":"owner@example.test","password":"SET_LOCALLY_DO_NOT_COMMIT"}
+
+### Platform Super Admin: create organization and email its initial admin invite
+POST {{baseUrl}}/saas/organizations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name":"Example Company","slug":"example-company","adminName":"Organization Admin","adminEmail":"admin@example.test"}
+
+### Organization Admin: invite staff (cannot select platform/admin roles)
+POST {{baseUrl}}/saas/invitations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"fullName":"Hiring Manager","email":"manager@example.test","role":"HIRING_MANAGER"}
+
+### Recipient: accept the latest invitation; no role or user ID in this body
+POST {{baseUrl}}/saas/invitations/accept
+Origin: http://localhost:5173
+Content-Type: application/json
+
+{"organizationSlug":"example-company","token":"PASTE_ONE_TIME_TOKEN_LOCALLY","password":"CHOOSE_12_TO_128_CHARACTERS"}
+
+### Organization Admin: current-organization team (pagination)
+GET {{baseUrl}}/saas/users?limit=25&offset=0
+Authorization: Bearer {{token}}

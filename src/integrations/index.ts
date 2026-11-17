@@ -17,6 +17,6 @@ export { CalendarPort, DisabledCalendar } from './calendar';
 export type { CalendarInterview, CalendarResult } from './calendar';
 
 export { EmailPort, DevelopmentLogEmail, DisabledEmail } from './email';
-export type { ContactEmail } from './email';
+export type { ContactEmail, InvitationEmail } from './email';
 export { ClamAvScanner } from './clamav';
 export { TurnstileCaptcha } from './turnstile';

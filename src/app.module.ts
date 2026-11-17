@@ -6,10 +6,12 @@ import { DatabaseModule } from './platform/database/database.module';
 import { TalentAcquisitionModule } from './modules/talent-acquisition';
 import { HrModule } from './modules/hr';
 import { PlatformHttpModule } from './platform/http/platform.module';
+import { SaasModule } from './modules/saas';
 @Module({
   imports: [
     DatabaseModule,
     AuthModule,
+    SaasModule,
     TalentAcquisitionModule,
     HrModule,
     PlatformHttpModule,

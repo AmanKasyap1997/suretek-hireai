@@ -23,7 +23,7 @@ Validation results are recorded after the full local and CI runs. Web unit tests
 ## Manual server steps
 
 1. Review the supplied-blueprint logo and website-aligned red/font tokens in the login and role shell.
-2. Set Actions PILOT_TENANT_ID to the actual pilot UUID. Publish a version tag to ship API and web/Caddy together.
+2. Apply migration 012 and bootstrap a dedicated platform owner; the web build no longer uses PILOT_TENANT_ID. Publish a version tag to ship API and web/Caddy together.
 3. Add the exact same-origin console HTTPS origin to CORS_ORIGINS; keep HTTPS, proxy count and existing hardening.
 4. Deploy via existing backup/migrate/health workflow. Open /console/login and test each provisioned role, forbidden routes, logout/back, expiry and reload.
 5. Verify CSP, no-store HTML, immutable hashed assets, HttpOnly/Secure/Strict cookie, Origin rejection and no sensitive logs. Test keyboard focus/errors and 360px layout with approved assets.
@@ -32,3 +32,7 @@ Validation results are recorded after the full local and CI runs. Web unit tests
 ## PR description
 
 Add a same-origin /console login and shared role shell for all ten backend roles. Preserve existing bearer auth and add a separately committed HttpOnly cookie session adapter with exact-Origin CSRF checks. Provide role-filtered disabled navigation/cards, session startup/expiry/logout and error states, responsive Suretek branding, guarded test-user seeding and tagged static assets in the hardened Caddy companion. No business screens, refresh/reset redesign, AI, queue or call dispatch. See web/README.md for dependency rationale and operational boundaries.
+
+## SaaS scope supersedes the original F1 role discovery
+
+The owner subsequently requested SaaS onboarding on this branch. Super Admin now has organization creation/initial-admin invitations only; HR_ADMIN is Organization Admin and manages scoped staff invitations/status plus existing business permissions. General password reset/refresh remain unsupported; invitation recipients can set their initial password. Web builds are no longer tied to a tenant UUID. See [the current SaaS setup, role/API model, migration and tests](saas-onboarding.md); earlier F1 discovery statements above describe the previous permission model.

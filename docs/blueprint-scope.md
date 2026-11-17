@@ -62,3 +62,7 @@ ClamAV scanning and a bounded cron sweep, permanent infected-document quarantine
 See [the production runbook](../deploy/README.md) for Ubuntu 24.04, versioned GHCR releases, Caddy HTTPS, private persistent local resumes, systemd maintenance, encrypted offsite backups and scratch restore drills. Migrations are forward-only; rollback requires restoring a backup. Production email requires SMTP or EMAIL_DISABLED_ACKNOWLEDGED=true; the pilot preflight requires real SMTP and CAPTCHA. Verification links use a fragment at PUBLIC_WEB_BASE_URL; the verification web client is outside this backend milestone. JSON request logs omit URLs, bodies and personal data. No schema or API contract changes.
 
 F1 provides unified sign-in and a shared role console with disabled coming-soon cards. It adds a browser cookie adapter to existing auth. Password reset, refresh, forced password changes and lockout remain gaps; role-specific business screens and careers UI remain out of scope. Brand tokens/logo are explicitly placeholders pending approved assets.
+
+## SaaS onboarding extension
+
+Platform Super Admin provisions organizations and their initial admin via invitation email. Organization Admin manages scoped staff invitations/status; recipients set their own password before sign-in. One console build serves all organization keys. This user-requested extension supersedes F1's original single-tenant scope, without adding business-module screens or billing. See [SaaS onboarding](saas-onboarding.md).

@@ -10,6 +10,7 @@ import { migrationDatabaseUrl } from './database-connection';
 export function frontendTenant(
   directory: string,
   environment: NodeJS.ProcessEnv = process.env,
+  key = 'VITE_TENANT_ID',
 ) {
   const values: Record<string, string> = {};
   for (const name of [
@@ -21,7 +22,7 @@ export function frontendTenant(
     const path = resolve(directory, name);
     if (existsSync(path)) Object.assign(values, parse(readFileSync(path)));
   }
-  return environment.VITE_TENANT_ID ?? values.VITE_TENANT_ID;
+  return environment[key] ?? values[key];
 }
 
 export async function checkLogin(
@@ -62,27 +63,27 @@ export async function checkLogin(
 }
 
 async function main() {
-  const tenantId = frontendTenant(resolve(process.cwd(), 'web'));
+  const organizationSlug =
+    process.env.AUTH_CHECK_ORGANIZATION ??
+    frontendTenant(
+      resolve(process.cwd(), 'web'),
+      process.env,
+      'VITE_ORGANIZATION_SLUG',
+    ) ??
+    process.env.BOOTSTRAP_TENANT_SLUG ??
+    'platform';
   const email =
     process.env.AUTH_CHECK_EMAIL ?? process.env.BOOTSTRAP_ADMIN_EMAIL;
-  if (!z.uuid().safeParse(tenantId).success) {
-    console.error('Set a valid VITE_TENANT_ID in web/.env.local, then retry.');
+  if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(organizationSlug)) {
+    console.error(
+      'Set AUTH_CHECK_ORGANIZATION to the organization key used on the login form.',
+    );
     process.exitCode = 1;
     return;
   }
   if (!z.email().safeParse(email?.trim()).success) {
     console.error(
       'Set AUTH_CHECK_EMAIL or BOOTSTRAP_ADMIN_EMAIL in root .env.',
-    );
-    process.exitCode = 1;
-    return;
-  }
-  if (
-    process.env.BOOTSTRAP_TENANT_ID &&
-    process.env.BOOTSTRAP_TENANT_ID.trim() !== tenantId
-  ) {
-    console.error(
-      'Tenant mismatch: frontend VITE_TENANT_ID differs from BOOTSTRAP_TENANT_ID. Use the saved account tenant ID and restart Vite.',
     );
     process.exitCode = 1;
     return;
@@ -96,8 +97,20 @@ async function main() {
         : undefined,
   });
   try {
+    const resolved = await pool.query(
+      'SELECT resolve_public_tenant($1) AS id',
+      [organizationSlug],
+    );
+    const tenantId = resolved.rows[0]?.id;
+    if (!tenantId) {
+      console.error(
+        'Organization key not found in this database. Use the key from your invitation or platform bootstrap.',
+      );
+      process.exitCode = 1;
+      return;
+    }
     const result = await checkLogin(pool, {
-      tenantId: tenantId!,
+      tenantId,
       email: email!,
       password:
         process.env.AUTH_CHECK_PASSWORD ?? process.env.BOOTSTRAP_ADMIN_PASSWORD,
