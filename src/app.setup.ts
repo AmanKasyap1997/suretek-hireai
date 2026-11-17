@@ -1,3 +1,4 @@
+import { requestLogging } from './platform/http/logging';
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -7,6 +8,7 @@ import { readConfig } from './platform/config';
 import { tenantContextMiddleware } from './platform/database/tenant-context';
 export function configureApp(app: INestApplication): void {
   const cfg = readConfig();
+  app.use(requestLogging);
   app.use(tenantContextMiddleware);
   app.getHttpAdapter().getInstance().set('trust proxy', cfg.TRUST_PROXY);
   app.setGlobalPrefix('api/v1');

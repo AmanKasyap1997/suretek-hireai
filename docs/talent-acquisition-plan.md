@@ -6,6 +6,7 @@
 | B         | Complete |
 | C         | Complete |
 | D         | Complete |
+| E         | Complete |
 
 ## Working rules (apply to every milestone)
 
@@ -53,6 +54,20 @@ D3. Contact verification: introduce EmailPort and a log-only development adapter
 D4. Abuse protection: add a fail-closed Cloudflare Turnstile CaptchaPort adapter with request timeout. Production requires a real adapter or CAPTCHA_DISABLED_ACKNOWLEDGED=true. Count email/client intake buckets only after CAPTCHA and input validation; retain independent client/IP protection so submitting another person's email cannot exhaust that person's unrelated client bucket. Document privacy, trust-proxy and residual abuse limits.
 
 Add unit/integration coverage, cross-tenant and permission checks for new resources, and preserve the RLS coverage guard. Update README, blueprint scope, Milestone B operations, hardening and API examples. Complete the acceptance checks below and record files, schema, decisions, results, verification limits and a PR description.
+
+## Milestone E: self-hosted production deployment
+
+Target: one Ubuntu 24.04 Docker Compose server, single-tenant pilot. Follow all Working rules above. No frontend, AI screening, job queue, call dispatch, Kubernetes or multi-server HA.
+
+E1. Authenticated TLS SMTP EmailPort, bounded connection/send timeouts, text and HTML verification, PUBLIC_WEB_BASE_URL, production email refusal without explicit disabled acknowledgement; fake SMTP tests.
+E2. Version-tagged GHCR releases with SHA-pinned actions, minimal permissions, provenance and SBOM.
+E3. Hardened production Compose with Caddy automatic HTTPS as the only published service, exact CORS, one proxy hop, private PostgreSQL/ClamAV/local resume volumes and optional S3 path. Preserve development Compose.
+E4. systemd scan and retention timers using one-shot Compose commands and optional failure pings.
+E5. Encrypted offsite database, globals and resume backups with retention, scratch restore and row-count drill. Migrations are forward-only: rollback requires restoring a backup.
+E6. Secret generation, strict preflight, safe deployment, deployed smoke tests and Ubuntu operations runbook.
+E7. Structured JSON logs and request IDs without personal data or query-string secrets.
+
+Validation: existing acceptance plus SMTP/config/preflight tests, production Compose config, shellcheck, production image build and local backup/restore drill when Docker is available. Record verification limits and manual server steps.
 
 ## Non-goals for all milestones
 

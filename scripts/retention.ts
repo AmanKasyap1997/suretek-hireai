@@ -54,6 +54,12 @@ async function main() {
   }
 }
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Retention failed');
+  console.error(
+    process.env.NODE_ENV === 'production'
+      ? JSON.stringify({ event: 'retention_failed', level: 'error' })
+      : error instanceof Error
+        ? error.message
+        : 'Retention failed',
+  );
   process.exitCode = 1;
 });

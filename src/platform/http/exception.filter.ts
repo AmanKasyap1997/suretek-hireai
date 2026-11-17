@@ -3,16 +3,14 @@ import {
   Catch,
   ExceptionFilter,
   HttpException,
-  Logger,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { jsonLog } from './logging';
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger('API');
   catch(error: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
     let status = 500;
     let payload: unknown = { message: 'Internal server error' };
     if (error instanceof HttpException) {
@@ -39,9 +37,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
         status = 400;
         payload = { message: 'Invalid record reference or value' };
       } else
-        this.logger.error(
-          `Request failed: ${request.method} ${request.route?.path ?? 'unknown'} (${error instanceof Error ? error.name : 'unknown'})`,
-        );
+        jsonLog('request_failed', {
+          requestId: response.locals.requestId,
+          level: 'error',
+        });
     }
     response.status(status).json({
       statusCode: status,

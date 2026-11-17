@@ -75,6 +75,12 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Migration failed');
+  console.error(
+    process.env.NODE_ENV === 'production'
+      ? JSON.stringify({ event: 'migration_failed', level: 'error' })
+      : error instanceof Error
+        ? error.message
+        : 'Migration failed',
+  );
   process.exitCode = 1;
 });

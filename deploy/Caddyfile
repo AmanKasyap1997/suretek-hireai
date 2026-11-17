@@ -1,0 +1,44 @@
+{
+	email {$ACME_EMAIL}
+	http_port 8080
+	https_port 8443
+	admin 127.0.0.1:2019
+	log {
+		format filter {
+			wrap json
+			fields {
+				request delete
+				msg delete
+				error delete
+				email delete
+				contact delete
+				resp_headers delete
+			}
+		}
+	}
+}
+{$DOMAIN} {
+	request_body {
+		max_size 1MB
+	}
+	header {
+		?X-Request-ID {http.request.uuid}
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		-Server
+	}
+	@docs path /docs* /api/v1/docs*
+	respond @docs 404
+	reverse_proxy api:3000
+	# Access logs intentionally disabled. API emits IDs/status/duration only,
+	# never URLs, queries, addresses, headers or bodies.
+}
+
+# Explicit external-443 redirect: internal high ports must not appear in Location.
+http://{$DOMAIN}:8080 {
+	header ?X-Request-ID {http.request.uuid}
+	redir https://{$DOMAIN}{uri} permanent
+}

@@ -370,3 +370,13 @@ POST {{baseUrl}}/public/{{tenantSlug}}/contact-verification
 Content-Type: application/json
 
 {"token":"<selector>.<secret>"}
+
+### Milestone E: deployed readiness (production /docs is blocked)
+# Replace the domain; never put a verification token in a URL query.
+GET https://careers.your-domain.test/api/v1/health/ready
+
+### Verification client reads tenant/token from the email link fragment and POSTs here.
+POST {{baseUrl}}/public/{{tenantSlug}}/contact-verification
+Content-Type: application/json
+
+{"token":"{{verificationToken}}"}

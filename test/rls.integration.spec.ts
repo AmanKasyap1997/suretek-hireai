@@ -477,6 +477,7 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
     await restoreEnvironment(
       {
         NODE_ENV: 'production',
+        EMAIL_DISABLED_ACKNOWLEDGED: 'true',
         MALWARE_SCANNER: 'pending',
         CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
         RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
@@ -517,6 +518,7 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
     await restoreEnvironment(
       {
         NODE_ENV: 'production',
+        EMAIL_DISABLED_ACKNOWLEDGED: 'true',
         MALWARE_SCANNER: 'pending',
         CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
         RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
@@ -557,6 +559,7 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
       await restoreEnvironment(
         {
           NODE_ENV: 'production',
+          EMAIL_DISABLED_ACKNOWLEDGED: 'true',
           MALWARE_SCANNER: 'pending',
           CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
           RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
@@ -622,6 +625,7 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
       await restoreEnvironment(
         {
           NODE_ENV: 'production',
+          EMAIL_DISABLED_ACKNOWLEDGED: 'true',
           MALWARE_SCANNER: 'pending',
           CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
           RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',

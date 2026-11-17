@@ -54,7 +54,11 @@ async function main() {
 }
 main().catch((error: unknown) => {
   console.error(
-    error instanceof Error ? error.message : 'Document scan failed',
+    process.env.NODE_ENV === 'production'
+      ? JSON.stringify({ event: 'document_scan_failed', level: 'error' })
+      : error instanceof Error
+        ? error.message
+        : 'Document scan failed',
   );
   process.exitCode = 1;
 });

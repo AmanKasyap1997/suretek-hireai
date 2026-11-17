@@ -1,0 +1,20 @@
+[Unit]
+Description=HireAI scan
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/srv/hireai
+Environment=ENV_FILE=/srv/hireai/.env
+ExecStart=/srv/hireai/deploy/maintenance.sh scan
+TimeoutStartSec=30min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/srv/hireai/var /srv/hireai/data/resumes

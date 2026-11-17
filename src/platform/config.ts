@@ -7,6 +7,16 @@ const postgresUrlSchema = z
 
 const schema = z
   .object({
+    EMAIL_ADAPTER: z.enum(['disabled', 'log', 'smtp']).default('log'),
+    EMAIL_DISABLED_ACKNOWLEDGED: z.enum(['true', 'false']).default('false'),
+    PUBLIC_WEB_BASE_URL: z.string().url().optional(),
+    SMTP_HOST: z.string().min(1).optional(),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+    SMTP_SECURE: z.enum(['true', 'false']).default('false'),
+    SMTP_USER: z.string().min(1).optional(),
+    SMTP_PASSWORD: z.string().min(1).optional(),
+    SMTP_FROM: z.email().optional(),
+    SMTP_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(10000),
     MALWARE_SCANNER: z.enum(['clamav', 'pending']).optional(),
     CLAMAV_HOST: z.string().min(1).default('127.0.0.1'),
     CLAMAV_PORT: z.coerce.number().int().min(1).max(65535).default(3310),
@@ -74,17 +84,29 @@ const schema = z
       .default(5 * 1024 * 1024),
     RESUME_STORAGE: z.enum(['local', 's3']).default('local'),
     RESUME_STORAGE_ROOT: z.string().min(1).default('var/private/resumes'),
-    S3_ENDPOINT: z.string().url().optional(),
-    S3_BUCKET: z
-      .string()
-      .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)
-      .optional(),
+    S3_ENDPOINT: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().url().optional(),
+    ),
+    S3_BUCKET: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)
+        .optional(),
+    ),
     S3_REGION: z
       .string()
       .regex(/^[a-z0-9-]+$/)
       .default('us-east-1'),
-    S3_ACCESS_KEY_ID: z.string().min(1).optional(),
-    S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    S3_ACCESS_KEY_ID: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(1).optional(),
+    ),
+    S3_SECRET_ACCESS_KEY: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(1).optional(),
+    ),
     S3_SESSION_TOKEN: z.preprocess(
       (value) => (value === '' ? undefined : value),
       z.string().min(1).optional(),
@@ -148,6 +170,13 @@ export function readConfig(): AppConfig {
   }
   const cfg = result.data;
   if (cfg.NODE_ENV === 'production') {
+    if (
+      cfg.EMAIL_ADAPTER !== 'smtp' &&
+      cfg.EMAIL_DISABLED_ACKNOWLEDGED !== 'true'
+    )
+      throw new Error(
+        'Production requires SMTP email or EMAIL_DISABLED_ACKNOWLEDGED=true',
+      );
     if (!cfg.MALWARE_SCANNER)
       throw new Error('Production requires explicit MALWARE_SCANNER');
     if (
@@ -163,6 +192,32 @@ export function readConfig(): AppConfig {
     )
       throw new Error(
         'Production resumes require private S3 storage or explicit persistent-local override',
+      );
+  }
+  if (
+    cfg.EMAIL_ADAPTER === 'smtp' &&
+    (!cfg.SMTP_HOST ||
+      !cfg.SMTP_USER ||
+      !cfg.SMTP_PASSWORD ||
+      !cfg.SMTP_FROM ||
+      !cfg.PUBLIC_WEB_BASE_URL)
+  )
+    throw new Error(
+      'SMTP requires host, authentication, sender and PUBLIC_WEB_BASE_URL',
+    );
+  if (cfg.PUBLIC_WEB_BASE_URL) {
+    const url = new URL(cfg.PUBLIC_WEB_BASE_URL);
+    if (
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== '/' ||
+      !['https:', 'http:'].includes(url.protocol) ||
+      (cfg.NODE_ENV === 'production' && url.protocol !== 'https:')
+    )
+      throw new Error(
+        'PUBLIC_WEB_BASE_URL must be an HTTPS origin in production',
       );
   }
   if (cfg.CAPTCHA_PROVIDER === 'turnstile' && !cfg.TURNSTILE_SECRET_KEY)

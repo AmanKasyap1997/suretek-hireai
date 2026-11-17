@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule HireAI retention
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=30
+Unit=hireai-retention.service
+
+[Install]
+WantedBy=timers.target

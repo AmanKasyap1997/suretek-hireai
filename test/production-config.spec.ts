@@ -24,6 +24,7 @@ describe('Production configuration', () => {
   beforeEach(() => {
     process.env = {
       NODE_ENV: 'production',
+      EMAIL_DISABLED_ACKNOWLEDGED: 'true',
       MALWARE_SCANNER: 'pending',
       CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
       RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
@@ -58,6 +59,30 @@ describe('Production configuration', () => {
     expect(readConfig().RESUME_STORAGE).toBe('local');
     process.env.CAPTCHA_PROVIDER = 'turnstile';
     expect(() => readConfig()).toThrow(/TURNSTILE_SECRET_KEY/);
+  });
+  it.each(['disabled', 'log'])(
+    'refuses %s email in production without acknowledgement',
+    (adapter) => {
+      process.env.EMAIL_ADAPTER = adapter;
+      delete process.env.EMAIL_DISABLED_ACKNOWLEDGED;
+      expect(() => readConfig()).toThrow(/EMAIL/);
+      process.env.EMAIL_DISABLED_ACKNOWLEDGED = 'true';
+      expect(readConfig().EMAIL_ADAPTER).toBe(adapter);
+    },
+  );
+  it('requires authenticated SMTP configuration and an HTTPS verification origin', () => {
+    process.env.EMAIL_ADAPTER = 'smtp';
+    expect(() => readConfig()).toThrow(/SMTP/);
+    Object.assign(process.env, {
+      SMTP_HOST: 'smtp.example.test',
+      SMTP_USER: 'user',
+      SMTP_PASSWORD: 'secret',
+      SMTP_FROM: 'verify@example.test',
+      PUBLIC_WEB_BASE_URL: 'http://web.example.test',
+    });
+    expect(() => readConfig()).toThrow(/HTTPS/);
+    process.env.PUBLIC_WEB_BASE_URL = 'https://web.example.test';
+    expect(readConfig().EMAIL_ADAPTER).toBe('smtp');
   });
   it('defaults maker-checker on in production and accepts explicit overrides', () => {
     expect(readConfig().OFFER_MAKER_CHECKER).toBe(true);
