@@ -364,3 +364,9 @@ Authorization: Bearer {{token}}
 ### Time to hire excludes and counts missing APPLIED/reversed evidence; no fabricated zero duration.
 GET {{baseUrl}}/reports/recruitment/time-to-hire?jobId={{jobId}}&from=2026-01-01T00:00:00Z&to=2026-11-01T00:00:00Z
 Authorization: Bearer {{token}}
+
+### Verify the single-use token from the development email log
+POST {{baseUrl}}/public/{{tenantSlug}}/contact-verification
+Content-Type: application/json
+
+{"token":"<selector>.<secret>"}

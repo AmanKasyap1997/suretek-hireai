@@ -58,10 +58,10 @@ export class DocumentsService {
     try {
       status = await this.scanner.scan(file.buffer);
     } catch {
-      status = DocumentScanStatus.ERROR;
+      status = DocumentScanStatus.FAILED;
     }
     if (!Object.values(DocumentScanStatus).includes(status))
-      status = DocumentScanStatus.ERROR;
+      status = DocumentScanStatus.FAILED;
     const versionId = await this.storage.put(
       key,
       file.buffer,
@@ -95,6 +95,24 @@ export class DocumentsService {
       id,
       { candidateId, scanStatus: status },
     );
+    if (status !== DocumentScanStatus.PENDING) {
+      await tx.query(
+        'UPDATE candidate_documents SET scanned_at=clock_timestamp(),scan_attempts=1,scan_error=$3 WHERE tenant_id=$1 AND id=$2',
+        [
+          actor.tenantId,
+          id,
+          status === DocumentScanStatus.FAILED ? 'SCANNER_FAILED' : null,
+        ],
+      );
+      if (status === DocumentScanStatus.INFECTED)
+        await audit(
+          tx,
+          actor,
+          'candidate.document_quarantined',
+          'candidate_document',
+          id,
+        );
+    }
     return row;
   }
   async cleanup(keys: StoredObject[]) {

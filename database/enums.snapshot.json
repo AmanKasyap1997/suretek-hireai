@@ -85,6 +85,7 @@
       "values": [
         "CLEAN",
         "ERROR",
+        "FAILED",
         "INFECTED",
         "PENDING"
       ],
@@ -99,6 +100,15 @@
         "CALL",
         "RECORDING",
         "TRANSCRIPTION"
+      ]
+    },
+    {
+      "enumName": "VerificationMethod",
+      "table": "consents",
+      "column": "verification_method",
+      "constraintName": "consents_verification_method_check",
+      "values": [
+        "EMAIL_TOKEN"
       ]
     },
     {

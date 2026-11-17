@@ -264,8 +264,8 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
     process.env.INTAKE_IP_LIMIT = '2';
     const email = body().email;
     await apply(jobId, body(email), f.tenantA, '198.51.100.1').expect(202);
-    await apply(jobId, body(email), f.tenantA, '198.51.100.2').expect(202);
-    await apply(jobId, body(email), f.tenantA, '198.51.100.3').expect(429);
+    await apply(jobId, body(email), f.tenantA, '198.51.100.1').expect(202);
+    await apply(jobId, body(email), f.tenantA, '198.51.100.1').expect(429);
     await apply(jobId, body(), f.tenantA, '198.51.100.4').expect(202);
     await apply(jobId, body(), f.tenantA, '198.51.100.4').expect(202);
     await apply(jobId, body(), f.tenantA, '198.51.100.4').expect(429);
@@ -637,7 +637,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
       ).rejects.toMatchObject({ code: '42501' });
       await client.query('ROLLBACK');
       await expect(
-        client.query("UPDATE candidate_documents SET scan_status='CLEAN'"),
+        client.query("UPDATE candidate_documents SET sha256='tampered'"),
       ).rejects.toMatchObject({ code: '42501' });
       await expect(
         client.query('UPDATE consents SET notice_version=$1', ['tampered']),
@@ -692,7 +692,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
     const careers = f.app!.get(CareersService),
       input = body();
     const results = await Promise.allSettled(
-      Array.from({ length: 4 }, (_, i) =>
+      Array.from({ length: 4 }, () =>
         careers.apply(
           slug(),
           jobId,
@@ -701,7 +701,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
             website: '',
             consents: { CALL: false, RECORDING: false, TRANSCRIPTION: false },
           },
-          `203.0.113.${i + 1}`,
+          '203.0.113.1',
           'Concurrent test',
         ),
       ),

@@ -1,11 +1,11 @@
 # Talent Acquisition plan
 
-| Milestone | Status      |
-| --------- | ----------- |
-| A         | Complete    |
-| B         | Complete    |
-| C         | Complete    |
-| D         | In progress |
+| Milestone | Status   |
+| --------- | -------- |
+| A         | Complete |
+| B         | Complete |
+| C         | Complete |
+| D         | Complete |
 
 ## Working rules (apply to every milestone)
 

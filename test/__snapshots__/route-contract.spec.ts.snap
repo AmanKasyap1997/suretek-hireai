@@ -582,6 +582,12 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     ],
   },
   {
+    "method": "POST",
+    "path": "/api/v1/public/:tenantSlug/contact-verification",
+    "public": true,
+    "roles": [],
+  },
+  {
     "method": "GET",
     "path": "/api/v1/public/:tenantSlug/jobs",
     "public": true,

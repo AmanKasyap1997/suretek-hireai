@@ -2,6 +2,7 @@ import {
   InterviewMode,
   InterviewStatus,
   ScorecardRecommendation,
+  VerificationMethod,
   DocumentScanStatus,
   AssignmentRole,
   RejectionReason,
@@ -59,6 +60,13 @@ export interface EnumSnapshot {
 
 export const enumSchema: EnumSchema = {
   columns: [
+    {
+      enumName: 'VerificationMethod',
+      table: 'consents',
+      column: 'verification_method',
+      constraintName: 'consents_verification_method_check',
+      values: Object.values(VerificationMethod),
+    },
     {
       enumName: 'InterviewMode',
       table: 'interviews',

@@ -33,6 +33,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      MINIO_TEST_ENDPOINT: http://127.0.0.1:9000
       NODE_ENV: test
       DATABASE_URL: postgresql://hireai_app:ci_app_password@localhost:5432/hireai_test
       DATABASE_MIGRATION_URL: postgresql://hireai_owner:ci_owner_password@localhost:5432/hireai_test
@@ -76,6 +77,11 @@ jobs:
         run: npm run db:migrate
       - name: Verify migration retries are safe
         run: npm run db:migrate
+      - name: Start real MinIO and private test bucket
+        run: |
+          docker run -d --name minio -p 127.0.0.1:9000:9000 -e MINIO_DEFAULT_BUCKETS=private-resumes -e MINIO_ROOT_USER=hireai_dev -e MINIO_ROOT_PASSWORD=hireai_minio_dev_only bitnamilegacy/minio:2025.7.23-debian-12-r3
+          for i in $(seq 1 60); do if docker logs minio 2>&1 | grep -q 'setup finished' && curl -fsS http://127.0.0.1:9000/minio/health/ready; then break; fi; sleep 2; done
+          curl -fsS http://127.0.0.1:9000/minio/health/ready
       - name: Run tests
         run: npm test
 

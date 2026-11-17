@@ -143,6 +143,10 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
     [consentId, tenantId, candidateId, ConsentScope.CALL, userId],
   );
   await client.query(
+    `INSERT INTO contact_verifications(tenant_id,candidate_id,application_id,token_hash,email_hash,call_consent_id,recording_consent_id,transcription_consent_id,expires_at) VALUES($1,$2,$3,$4,$4,$5,$5,$5,now()+interval '1 hour')`,
+    [tenantId, candidateId, applicationId, '0'.repeat(64), consentId],
+  );
+  await client.query(
     `INSERT INTO call_requests(tenant_id,application_id,requested_by,language,idempotency_key)
      VALUES($1,$2,$3,$4,$5)`,
     [tenantId, applicationId, userId, CallLanguage.EN, randomUUID()],
@@ -225,10 +229,15 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
 
   afterAll(async () => {
     if (admin && first && second) {
+      await admin.query(
+        'UPDATE consents SET verification_id=NULL,verification_method=NULL WHERE tenant_id=ANY($1::uuid[])',
+        [[first.tenantId, second.tenantId]],
+      );
       for (const table of [
         'interview_scorecards',
         'interview_panelists',
         'interviews',
+        'contact_verifications',
         'candidate_documents',
         'public_intake_limits',
         'application_stage_events',
@@ -468,6 +477,9 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
     await restoreEnvironment(
       {
         NODE_ENV: 'production',
+        MALWARE_SCANNER: 'pending',
+        CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
+        RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
         DATABASE_URL: process.env.TEST_ADMIN_DATABASE_URL!,
         JWT_SECRET: 'production-role-test-secret-0123456789abcdef',
         CORS_ORIGINS: 'https://app.example.com',
@@ -505,6 +517,9 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
     await restoreEnvironment(
       {
         NODE_ENV: 'production',
+        MALWARE_SCANNER: 'pending',
+        CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
+        RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
         DATABASE_URL: process.env.DATABASE_MIGRATION_URL,
         JWT_SECRET: 'production-role-test-secret-0123456789abcdef',
         CORS_ORIGINS: 'https://app.example.com',
@@ -542,6 +557,9 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
       await restoreEnvironment(
         {
           NODE_ENV: 'production',
+          MALWARE_SCANNER: 'pending',
+          CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
+          RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
           DATABASE_URL: connection.toString(),
           JWT_SECRET: 'production-role-test-secret-0123456789abcdef',
           CORS_ORIGINS: 'https://app.example.com',
@@ -604,6 +622,9 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
       await restoreEnvironment(
         {
           NODE_ENV: 'production',
+          MALWARE_SCANNER: 'pending',
+          CAPTCHA_DISABLED_ACKNOWLEDGED: 'true',
+          RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION: 'true',
           DATABASE_URL: connection.toString(),
           JWT_SECRET: 'production-role-test-secret-0123456789abcdef',
           CORS_ORIGINS: 'https://app.example.com',

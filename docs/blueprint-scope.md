@@ -52,3 +52,7 @@ Public published-job browsing and generic application intake are tenant-resolved
 Interview reservations use tenant-scoped composite relationships and database exclusion constraints to reject overlapping active reservations for the same panelist. Staff manage schedules; panel members receive scoped visibility and submit immutable scorecards against frozen criteria. The CalendarPort/DisabledCalendar pair is a stub only and no API calls it. Scheduling and recommendations never change application stages or hiring outcomes.
 
 Admin/recruiter reports derive funnel entries, clipped nonterminal stage dwell and first-APPLIED-to-first-HIRED duration from stage evidence. Query periods are bounded; incomplete legacy hire histories are excluded and counted rather than assigned zero duration. See [definitions and verification](ta-milestone-c-report.md).
+
+## Milestone D readiness
+
+ClamAV scanning and a bounded cron sweep, permanent infected-document quarantine, explicit production storage/scanner/CAPTCHA choices, real MinIO protocol tests, hashed single-use contact verification and Turnstile are implemented. See [readiness operations](milestone-b-operations.md#milestone-d-readiness) for configuration, local-volume persistence, verification limitations and real ClamAV checks. Email delivery remains a development log adapter; production needs an EmailPort provider before contact verification can be used. Email/client rate buckets are charged after validation and CAPTCHA, preventing unrelated clients from exhausting a victim's email allowance.
