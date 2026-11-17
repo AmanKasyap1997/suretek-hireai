@@ -87,7 +87,10 @@ export class SuperAdminService {
         `SELECT (SELECT count(*)::int FROM users WHERE tenant_id=$1) AS users,
     (SELECT coalesce(sum(byte_size),0)::float/1048576 FROM candidate_documents WHERE tenant_id=$1) AS storage_mb,
     (SELECT coalesce(sum(duration_seconds),0)::float/60 FROM call_requests WHERE tenant_id=$1 AND created_at>=date_trunc('month',now())) AS call_minutes,
-    (SELECT count(*)::int FROM call_requests WHERE tenant_id=$1 AND duration_seconds IS NULL AND created_at>=date_trunc('month',now())) AS unmetered_calls`,
+    (SELECT count(*)::int FROM call_requests WHERE tenant_id=$1 AND duration_seconds IS NULL AND created_at>=date_trunc('month',now())) AS unmetered_calls,
+    (SELECT coalesce(sum(error_count),0)::int FROM integration_configs WHERE tenant_id=$1 AND organization_id=$1) AS integration_errors,
+    (SELECT count(*)::int FROM integration_configs c JOIN integration_providers p ON p.provider=c.provider AND p.enabled AND p.revision=c.provider_revision WHERE c.tenant_id=$1 AND c.organization_id=$1 AND c.status IN ('ok','enabled')) AS integrations_ok,
+    (SELECT count(*)::int FROM integration_configs c JOIN integration_providers p ON p.provider=c.provider AND p.enabled AND p.revision=c.provider_revision WHERE c.tenant_id=$1 AND c.organization_id=$1 AND c.status='failing') AS integrations_failing`,
         [id],
       );
       await tx.query("SELECT set_config('app.tenant_id',$1,true)", [
@@ -240,12 +243,13 @@ export class SuperAdminService {
       total_users: rows.reduce((n, r) => n + r.usage.users, 0),
       new_this_month: rows.filter((r) => new Date(r.created_at) >= month)
         .length,
-      integrations_ok: report.integrations.filter((r) =>
-        ['ok', 'enabled'].includes(r.status),
-      ).length,
-      integrations_failing: report.integrations.filter(
-        (r) => r.status === 'failing',
-      ).length,
+      integrations_ok:
+        report.integrations.filter((r) => ['ok', 'enabled'].includes(r.status))
+          .length +
+        rows.reduce((n, r) => n + (r.usage.integrations_ok ?? 0), 0),
+      integrations_failing:
+        report.integrations.filter((r) => r.status === 'failing').length +
+        rows.reduce((n, r) => n + (r.usage.integrations_failing ?? 0), 0),
       attention: rows.filter(
         (r) =>
           r.usage.users >= r.limits.max_users * 0.9 ||

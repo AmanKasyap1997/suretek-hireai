@@ -207,6 +207,10 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
     "INSERT INTO platform_settings(tenant_id,key,value,updated_by) VALUES($1,'rls_fixture','{}',$2)",
     [tenantId, userId],
   );
+  await client.query(
+    "INSERT INTO integration_oauth_states(tenant_id,user_id,state_hash,encrypted_payload) VALUES($1,$2,$3,'fixture-encrypted-payload')",
+    [tenantId, userId, randomUUID()],
+  );
   return { tenantId, organizationId, userId, candidateId, consentId, auditId };
 }
 
@@ -257,11 +261,13 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
     }
     db = new DbService();
     await db.onModuleInit();
+    // Provider availability is intentionally shared non-secret metadata. Its
+    // write policy is covered by organization-integrations API/database tests.
     tenantTables = (
       await admin.query<TenantTable>(
         `SELECT c.relname AS name,c.relrowsecurity AS row_security,c.relforcerowsecurity AS force_row_security
        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-       WHERE n.nspname='public' AND c.relkind='r' AND
+       WHERE n.nspname='public' AND c.relkind='r' AND c.relname<>'integration_providers' AND
          (c.relname='tenants' OR EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attname='tenant_id' AND NOT a.attisdropped))
        ORDER BY c.relname`,
       )
@@ -282,6 +288,7 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
         ],
       );
       for (const table of [
+        'integration_oauth_states',
         'integration_configs',
         'platform_settings',
         'platform_organizations',
