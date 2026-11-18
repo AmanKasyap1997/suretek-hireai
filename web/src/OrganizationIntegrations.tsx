@@ -484,7 +484,9 @@ function OrganizationConnections() {
                       <p>{p.setupMessage}</p>
                     ) : (
                       <>
-                        <p>Connect using {p.methods.map(label).join(' or ')}.</p>
+                        <p>
+                          Connect using {p.methods.map(label).join(' or ')}.
+                        </p>
                         <div className="integration-actions">
                           {p.methods.map((method) => (
                             <button
