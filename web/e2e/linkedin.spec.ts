@@ -55,17 +55,14 @@ test('hosted LinkedIn consent opens a provider window without requesting app sec
     return route.fulfill({ json: [] });
   });
   await page.goto('integrations');
-  await page
-    .getByRole('button', {
-      name: 'Connect LinkedIn company pages',
-      exact: true,
-    })
-    .click();
   await expect(page.getByLabel('Client secret')).toHaveCount(0);
   await expect(page.getByLabel('Client ID')).toHaveCount(0);
   const opened = context.waitForEvent('page');
   await page
-    .getByRole('button', { name: 'Connect with LinkedIn company pages' })
+    .getByRole('button', {
+      name: 'Authorize LinkedIn company pages',
+      exact: true,
+    })
     .click();
   const popup = await opened;
   await expect(popup.getByRole('heading')).toHaveText(
