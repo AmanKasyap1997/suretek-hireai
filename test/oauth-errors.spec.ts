@@ -22,18 +22,16 @@ it.each([
 ])(
   'reports %s without leaking provider descriptions or credentials',
   async (code) => {
-    jest
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(
-        Response.json(
-          {
-            error: code,
-            error_description: 'client_secret=private-secret code=private-code',
-            access_token: 'private-token',
-          },
-          { status: 400 },
-        ),
-      );
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json(
+        {
+          error: code,
+          error_description: 'client_secret=private-secret code=private-code',
+          access_token: 'private-token',
+        },
+        { status: 400 },
+      ),
+    );
     const error = await exchange(
       'google_calendar',
       new URLSearchParams({ client_secret: 'private-secret' }),
@@ -86,17 +84,15 @@ it.each([
   },
 );
 it('rejects oversized error payloads without returning reflected secrets', async () => {
-  jest
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(
-      Response.json(
-        {
-          error: 'invalid_client',
-          error_description: 'private-secret'.repeat(1000),
-        },
-        { status: 400 },
-      ),
-    );
+  jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+    Response.json(
+      {
+        error: 'invalid_client',
+        error_description: 'private-secret'.repeat(1000),
+      },
+      { status: 400 },
+    ),
+  );
   const error = await exchange('google_calendar', new URLSearchParams()).catch(
     (e) => e,
   );
