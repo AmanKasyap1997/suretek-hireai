@@ -44,7 +44,7 @@
     "@nestjs/cli": "^11.0.12",
     "@types/express": "^5.0.5",
     "@types/jest": "^29.5.14",
-    "@types/node": "^24.10.0",
+    "@types/node": "^26.6.6",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.15.6",
     "@types/smtp-server": "^3.5.13",
