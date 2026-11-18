@@ -1,5 +1,33 @@
 * {
   box-sizing: border-box;
+  scrollbar-color: var(--brand) var(--accent);
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--accent);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    #e35b5d 0%,
+    var(--brand) 55%,
+    #701719 100%
+  );
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    #f07173 0%,
+    var(--brand-hover) 55%,
+    #5c1113 100%
+  );
 }
 body {
   margin: 0;
@@ -73,11 +101,11 @@ p {
 .brand-lockup {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 4.9rem;
   flex-shrink: 0;
 }
 .brand-lockup img {
-  width: 154px;
+  width: 40px;
   height: auto;
   display: block;
 }
@@ -279,11 +307,14 @@ p {
 .shell {
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
-  min-height: 100dvh;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 .app-header {
   grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: 1.5rem;
@@ -291,11 +322,20 @@ p {
   padding: 1rem 1.5rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 2;
+}
+.app-header .brand-lockup {
+  gap: 1.5rem;
 }
 .app-header details {
   margin-left: auto;
 }
 .shell aside {
+  grid-row: 2;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: 1.5rem 0.75rem;
@@ -376,7 +416,11 @@ p {
   margin: 0.5rem 0;
 }
 .workspace {
+  grid-row: 2;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .role {
   display: block;
@@ -520,16 +564,44 @@ summary::-webkit-details-marker {
     grid-template-columns: minmax(0, 1fr);
   }
   .app-header {
-    padding: 1rem;
-    flex-wrap: wrap;
-    gap: 1rem;
+    height: 64px;
+    min-height: 64px;
+    padding: 0.7rem 0.75rem;
+    flex-wrap: nowrap;
+    gap: 0.65rem;
   }
   .app-header .product-name {
     display: none;
   }
+  .app-header .brand-lockup {
+    gap: 0;
+    min-width: 0;
+  }
+  .app-header .brand-lockup img {
+    width: 100px;
+  }
+  .app-header .menu-toggle {
+    flex: 0 0 auto;
+    padding: 0.4rem 0.55rem;
+  }
+  .app-header details {
+    min-width: 0;
+  }
   .app-header summary > span:nth-child(2) {
-    max-width: 150px;
-    overflow-wrap: anywhere;
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-header summary {
+    gap: 0.35rem;
+  }
+  .app-header .avatar {
+    width: 30px;
+    height: 30px;
+  }
+  .app-header .role {
+    display: none;
   }
   .shell aside {
     padding: 1rem;
@@ -769,6 +841,7 @@ summary::-webkit-details-marker {
 }
 .menu-toggle {
   padding: 0.4rem 0.7rem;
+  white-space: nowrap;
 }
 .shell.menu-closed aside {
   display: none;
@@ -789,13 +862,18 @@ summary::-webkit-details-marker {
     display: block;
     position: fixed;
     z-index: 20;
-    top: 80px;
+    top: 76px;
     bottom: 0;
     left: 0;
     width: min(300px, 85vw);
     overflow: auto;
     background: var(--surface);
     box-shadow: 8px 0 24px #0002;
+  }
+}
+@media (max-width: 760px) {
+  .shell.menu-open aside {
+    top: 64px;
   }
 }
 
@@ -832,6 +910,44 @@ summary::-webkit-details-marker {
   background: white;
   overflow-wrap: anywhere;
   min-width: 0;
+}
+.integration-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+.integration-card-heading h2 {
+  margin: 0;
+}
+.integration-status-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.integration-status {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.integration-status-success {
+  color: #17613d;
+  background: #e8f5ed;
+}
+.integration-status-warning {
+  color: #80540b;
+  background: #fff3d6;
+}
+.integration-status-neutral {
+  color: var(--muted);
+  background: var(--canvas);
 }
 .integration-actions {
   display: flex;

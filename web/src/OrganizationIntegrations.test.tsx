@@ -11,6 +11,7 @@ function setup(
   oauth = false,
   ready = false,
   startFails = false,
+  connected = false,
 ) {
   const fetcher = vi.fn(async (url: string, init: RequestInit) => {
     if (url === '/api/v1/auth/session')
@@ -35,6 +36,22 @@ function setup(
         authorizationUrl:
           'https://accounts.google.com/o/oauth2/v2/auth?state=fixture',
       });
+    if (url === '/api/v1/organization/integrations')
+      return Response.json(
+        connected
+          ? [
+              {
+                id: 'google-connection',
+                provider: 'google_calendar',
+                environment: 'sandbox',
+                method: 'oauth2',
+                status: 'ok',
+                credential_hint: 'Google account',
+                last_verified_at: null,
+              },
+            ]
+          : [],
+      );
     if (init.method === 'POST' || init.method === 'PATCH')
       return Response.json({ id: 'connection' });
     if (url.endsWith('/providers') || url.endsWith('/integration-providers'))
@@ -141,6 +158,12 @@ it('offers authorization and manual credentials separately and explains missing 
   expect(screen.getByLabelText('Connection method')).toHaveValue('bearer');
   expect(screen.getByLabelText('Access token')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Save connection' })).toBeEnabled();
+});
+it('shows connected provider status on its integration card', async () => {
+  setup('HR_ADMIN', true, true, true, false, true);
+  expect(
+    await screen.findByText('Sandbox · Connected · verified'),
+  ).toBeVisible();
 });
 it('shows only enabled providers and saves credentials without client tenant scope', async () => {
   const fetcher = setup();

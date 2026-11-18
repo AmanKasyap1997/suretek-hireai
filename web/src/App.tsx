@@ -298,6 +298,7 @@ function Shell() {
         Skip to content
       </a>
       <header className="app-header">
+        <Brand />
         <button
           className="menu-toggle"
           aria-label="Toggle navigation"
@@ -306,7 +307,6 @@ function Shell() {
         >
           Menu
         </button>
-        <Brand />
         <span className="platform-label">
           Recruitment &amp; People Platform
         </span>

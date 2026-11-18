@@ -48,6 +48,19 @@ const labels: Record<string, string> = {
 };
 const label = (s: string) =>
   labels[s] ?? s[0].toUpperCase() + s.slice(1).replace(/_/g, ' ');
+function connectionStatus(connection: Connection) {
+  if (connection.credential_hint === 'Disconnected')
+    return { text: 'Disconnected', tone: 'neutral' };
+  if (connection.status === 'ok')
+    return { text: 'Connected · verified', tone: 'success' };
+  if (connection.status === 'enabled')
+    return { text: 'Connected · enabled', tone: 'success' };
+  if (connection.status === 'failing')
+    return { text: 'Connected · check needed', tone: 'warning' };
+  if (connection.status === 'disabled')
+    return { text: 'Connected · provider disabled', tone: 'warning' };
+  return { text: 'Connected · verification needed', tone: 'warning' };
+}
 function useAction() {
   const client = useQueryClient(),
     [busy, setBusy] = useState(false),
@@ -439,44 +452,73 @@ function OrganizationConnections() {
             </p>
           ) : (
             <div className="integration-grid">
-              {providers.data.map((p) => (
-                <article className="integration-card" key={p.provider}>
-                  <h2>{p.label}</h2>
-                  {p.platformManaged ? (
-                    <p>{p.setupMessage}</p>
-                  ) : (
-                    <>
-                      <p>Connect using {p.methods.map(label).join(' or ')}.</p>
-                      <div className="integration-actions">
-                        {p.methods.map((method) => (
-                          <button
-                            key={method}
-                            disabled={action.busy}
-                            onClick={() => {
-                              if (
-                                method === 'oauth2' &&
-                                p.oauthReady &&
-                                p.hostedOAuth
-                              )
-                                void authorize(p);
-                              else
-                                setSelected({ provider: p.provider, method });
-                            }}
-                          >
-                            {method === 'oauth2'
-                              ? `Authorize ${p.label}`
-                              : p.methods.length === 1
-                                ? `Connect ${p.label}`
-                                : `Use ${label(method)}`}
-                          </button>
-                        ))}
-                      </div>
-                      {p.setupMessage && <p>{p.setupMessage}</p>}
-                      <AIProviderSetup provider={p.provider} />
-                    </>
-                  )}
-                </article>
-              ))}
+              {providers.data.map((p) => {
+                const providerConnections = connections.data.filter(
+                  (connection) => connection.provider === p.provider,
+                );
+                return (
+                  <article className="integration-card" key={p.provider}>
+                    <div className="integration-card-heading">
+                      <h2>{p.label}</h2>
+                      {providerConnections.length > 0 && (
+                        <div
+                          className="integration-status-list"
+                          role="group"
+                          aria-label={`${p.label} connection status`}
+                        >
+                          {providerConnections.map((connection) => {
+                            const status = connectionStatus(connection);
+                            return (
+                              <span
+                                className={`integration-status integration-status-${status.tone}`}
+                                key={connection.id}
+                              >
+                                {label(connection.environment)} · {status.text}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {p.platformManaged ? (
+                      <p>{p.setupMessage}</p>
+                    ) : (
+                      <>
+                        <p>Connect using {p.methods.map(label).join(' or ')}.</p>
+                        <div className="integration-actions">
+                          {p.methods.map((method) => (
+                            <button
+                              key={method}
+                              disabled={action.busy}
+                              onClick={() => {
+                                if (
+                                  method === 'oauth2' &&
+                                  p.oauthReady &&
+                                  p.hostedOAuth
+                                )
+                                  void authorize(p);
+                                else
+                                  setSelected({
+                                    provider: p.provider,
+                                    method,
+                                  });
+                              }}
+                            >
+                              {method === 'oauth2'
+                                ? `Authorize ${p.label}`
+                                : p.methods.length === 1
+                                  ? `Connect ${p.label}`
+                                  : `Use ${label(method)}`}
+                            </button>
+                          ))}
+                        </div>
+                        {p.setupMessage && <p>{p.setupMessage}</p>}
+                        <AIProviderSetup provider={p.provider} />
+                      </>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
           {provider && selected && (
