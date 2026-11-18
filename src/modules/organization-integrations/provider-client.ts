@@ -1,3 +1,8 @@
+import {
+  OAuthExchangeError,
+  rejectedExchange,
+  transportFailure,
+} from './oauth-errors';
 import { BadRequestException } from '@nestjs/common';
 import nodemailer from 'nodemailer';
 import { Method, Provider } from './catalog';
@@ -57,28 +62,36 @@ export async function exchange(provider: Provider, body: URLSearchParams) {
         : trustedUrl(
             process.env[`INTEGRATION_${provider.toUpperCase()}_TOKEN_URL`],
           );
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-    redirect: 'error',
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw new Error('Provider authentication failed');
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (error) {
+    throw transportFailure(error);
   }
-  const data = (await response.json()) as {
+  if (!response.ok) throw await rejectedExchange(response);
+  let data: {
     access_token?: unknown;
     refresh_token?: unknown;
     expires_in?: unknown;
-  };
+  } | null;
+  try {
+    data = await response.json();
+  } catch {
+    throw new OAuthExchangeError('invalid_response');
+  }
   if (
+    !data ||
     typeof data.access_token !== 'string' ||
     !data.access_token ||
     data.access_token.length > 16384
   )
-    throw new Error('Provider token is invalid');
+    throw new OAuthExchangeError('invalid_response');
   return {
     accessToken: data.access_token,
     ...(typeof data.expires_in === 'number' &&

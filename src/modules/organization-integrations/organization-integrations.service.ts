@@ -1,3 +1,4 @@
+import { oauthFailureResponse } from './oauth-errors';
 import { hostedOAuth, oauthFingerprint } from './hosted-oauth';
 import {
   BadRequestException,
@@ -435,8 +436,8 @@ export class OrganizationIntegrationsService {
       input.credentials = { ...input.credentials, ...tokens };
       if (input.credentials._hosted === 'true')
         delete input.credentials.clientSecret;
-    } catch {
-      throw new BadRequestException('Provider authorization failed; reconnect');
+    } catch (error) {
+      throw new BadRequestException(oauthFailureResponse(error));
     }
     return this.db.transaction(async (tx) => {
       const revision = await this.available(tx, input.provider, true);

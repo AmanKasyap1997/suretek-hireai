@@ -69,3 +69,25 @@ The session-error/remount regression is covered by the real application route-tr
 tests and a browser test using a disposable callback and mocked provider exchange.
 A live Google account consent/exchange still needs verification with your deployment's
 OAuth client and redirect URI.
+
+## Token-exchange failures after approving consent
+
+If the callback displays a token-exchange error, it reached the backend. Google's
+unverified-app warning in testing mode does not itself identify the exchange
+failure. The backend returns a fixed diagnostic code and actionable message;
+provider descriptions, response bodies, codes and credentials are never echoed.
+
+| Diagnostic                                                | Check on the machine running the backend                                                                                                                                                               |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `invalid_client`                                          | Client ID and **client secret** must be from the same Web application OAuth client. The secret is not the client ID, project ID or an API key. Restart the backend after changing its env.             |
+| `invalid_grant`                                           | Start a fresh authorization; codes expire and are single-use. If repeated, check the matching OAuth client and exact redirect URI.                                                                     |
+| `redirect_uri_mismatch`                                   | Register the exact URI displayed in Super Admin's Google authorization setup, including scheme/host/port/path.                                                                                         |
+| `oauth_tls_error`                                         | Check Node.js trust for a corporate HTTPS inspection certificate. Configure an operator-approved CA through `NODE_EXTRA_CA_CERTS` before starting Node when required; do not disable TLS verification. |
+| `oauth_dns_error`, `oauth_network_error`, `oauth_timeout` | Check backend DNS, firewall and outbound HTTPS/proxy access to `oauth2.googleapis.com`. Browser access to Google does not prove Node has access.                                                       |
+| `oauth_provider_unavailable`, `oauth_rate_limited`        | Wait and initiate a new authorization.                                                                                                                                                                 |
+| `oauth_invalid_response`, `oauth_exchange_failed`         | Check for proxy interception or provider service errors; report the diagnostic code, never a callback URL or secret.                                                                                   |
+
+After pulling an exchange-diagnostics update, restart the **backend**, not only
+Vite, then initiate a fresh authorization. An old authorization code must not be
+retried after a failed exchange. No database migration or Google permission change
+is required for this diagnostic update.
