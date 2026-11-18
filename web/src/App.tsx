@@ -522,6 +522,10 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
+      {/* Own the one-time callback outside Guard: session retries must not
+          unmount it after its authorization code has been removed from the URL.
+          The callback checks the session/role before any exchange itself. */}
+      <Route path="integrations/oauth" element={<IntegrationOAuthCallback />} />
       <Route element={<Guard />}>
         <Route element={<Shell />}>
           <Route index element={<Index />} />
@@ -531,10 +535,6 @@ export default function App() {
             element={<SuperAdminDetail />}
           />
           <Route path="integrations" element={<OrganizationIntegrations />} />
-          <Route
-            path="integrations/oauth"
-            element={<IntegrationOAuthCallback />}
-          />
           <Route path="home/:role" element={<Home />} />
           {navigation
             .filter((n) => n.id !== 'integrations')

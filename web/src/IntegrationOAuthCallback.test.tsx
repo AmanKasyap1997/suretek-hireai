@@ -70,3 +70,22 @@ it('shows exchange failure without attempting verification or replaying the code
   );
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
+
+it.each(['', '?code=fixture', '?state=fixture'])(
+  'does not exchange an incomplete callback: %s',
+  async (query) => {
+    const fetcher = setup(query);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Authorization details are missing',
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(window.location.search).toBe('');
+  },
+);
+it('does not describe a provider error as declined consent or exchange it', () => {
+  const fetcher = setup('?error=server_error&state=fixture&code=fixture');
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'The provider could not complete authorization',
+  );
+  expect(fetcher).not.toHaveBeenCalled();
+});

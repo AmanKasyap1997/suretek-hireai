@@ -31,6 +31,7 @@ operator must configure the application credentials once:
    Use your HTTPS web origin in production. Keep secrets out of `web/.env*`,
    source control, and client bundles. Existing integration encryption must also
    be configured with `INTEGRATION_ENCRYPTION_KEY`.
+
 5. Restart the backend, enable Google Calendar in Super Admin, then connect as an
    organization HR admin. Select the desired environment before authorization.
 
@@ -46,3 +47,25 @@ blocked during testing, check the configured test users and organization policy.
 Review Google's verification requirements before publishing the OAuth app.
 
 [Google's web-server OAuth documentation](https://developers.google.com/identity/protocols/oauth2/web-server)
+
+## Returning from Google consent
+
+The callback is a standalone, session-aware route. It captures `code` and `state`
+in memory and removes them from the address bar. A temporary HireAI session-check
+failure can be retried in the same window without losing those values or exchanging
+the code twice. It still requires an organization HR administrator and the backend
+checks the one-time state against the signed-in user and organization. Codes are
+never saved in local/session storage.
+
+If a session check fails, click **Try again** in that window. If your HireAI
+session has expired, sign in and start **Authorize Google Calendar** again. A full
+reload, copied callback URL or reopened callback cannot recover the cleared code;
+start a new authorization. Only Google's `access_denied` response is labeled as
+declined consent. Missing callback data and other provider failures have separate
+messages. Do not share callback URLs, authorization codes, state values or client
+secrets when reporting errors.
+
+The session-error/remount regression is covered by the real application route-tree
+tests and a browser test using a disposable callback and mocked provider exchange.
+A live Google account consent/exchange still needs verification with your deployment's
+OAuth client and redirect URI.

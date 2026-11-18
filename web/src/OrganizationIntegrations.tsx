@@ -570,18 +570,25 @@ function OrganizationConnections() {
   );
 }
 export function IntegrationOAuthCallback() {
-  const { session, status } = useAuth();
+  const { session, status, retry } = useAuth();
   const cache = useQueryClient();
   const [params] = useState(() => new URLSearchParams(window.location.search));
   const started = useRef(false);
+  const owner = useRef<string | null>(null);
+  const identity = session
+    ? `${session.user.tenant_id}:${session.user.id}`
+    : null;
+  const accountChanged =
+    !!owner.current && !!identity && owner.current !== identity;
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const allowed =
     !!session &&
+    !session.user.must_change_password &&
     session.user.role !== 'SUPER_ADMIN' &&
     [session.user.role, ...(session.user.roles ?? [])].includes('HR_ADMIN');
   const invalid =
-    !!params.get('error') || !params.get('code') || !params.get('state');
+    params.has('error') || !params.get('code') || !params.get('state');
   useEffect(() => {
     window.history.replaceState(
       window.history.state,
@@ -590,8 +597,9 @@ export function IntegrationOAuthCallback() {
     );
   }, []);
   useEffect(() => {
-    if (!allowed || invalid || started.current) return;
+    if (status !== 'ready' || !allowed || invalid || started.current) return;
     started.current = true;
+    owner.current = identity;
     void (async () => {
       try {
         const connection = await api<{ id: string }>(base + '/oauth/complete', {
@@ -632,16 +640,55 @@ export function IntegrationOAuthCallback() {
         );
       }
     })();
-  }, [allowed, invalid, params, cache]);
+  }, [status, allowed, identity, invalid, params, cache]);
   if (status === 'loading') return <p role="status">Loading your session…</p>;
-  if (!allowed) return <h1>Not authorized</h1>;
+  if (status === 'error')
+    return (
+      <main className="standalone">
+        <h1>Unable to load your session</h1>
+        <p>
+          Your authorization is still held in this window. Retry the session
+          check to continue.
+        </p>
+        <button onClick={retry}>Try again</button>
+      </main>
+    );
+  if (!session)
+    return (
+      <main className="standalone">
+        <h1>Sign in to connect your provider</h1>
+        <p>
+          Your HireAI session has expired. Sign in and start a new authorization
+          from Integrations.
+        </p>
+        <Link to="/login">Sign in</Link>
+      </main>
+    );
+  if (accountChanged)
+    return (
+      <main className="standalone">
+        <h1>Signed-in account changed</h1>
+        <p>Start a new authorization for the current organization.</p>
+        <Link to="/integrations">Back to integrations</Link>
+      </main>
+    );
+  if (!allowed)
+    return (
+      <main className="standalone">
+        <h1>Not authorized</h1>
+        <Link to="/">Return to your workspace</Link>
+      </main>
+    );
   return (
-    <>
+    <main className="standalone">
       <h1>Provider connection</h1>
       {invalid ? (
         <p role="alert">
-          Authorization was declined or the callback is incomplete. Start again
-          from Integrations.
+          {params.get('error') === 'access_denied'
+            ? 'Authorization was declined. Start again from Integrations if you want to connect.'
+            : params.has('error')
+              ? 'The provider could not complete authorization. Start again from Integrations.'
+              : 'Authorization details are missing or this callback has already been opened. Start a new connection from Integrations.'}
         </p>
       ) : error ? (
         <p role="alert">{error}</p>
@@ -656,6 +703,6 @@ export function IntegrationOAuthCallback() {
         <p role="status">Connecting and verifying your account…</p>
       )}
       <Link to="/integrations">Back to integrations</Link>
-    </>
+    </main>
   );
 }
