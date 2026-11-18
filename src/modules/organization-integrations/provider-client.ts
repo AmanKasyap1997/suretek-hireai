@@ -1,14 +1,23 @@
 import { BadRequestException } from '@nestjs/common';
 import nodemailer from 'nodemailer';
 import { Method, Provider } from './catalog';
+import { effectiveCredentials } from './hosted-oauth';
 export const oauthEndpoints = {
+  linkedin: {
+    authorize: 'https://www.linkedin.com/oauth/v2/authorization',
+    token: 'https://www.linkedin.com/oauth/v2/accessToken',
+    scope: 'rw_organization_admin w_organization_social',
+    pkce: false,
+  },
   google_calendar: {
+    pkce: true,
     authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
     token: 'https://oauth2.googleapis.com/token',
     scope:
       'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly',
   },
   microsoft_calendar: {
+    pkce: true,
     authorize: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
     token: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
     scope: 'offline_access https://graph.microsoft.com/Calendars.ReadWrite',
@@ -41,11 +50,13 @@ export function callbackUrl() {
 }
 export async function exchange(provider: Provider, body: URLSearchParams) {
   const endpoint =
-    provider in oauthEndpoints
-      ? oauthEndpoints[provider as keyof typeof oauthEndpoints].token
-      : trustedUrl(
-          process.env[`INTEGRATION_${provider.toUpperCase()}_TOKEN_URL`],
-        );
+    provider === 'linkedin_jobs'
+      ? 'https://www.linkedin.com/oauth/v2/accessToken'
+      : provider in oauthEndpoints
+        ? oauthEndpoints[provider as keyof typeof oauthEndpoints].token
+        : trustedUrl(
+            process.env[`INTEGRATION_${provider.toUpperCase()}_TOKEN_URL`],
+          );
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -60,6 +71,7 @@ export async function exchange(provider: Provider, body: URLSearchParams) {
   const data = (await response.json()) as {
     access_token?: unknown;
     refresh_token?: unknown;
+    expires_in?: unknown;
   };
   if (
     typeof data.access_token !== 'string' ||
@@ -69,6 +81,11 @@ export async function exchange(provider: Provider, body: URLSearchParams) {
     throw new Error('Provider token is invalid');
   return {
     accessToken: data.access_token,
+    ...(typeof data.expires_in === 'number' &&
+    data.expires_in > 0 &&
+    Number.isFinite(data.expires_in)
+      ? { expiresAt: String(Date.now() + data.expires_in * 1000) }
+      : {}),
     ...(typeof data.refresh_token === 'string' &&
     data.refresh_token.length <= 16384
       ? { refreshToken: data.refresh_token }
@@ -80,6 +97,7 @@ export async function verify(
   method: Method,
   credentials: Record<string, string>,
 ) {
+  credentials = effectiveCredentials(provider, credentials);
   if (method === 'smtp') {
     // Host/port are deployment-owned, never browser supplied (prevents SMTP SSRF).
     const host = process.env.INTEGRATION_EMAIL_SMTP_HOST;
@@ -106,7 +124,24 @@ export async function verify(
       transport.close();
     }
   }
+  if (provider === 'linkedin_jobs') {
+    if (process.env.LINKEDIN_JOBS_APPROVED !== 'true')
+      throw new BadRequestException(
+        'LinkedIn Jobs partner approval is required',
+      );
+    const tokens = await exchange(
+      provider,
+      new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
+      }),
+    );
+    return { ok: true, credentials: { ...credentials, ...tokens } };
+  }
   const fixed: Partial<Record<Provider, string>> = {
+    linkedin:
+      'https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&state=APPROVED&count=1',
     openai: 'https://api.openai.com/v1/models',
     anthropic: 'https://api.anthropic.com/v1/models',
     google_calendar:
@@ -141,7 +176,14 @@ export async function verify(
       token = refreshed.accessToken;
     }
   }
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> =
+    provider === 'linkedin'
+      ? {
+          'LinkedIn-Version':
+            process.env.LINKEDIN_MARKETING_VERSION || '202611',
+          'X-Restli-Protocol-Version': '2.0.0',
+        }
+      : {};
   if (method === 'basic')
     headers.Authorization =
       'Basic ' +
@@ -173,10 +215,12 @@ export async function verify(
       signal: AbortSignal.timeout(10000),
     });
     await response.body?.cancel();
+    if (credentials._hosted === 'true') delete credentials.clientSecret;
     return { ok: response.ok, credentials };
   } catch {
     // A successful token refresh may rotate the refresh token even if the
     // subsequent verification request fails. Preserve the new credentials.
+    if (credentials._hosted === 'true') delete credentials.clientSecret;
     return { ok: false, credentials };
   }
 }

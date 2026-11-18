@@ -1,9 +1,14 @@
+import { LinkedInPublishing, LinkedInPartnerSetup } from './LinkedInPublishing';
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from './api';
 import { useAuth } from './auth';
 type Provider = {
+  hostedOAuth?: boolean;
+  oauthReady?: boolean;
+  platformManaged?: boolean;
+  setupMessage?: string | null;
   provider: string;
   label: string;
   methods: string[];
@@ -89,6 +94,12 @@ export function ProviderAvailability() {
     <section>
       <h2>Available to organizations</h2>
       <p>
+        Google, Microsoft and LinkedIn use a provider authorization screen.
+        Configure the platform OAuth application once; organization admins never
+        need its client secret.
+      </p>
+      <LinkedInPartnerSetup />
+      <p>
         Enable a provider to let organization admins connect their own accounts.
         Disabling it immediately prevents organizations from testing or enabling
         connections. Re-enabling requires new verification.
@@ -157,6 +168,15 @@ function ConnectionForm({
           e.preventDefault();
           const form = e.currentTarget,
             values = new FormData(form);
+          const popup =
+            method === 'oauth2'
+              ? window.open(
+                  'about:blank',
+                  'hireai-provider',
+                  'popup,width=620,height=760',
+                )
+              : null;
+          if (popup) popup.opener = null;
           const credentials = Object.fromEntries(
             provider.fields[method]
               .map((field) => [field, String(values.get(field) ?? '')])
@@ -173,9 +193,13 @@ function ConnectionForm({
             'POST',
             input,
           );
-          if (result?.authorizationUrl)
-            window.location.assign(result.authorizationUrl);
-          else if (result) form.reset();
+          if (result?.authorizationUrl) {
+            if (popup) popup.location.replace(result.authorizationUrl);
+            else window.location.assign(result.authorizationUrl);
+          } else {
+            popup?.close();
+            if (result) form.reset();
+          }
         }}
       >
         <label>
@@ -216,7 +240,13 @@ function ConnectionForm({
             </label>
           ))}
         </div>
-        {method === 'oauth2' && (
+        {method === 'oauth2' && provider.hostedOAuth && (
+          <p>
+            You will sign in and approve access on {provider.label}’s website.
+            HireAI does not ask for your provider password.
+          </p>
+        )}
+        {method === 'oauth2' && !provider.hostedOAuth && (
           <p>
             Register the callback URL{' '}
             <code>{window.location.origin}/console/integrations/oauth</code> in
@@ -230,11 +260,17 @@ function ConnectionForm({
             organization’s SMTP credentials.
           </p>
         )}
-        <button disabled={action.busy}>
+        {provider.setupMessage && <p role="status">{provider.setupMessage}</p>}
+        <button
+          disabled={
+            action.busy ||
+            (method === 'oauth2' && provider.oauthReady === false)
+          }
+        >
           {action.busy
             ? 'Saving…'
             : method === 'oauth2'
-              ? 'Continue to provider'
+              ? 'Connect with ' + provider.label
               : 'Save connection'}
         </button>
         <button type="button" disabled={action.busy} onClick={onClose}>
@@ -256,6 +292,17 @@ export function OrganizationIntegrations() {
   return <OrganizationConnections />;
 }
 function OrganizationConnections() {
+  const { session } = useAuth();
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel('hireai-provider-connection');
+    channel.onmessage = () =>
+      void queryClient.invalidateQueries({
+        queryKey: ['organization-integrations'],
+      });
+    return () => channel.close();
+  }, [queryClient]);
   const providers = useQuery({
       queryKey: ['organization-integrations', 'providers'],
       queryFn: () => api<Provider[]>(base + '/providers'),
@@ -299,9 +346,13 @@ function OrganizationConnections() {
               {providers.data.map((p) => (
                 <article className="integration-card" key={p.provider}>
                   <h2>{p.label}</h2>
-                  <button onClick={() => setSelected(p.provider)}>
-                    Connect {p.label}
-                  </button>
+                  {p.platformManaged ? (
+                    <p>{p.setupMessage}</p>
+                  ) : (
+                    <button onClick={() => setSelected(p.provider)}>
+                      Connect {p.label}
+                    </button>
+                  )}
                 </article>
               ))}
             </div>
@@ -378,6 +429,17 @@ function OrganizationConnections() {
           )}
         </>
       )}
+      {session?.user.enabled_modules?.includes('hiring') &&
+        providers.data?.some(
+          (p) => p.provider === 'linkedin' || p.provider === 'linkedin_jobs',
+        ) && (
+          <LinkedInPublishing
+            social={!!providers.data?.some((p) => p.provider === 'linkedin')}
+            jobsEnabled={
+              !!providers.data?.some((p) => p.provider === 'linkedin_jobs')
+            }
+          />
+        )}
     </>
   );
 }
@@ -405,7 +467,10 @@ export function IntegrationOAuthCallback() {
         </p>
       ) : done ? (
         <p role="status">
-          Account connected. Test the connection before enabling it.
+          Account connected. Return to Integrations to test and enable it.{' '}
+          <button onClick={() => window.close()}>
+            Close authorization window
+          </button>
         </p>
       ) : (
         <>
@@ -418,7 +483,16 @@ export function IntegrationOAuthCallback() {
                 'POST',
                 { state: params.get('state'), code: params.get('code') },
               );
-              if (result) setDone(true);
+              if (result) {
+                setDone(true);
+                if (typeof BroadcastChannel !== 'undefined') {
+                  const channel = new BroadcastChannel(
+                    'hireai-provider-connection',
+                  );
+                  channel.postMessage({ completed: true });
+                  channel.close();
+                }
+              }
             }}
           >
             Complete connection

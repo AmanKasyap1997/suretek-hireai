@@ -1,5 +1,7 @@
 import { z } from 'zod';
 export const providerIds = [
+  'linkedin',
+  'linkedin_jobs',
   'openai',
   'anthropic',
   'google_calendar',
@@ -26,6 +28,16 @@ export const catalog: {
   label: string;
   methods: Method[];
 }[] = [
+  {
+    provider: 'linkedin',
+    label: 'LinkedIn company pages',
+    methods: ['oauth2'],
+  },
+  {
+    provider: 'linkedin_jobs',
+    label: 'LinkedIn Jobs',
+    methods: ['oauth_client_credentials'],
+  },
   { provider: 'openai', label: 'OpenAI', methods: ['api_key'] },
   { provider: 'anthropic', label: 'Anthropic', methods: ['api_key'] },
   {
@@ -124,3 +136,15 @@ export const oauthCompleteSchema = z
   })
   .strict();
 export type ConnectionInput = z.infer<typeof connectionSchema>;
+
+export const oauthStartSchema = z.union([
+  connectionSchema,
+  z
+    .object({
+      provider: z.enum(['linkedin', 'google_calendar', 'microsoft_calendar']),
+      environment: z.enum(['sandbox', 'production']),
+      method: z.literal('oauth2'),
+      credentials: z.object({}).strict().default({}),
+    })
+    .strict(),
+]);

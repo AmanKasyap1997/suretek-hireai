@@ -1,4 +1,9 @@
 import {
+  LinkedInController,
+  LinkedInSetupController,
+} from '../organization-integrations/linkedin.controller';
+import { LinkedInService } from '../organization-integrations/linkedin.service';
+import {
   IntegrationProvidersController,
   OrganizationIntegrationsController,
 } from '../organization-integrations/organization-integrations.controller';
@@ -16,8 +21,15 @@ import { SaasService } from './saas.service';
     SuperAdminController,
     IntegrationProvidersController,
     OrganizationIntegrationsController,
+    LinkedInController,
+    LinkedInSetupController,
   ],
-  providers: [SaasService, SuperAdminService, OrganizationIntegrationsService],
+  providers: [
+    SaasService,
+    SuperAdminService,
+    OrganizationIntegrationsService,
+    LinkedInService,
+  ],
   exports: [SaasService],
 })
 export class SaasModule {}

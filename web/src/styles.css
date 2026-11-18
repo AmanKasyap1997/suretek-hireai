@@ -838,3 +838,10 @@ summary::-webkit-details-marker {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+.publication-copy {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 20rem;
+  overflow-y: auto;
+}

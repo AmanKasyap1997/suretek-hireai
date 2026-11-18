@@ -16,6 +16,7 @@ import { BodySchema, parse } from '../../platform/http/validation';
 import {
   connectionSchema,
   oauthCompleteSchema,
+  oauthStartSchema,
   providerIds,
   providerToggle,
 } from './catalog';
@@ -58,10 +59,10 @@ export class OrganizationIntegrationsController {
     return this.service.connect(actor, parse(connectionSchema, body));
   }
   @Post('oauth/start')
-  @BodySchema(connectionSchema)
+  @BodySchema(oauthStartSchema)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   start(@CurrentUser() actor: Actor, @Body() body: unknown) {
-    return this.service.startOAuth(actor, parse(connectionSchema, body));
+    return this.service.startOAuth(actor, parse(oauthStartSchema, body));
   }
   @Post('oauth/complete')
   @BodySchema(oauthCompleteSchema)

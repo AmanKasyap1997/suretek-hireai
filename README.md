@@ -15,7 +15,7 @@ The attached blueprint is requirements input. Vendor recommendations, prices, pu
 - Basic employee, leave and attendance administration, audit records and health endpoints.
 - PostgreSQL schema migrations, administrator bootstrap, API documentation, Docker and GitHub Actions.
 
-Live AI calls, resume parsing, external calendar integration, payroll, e-signature and external job publishing require further implementation. [Scope and next steps](docs/blueprint-scope.md) map the starter to the full blueprint.
+Live AI calls, resume parsing, external calendar integration, payroll, e-signature and additional job-board publishing require further implementation. LinkedIn company announcements and partner-gated BASIC Jobs submissions are implemented; see [setup and limitations](docs/linkedin-integrations.md). [Scope and next steps](docs/blueprint-scope.md) map the starter to the full blueprint.
 
 ## Project layout
 
@@ -295,3 +295,5 @@ The latest completion review fixes sandbox approval invalidation, suspended/dele
 Super Admin enables providers under Integrations → Available to organizations. Organization Admins then connect their own accounts under Integrations using the provider's supported API key, OAuth, token, basic-auth or SMTP method. Apply migration 017 and configure the stable integration encryption key first. See [setup, methods and OAuth callback registration](docs/super-admin.md#organization-owned-integrations-migration-017).
 
 If Super Admin APIs return 404, rebuild/restart the backend from this branch and run `npm run api:check`; the registered protected routes return 401 without credentials. See [API/proxy troubleshooting](docs/super-admin.md#diagnosing-apiv1super-admin-404s).
+
+Hosted provider authorization windows and both LinkedIn publishing paths are documented in [LinkedIn integrations](docs/linkedin-integrations.md). Apply migrations through 019 before deploying these changes.

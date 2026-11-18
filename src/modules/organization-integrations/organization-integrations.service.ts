@@ -1,3 +1,4 @@
+import { hostedOAuth, oauthFingerprint } from './hosted-oauth';
 import {
   BadRequestException,
   ConflictException,
@@ -50,8 +51,17 @@ export class OrganizationIntegrationsService {
     return catalog
       .map((p) => ({
         ...p,
+        hostedOAuth: !!hostedOAuth(p.provider),
+        oauthReady: !p.methods.includes('oauth2') || !!hostedOAuth(p.provider),
+        platformManaged: p.provider === 'linkedin_jobs',
+        setupMessage:
+          p.provider === 'linkedin_jobs'
+            ? 'LinkedIn partner approval and organization onboarding are required. Contact your platform administrator.'
+            : p.methods.includes('oauth2') && !hostedOAuth(p.provider)
+              ? 'Your platform administrator must configure the provider application.'
+              : null,
         fields: Object.fromEntries(
-          p.methods.map((m) => [m, credentialFields[m]]),
+          p.methods.map((m) => [m, m === 'oauth2' ? [] : credentialFields[m]]),
         ),
         enabled: rows.find((r) => r.provider === p.provider)?.enabled ?? false,
       }))
@@ -156,6 +166,10 @@ export class OrganizationIntegrationsService {
     );
   }
   async connect(actor: Actor, input: ConnectionInput) {
+    if (input.provider === 'linkedin_jobs')
+      throw new ForbiddenException(
+        'LinkedIn Jobs onboarding is managed by the platform',
+      );
     await this.organization(actor);
     if (input.method === 'oauth2')
       throw new BadRequestException('Use the OAuth authorization flow');
@@ -281,6 +295,20 @@ export class OrganizationIntegrationsService {
       throw new BadRequestException(
         'OAuth consent is unsupported for this provider',
       );
+    const app = hostedOAuth(input.provider);
+    const hosted = Object.keys(input.credentials).length === 0;
+    if (hosted && !app)
+      throw new BadRequestException(
+        'Your platform administrator must configure the provider application',
+      );
+    if (input.provider === 'linkedin' && !hosted)
+      throw new BadRequestException('Use the platform LinkedIn application');
+    input = {
+      ...input,
+      credentials: hosted
+        ? { ...app!, _hosted: 'true' }
+        : { ...input.credentials },
+    };
     const endpoint =
       oauthEndpoints[input.provider as keyof typeof oauthEndpoints];
     const state = randomBytes(32).toString('hex'),
@@ -299,24 +327,37 @@ export class OrganizationIntegrationsService {
           actor.userId,
           digest(state),
           encryptSecret(
-            JSON.stringify({ input, verifier, revision, redirectUri }),
+            JSON.stringify({
+              input,
+              verifier,
+              revision,
+              redirectUri,
+              ...(hosted ? { appFingerprint: oauthFingerprint(app!) } : {}),
+            }),
             actor.tenantId + ':' + actor.userId + ':' + state,
           ),
         ],
       );
     });
     const url = new URL(endpoint.authorize);
-    const params = {
+    const params: Record<string, string> = {
       client_id: input.credentials.clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: endpoint.scope,
       state,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256',
-      access_type: 'offline',
-      prompt: 'consent',
     };
+    if (endpoint.pkce) {
+      params.code_challenge = createHash('sha256')
+        .update(verifier)
+        .digest('base64url');
+      params.code_challenge_method = 'S256';
+    }
+    if (input.provider === 'google_calendar') {
+      params.access_type = 'offline';
+      params.prompt = 'consent';
+    }
+    if (input.provider === 'microsoft_calendar') params.prompt = 'consent';
     for (const [key, value] of Object.entries(params))
       url.searchParams.set(key, value);
     return { authorizationUrl: url.toString() };
@@ -338,6 +379,11 @@ export class OrganizationIntegrationsService {
       ),
     );
     const input = payload.input as ConnectionInput;
+    if (payload.appFingerprint) {
+      const current = hostedOAuth(input.provider);
+      if (!current || oauthFingerprint(current) !== payload.appFingerprint)
+        throw new ConflictException('Provider application changed; reconnect');
+    }
     if ((await this.available(this.db, input.provider)) !== payload.revision)
       throw new ConflictException('Provider availability changed; reconnect');
     try {
@@ -349,10 +395,14 @@ export class OrganizationIntegrationsService {
           client_id: input.credentials.clientId,
           client_secret: input.credentials.clientSecret,
           redirect_uri: payload.redirectUri,
-          code_verifier: payload.verifier,
+          ...(oauthEndpoints[input.provider as keyof typeof oauthEndpoints].pkce
+            ? { code_verifier: payload.verifier }
+            : {}),
         }),
       );
       input.credentials = { ...input.credentials, ...tokens };
+      if (input.credentials._hosted === 'true')
+        delete input.credentials.clientSecret;
     } catch {
       throw new BadRequestException('Provider authorization failed; reconnect');
     }
