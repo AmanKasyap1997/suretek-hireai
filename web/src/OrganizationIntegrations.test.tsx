@@ -5,7 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AuthProvider } from './auth';
 import App from './App';
-function setup(role = 'HR_ADMIN', enabled = true) {
+function setup(
+  role = 'HR_ADMIN',
+  enabled = true,
+  oauth = false,
+  ready = false,
+  startFails = false,
+) {
   const fetcher = vi.fn(async (url: string, init: RequestInit) => {
     if (url === '/api/v1/auth/session')
       return Response.json({
@@ -19,6 +25,16 @@ function setup(role = 'HR_ADMIN', enabled = true) {
         },
         expiresAt: Date.now() + 900000,
       });
+    if (url.endsWith('/oauth/start') && startFails)
+      return Response.json(
+        { message: 'Integration encryption key is not configured' },
+        { status: 503 },
+      );
+    if (url.endsWith('/oauth/start'))
+      return Response.json({
+        authorizationUrl:
+          'https://accounts.google.com/o/oauth2/v2/auth?state=fixture',
+      });
     if (init.method === 'POST' || init.method === 'PATCH')
       return Response.json({ id: 'connection' });
     if (url.endsWith('/providers') || url.endsWith('/integration-providers'))
@@ -26,11 +42,14 @@ function setup(role = 'HR_ADMIN', enabled = true) {
         enabled
           ? [
               {
-                provider: 'openai',
-                label: 'OpenAI',
+                provider: oauth ? 'google_calendar' : 'openai',
+                label: oauth ? 'Google Calendar' : 'OpenAI',
                 enabled: true,
-                methods: ['api_key'],
-                fields: { api_key: ['apiKey'] },
+                methods: oauth ? ['oauth2', 'bearer'] : ['api_key'],
+                fields: oauth
+                  ? { oauth2: [], bearer: ['accessToken'] }
+                  : { api_key: ['apiKey'] },
+                ...(oauth ? { hostedOAuth: ready, oauthReady: ready } : {}),
               },
             ]
           : [],
@@ -60,6 +79,69 @@ function setup(role = 'HR_ADMIN', enabled = true) {
   return fetcher;
 }
 afterEach(() => vi.unstubAllGlobals());
+it('shows the backend failure on the integrations page when the popup closes', async () => {
+  const close = vi.fn();
+  const open = vi
+    .spyOn(window, 'open')
+    .mockReturnValue({ close, opener: null } as unknown as Window);
+  setup('HR_ADMIN', true, true, true, true);
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Authorize Google Calendar' }),
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Integration encryption key is not configured',
+  );
+  await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+  open.mockRestore();
+});
+it('opens Google authorization directly from the provider card when configured', async () => {
+  const replace = vi.fn();
+  const open = vi.spyOn(window, 'open').mockReturnValue({
+    location: { replace },
+    close: vi.fn(),
+    opener: window,
+  } as unknown as Window);
+  const fetcher = setup('HR_ADMIN', true, true, true);
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Authorize Google Calendar' }),
+  );
+  await waitFor(() =>
+    expect(replace).toHaveBeenCalledWith(
+      'https://accounts.google.com/o/oauth2/v2/auth?state=fixture',
+    ),
+  );
+  const request = fetcher.mock.calls.find(([url]) =>
+    url.endsWith('/oauth/start'),
+  );
+  expect(JSON.parse(request![1].body as string)).toEqual({
+    provider: 'google_calendar',
+    environment: 'sandbox',
+    method: 'oauth2',
+    credentials: {},
+  });
+  expect(screen.queryByLabelText('Client secret')).not.toBeInTheDocument();
+  open.mockRestore();
+});
+it('offers authorization and manual credentials separately and explains missing setup', async () => {
+  setup('HR_ADMIN', true, true);
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Authorize Google Calendar' }),
+  );
+  expect(screen.getByLabelText('Connection method')).toHaveValue('oauth2');
+  expect(
+    screen.getByRole('button', { name: 'Connect with Google Calendar' }),
+  ).toBeDisabled();
+  expect(
+    screen.getByText(/Authorization requires platform setup/),
+  ).toBeVisible();
+  expect(screen.queryByLabelText('Client secret')).not.toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Use Access token' }),
+  );
+  expect(screen.getByLabelText('Connection method')).toHaveValue('bearer');
+  expect(screen.getByLabelText('Access token')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Save connection' })).toBeEnabled();
+});
 it('shows only enabled providers and saves credentials without client tenant scope', async () => {
   const fetcher = setup();
   await userEvent.click(

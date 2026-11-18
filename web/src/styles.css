@@ -838,6 +838,14 @@ summary::-webkit-details-marker {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+.authorization-setup {
+  border-top: 1px solid #ddd;
+  margin: 1rem 0;
+  padding-top: 0.5rem;
+}
+.authorization-setup section {
+  margin-top: 1rem;
+}
 
 .publication-copy {
   white-space: pre-wrap;

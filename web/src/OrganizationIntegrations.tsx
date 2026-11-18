@@ -1,9 +1,10 @@
 import { LinkedInPublishing, LinkedInPartnerSetup } from './LinkedInPublishing';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from './api';
 import { useAuth } from './auth';
+import { AIProviderSetup } from './AIProviderSetup';
 type Provider = {
   hostedOAuth?: boolean;
   oauthReady?: boolean;
@@ -14,6 +15,12 @@ type Provider = {
   methods: string[];
   fields: Record<string, string[]>;
   enabled: boolean;
+  oauthSetup?: {
+    clientIdConfigured: boolean;
+    clientSecretConfigured: boolean;
+    encryptionConfigured: boolean;
+    redirectUri: string | null;
+  };
 };
 type Connection = {
   id: string;
@@ -33,7 +40,7 @@ const labels: Record<string, string> = {
   refreshToken: 'Refresh token',
   api_key: 'API key',
   bearer: 'Access token',
-  oauth2: 'OAuth consent',
+  oauth2: 'Authorization window',
   oauth_client_credentials: 'OAuth client credentials',
   oauth_refresh_token: 'OAuth refresh token',
   smtp: 'SMTP',
@@ -61,7 +68,9 @@ function useAction() {
       setMessage(
         result?.ok === false
           ? 'Connection verification failed. Check credentials and provider configuration.'
-          : 'Changes saved.',
+          : result?.authorizationUrl
+            ? 'Continue in the provider authorization window.'
+            : 'Changes saved.',
       );
       await client.invalidateQueries({
         queryKey: ['organization-integrations'],
@@ -120,6 +129,57 @@ export function ProviderAvailability() {
               <p>
                 {p.enabled ? 'Available to organization admins' : 'Disabled'}
               </p>
+              <p>Connection methods: {p.methods.map(label).join(', ')}</p>
+              <AIProviderSetup provider={p.provider} platform />
+              {p.oauthSetup && (
+                <details>
+                  <summary>Google authorization setup</summary>
+                  <p>
+                    Configure this once for HireAI. Organization admins then
+                    choose their Google account and approve Calendar access.
+                  </p>
+                  <ol>
+                    <li>
+                      In Google Cloud, enable Google Calendar API and configure
+                      Google Auth Platform branding, audience and Calendar
+                      scopes. Add test users while the app is in testing.
+                    </li>
+                    <li>
+                      Create an OAuth client of type Web application and
+                      register this exact redirect URI:{' '}
+                      <code>
+                        {p.oauthSetup.redirectUri ??
+                          'Set PUBLIC_WEB_BASE_URL on the backend first.'}
+                      </code>
+                    </li>
+                    <li>
+                      Set <code>OAUTH_GOOGLE_CALENDAR_CLIENT_ID</code> and{' '}
+                      <code>OAUTH_GOOGLE_CALENDAR_CLIENT_SECRET</code> in the
+                      backend environment, then restart it.
+                    </li>
+                  </ol>
+                  <p>
+                    Client ID:{' '}
+                    {p.oauthSetup.clientIdConfigured ? 'Configured' : 'Missing'}
+                    . Client secret:{' '}
+                    {p.oauthSetup.clientSecretConfigured
+                      ? 'Configured'
+                      : 'Missing'}
+                    . Secure integration storage:{' '}
+                    {p.oauthSetup.encryptionConfigured
+                      ? 'Configured'
+                      : 'Missing or invalid INTEGRATION_ENCRYPTION_KEY'}
+                    .
+                  </p>
+                  <a
+                    href="https://console.cloud.google.com/apis/credentials"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open Google Cloud credentials
+                  </a>
+                </details>
+              )}
               <button
                 disabled={action.busy}
                 onClick={() => {
@@ -148,12 +208,14 @@ export function ProviderAvailability() {
 }
 function ConnectionForm({
   provider,
+  initialMethod,
   onClose,
 }: {
   provider: Provider;
+  initialMethod: string;
   onClose: () => void;
 }) {
-  const [method, setMethod] = useState(provider.methods[0]),
+  const [method, setMethod] = useState(initialMethod),
     action = useAction();
   return (
     <section className="integration-card">
@@ -248,10 +310,8 @@ function ConnectionForm({
         )}
         {method === 'oauth2' && !provider.hostedOAuth && (
           <p>
-            Register the callback URL{' '}
-            <code>{window.location.origin}/console/integrations/oauth</code> in
-            your provider application. You will continue to the provider’s
-            consent screen.
+            Authorization requires platform setup. Contact your platform
+            administrator to enable this connection method.
           </p>
         )}
         {method === 'smtp' && (
@@ -312,11 +372,47 @@ function OrganizationConnections() {
       queryFn: () => api<Connection[]>(base),
     }),
     action = useAction(),
-    [selected, setSelected] = useState<string | null>(null);
-  const provider = providers.data?.find((p) => p.provider === selected);
+    [selected, setSelected] = useState<{
+      provider: string;
+      method: string;
+    } | null>(null);
+  const provider = providers.data?.find(
+    (p) => p.provider === selected?.provider,
+  );
+  const [oauthEnvironment, setOAuthEnvironment] = useState('sandbox');
+  async function authorize(p: Provider) {
+    const popup = window.open(
+      'about:blank',
+      'hireai-provider',
+      'popup,width=620,height=760',
+    );
+    if (popup) popup.opener = null;
+    const result = await action.run(base + '/oauth/start', 'POST', {
+      provider: p.provider,
+      environment: oauthEnvironment,
+      method: 'oauth2',
+      credentials: {},
+    });
+    if (result?.authorizationUrl) {
+      if (popup) popup.location.replace(result.authorizationUrl);
+      else window.location.assign(result.authorizationUrl);
+    } else popup?.close();
+  }
   return (
     <>
       <h1>Integrations</h1>
+      {providers.data?.some((p) => p.methods.includes('oauth2')) && (
+        <label>
+          Authorization environment
+          <select
+            value={oauthEnvironment}
+            onChange={(e) => setOAuthEnvironment(e.target.value)}
+          >
+            <option value="sandbox">Sandbox</option>
+            <option value="production">Production</option>
+          </select>
+        </label>
+      )}
       <p>
         Connect your organization’s accounts to providers enabled by Suretek.
       </p>
@@ -349,18 +445,45 @@ function OrganizationConnections() {
                   {p.platformManaged ? (
                     <p>{p.setupMessage}</p>
                   ) : (
-                    <button onClick={() => setSelected(p.provider)}>
-                      Connect {p.label}
-                    </button>
+                    <>
+                      <p>Connect using {p.methods.map(label).join(' or ')}.</p>
+                      <div className="integration-actions">
+                        {p.methods.map((method) => (
+                          <button
+                            key={method}
+                            disabled={action.busy}
+                            onClick={() => {
+                              if (
+                                method === 'oauth2' &&
+                                p.oauthReady &&
+                                p.hostedOAuth
+                              )
+                                void authorize(p);
+                              else
+                                setSelected({ provider: p.provider, method });
+                            }}
+                          >
+                            {method === 'oauth2'
+                              ? `Authorize ${p.label}`
+                              : p.methods.length === 1
+                                ? `Connect ${p.label}`
+                                : `Use ${label(method)}`}
+                          </button>
+                        ))}
+                      </div>
+                      {p.setupMessage && <p>{p.setupMessage}</p>}
+                      <AIProviderSetup provider={p.provider} />
+                    </>
                   )}
                 </article>
               ))}
             </div>
           )}
-          {provider && (
+          {provider && selected && (
             <ConnectionForm
-              key={provider.provider}
+              key={provider.provider + ':' + selected.method}
               provider={provider}
+              initialMethod={selected.method}
               onClose={() => setSelected(null)}
             />
           )}
@@ -377,7 +500,10 @@ function OrganizationConnections() {
                   <p>
                     {label(c.method)} · {c.credential_hint}
                   </p>
-                  <p>Status: {c.status}</p>
+                  <p>
+                    Status:{' '}
+                    {c.status === 'ok' ? 'Connected (verified)' : c.status}
+                  </p>
                   <p>
                     Last verified:{' '}
                     {c.last_verified_at
@@ -444,62 +570,91 @@ function OrganizationConnections() {
   );
 }
 export function IntegrationOAuthCallback() {
-  const { session } = useAuth(),
-    action = useAction();
+  const { session, status } = useAuth();
+  const cache = useQueryClient();
   const [params] = useState(() => new URLSearchParams(window.location.search));
-  const [done, setDone] = useState(false);
+  const started = useRef(false);
+  const [result, setResult] = useState('');
+  const [error, setError] = useState('');
+  const allowed =
+    !!session &&
+    session.user.role !== 'SUPER_ADMIN' &&
+    [session.user.role, ...(session.user.roles ?? [])].includes('HR_ADMIN');
+  const invalid =
+    !!params.get('error') || !params.get('code') || !params.get('state');
   useEffect(() => {
-    window.history.replaceState(null, '', window.location.pathname);
+    window.history.replaceState(
+      window.history.state,
+      '',
+      window.location.pathname,
+    );
   }, []);
-  if (
-    !session ||
-    session.user.role === 'SUPER_ADMIN' ||
-    ![session.user.role, ...(session.user.roles ?? [])].includes('HR_ADMIN')
-  )
-    return <h1>Not authorized</h1>;
+  useEffect(() => {
+    if (!allowed || invalid || started.current) return;
+    started.current = true;
+    void (async () => {
+      try {
+        const connection = await api<{ id: string }>(base + '/oauth/complete', {
+          method: 'POST',
+          body: JSON.stringify({
+            state: params.get('state'),
+            code: params.get('code'),
+          }),
+        });
+        let verified = false;
+        try {
+          const check = await api<{ ok: boolean }>(
+            base + '/' + connection.id + '/test',
+            { method: 'POST' },
+          );
+          verified = check.ok;
+        } catch {
+          /* The authorization is saved even if verification fails. */
+        }
+        setResult(
+          verified
+            ? 'Connected and verified. You can now enable this connection in Integrations.'
+            : 'Account connected, but verification failed. Return to Integrations to test the connection.',
+        );
+        await cache.invalidateQueries({
+          queryKey: ['organization-integrations'],
+        });
+        if (typeof BroadcastChannel !== 'undefined') {
+          const channel = new BroadcastChannel('hireai-provider-connection');
+          channel.postMessage({ completed: true });
+          channel.close();
+        }
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : 'Authorization failed. Start again from Integrations.',
+        );
+      }
+    })();
+  }, [allowed, invalid, params, cache]);
+  if (status === 'loading') return <p role="status">Loading your session…</p>;
+  if (!allowed) return <h1>Not authorized</h1>;
   return (
     <>
-      <h1>Complete provider connection</h1>
-      {params.get('error') || !params.get('code') || !params.get('state') ? (
+      <h1>Provider connection</h1>
+      {invalid ? (
         <p role="alert">
           Authorization was declined or the callback is incomplete. Start again
           from Integrations.
         </p>
-      ) : done ? (
-        <p role="status">
-          Account connected. Return to Integrations to test and enable it.{' '}
+      ) : error ? (
+        <p role="alert">{error}</p>
+      ) : result ? (
+        <div>
+          <p role="status">{result}</p>
           <button onClick={() => window.close()}>
             Close authorization window
           </button>
-        </p>
+        </div>
       ) : (
-        <>
-          <p>Save the authorized account to your organization.</p>
-          <button
-            disabled={action.busy}
-            onClick={async () => {
-              const result = await action.run(
-                base + '/oauth/complete',
-                'POST',
-                { state: params.get('state'), code: params.get('code') },
-              );
-              if (result) {
-                setDone(true);
-                if (typeof BroadcastChannel !== 'undefined') {
-                  const channel = new BroadcastChannel(
-                    'hireai-provider-connection',
-                  );
-                  channel.postMessage({ completed: true });
-                  channel.close();
-                }
-              }
-            }}
-          >
-            Complete connection
-          </button>
-        </>
+        <p role="status">Connecting and verifying your account…</p>
       )}
-      <Feedback action={action} />
       <Link to="/integrations">Back to integrations</Link>
     </>
   );

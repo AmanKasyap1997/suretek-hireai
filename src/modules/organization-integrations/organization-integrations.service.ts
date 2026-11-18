@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { DbClient, DbService } from '../../platform/database/db.service';
@@ -15,6 +16,7 @@ import {
   encryptSecret,
   decryptSecret,
   maskSecret,
+  integrationEncryptionConfigured,
 } from '../super-admin/secrets';
 import {
   catalog,
@@ -48,18 +50,44 @@ export class OrganizationIntegrationsService {
     const rows = await this.db.query(
       'SELECT provider,enabled,revision FROM integration_providers',
     );
+    let redirectUri: string | null = null;
+    try {
+      redirectUri = callbackUrl();
+    } catch {
+      /* Report incomplete setup. */
+    }
     return catalog
       .map((p) => ({
         ...p,
         hostedOAuth: !!hostedOAuth(p.provider),
-        oauthReady: !p.methods.includes('oauth2') || !!hostedOAuth(p.provider),
+        oauthReady:
+          p.methods.includes('oauth2') &&
+          !!hostedOAuth(p.provider) &&
+          !!redirectUri &&
+          integrationEncryptionConfigured(),
+        ...(platform && p.provider === 'google_calendar'
+          ? {
+              oauthSetup: {
+                clientIdConfigured:
+                  !!process.env.OAUTH_GOOGLE_CALENDAR_CLIENT_ID,
+                clientSecretConfigured:
+                  !!process.env.OAUTH_GOOGLE_CALENDAR_CLIENT_SECRET,
+                redirectUri,
+                encryptionConfigured: integrationEncryptionConfigured(),
+              },
+            }
+          : {}),
         platformManaged: p.provider === 'linkedin_jobs',
         setupMessage:
           p.provider === 'linkedin_jobs'
             ? 'LinkedIn partner approval and organization onboarding are required. Contact your platform administrator.'
-            : p.methods.includes('oauth2') && !hostedOAuth(p.provider)
-              ? 'Your platform administrator must configure the provider application.'
-              : null,
+            : p.methods.includes('oauth2') &&
+                (!hostedOAuth(p.provider) || !redirectUri)
+              ? 'HireAI’s provider application is not configured. The deployment operator must add its OAuth credentials and public callback URL, then restart the backend.'
+              : p.methods.includes('oauth2') &&
+                  !integrationEncryptionConfigured()
+                ? 'Secure integration storage is not configured. The deployment operator must set INTEGRATION_ENCRYPTION_KEY to 64 hexadecimal characters and restart the backend.'
+                : null,
         fields: Object.fromEntries(
           p.methods.map((m) => [m, m === 'oauth2' ? [] : credentialFields[m]]),
         ),
@@ -291,6 +319,10 @@ export class OrganizationIntegrationsService {
   }
   async startOAuth(actor: Actor, input: ConnectionInput) {
     await this.organization(actor);
+    if (!integrationEncryptionConfigured())
+      throw new ServiceUnavailableException(
+        'Integration encryption key is not configured',
+      );
     if (input.method !== 'oauth2' || !(input.provider in oauthEndpoints))
       throw new BadRequestException(
         'OAuth consent is unsupported for this provider',
@@ -355,7 +387,7 @@ export class OrganizationIntegrationsService {
     }
     if (input.provider === 'google_calendar') {
       params.access_type = 'offline';
-      params.prompt = 'consent';
+      params.prompt = 'select_account consent';
     }
     if (input.provider === 'microsoft_calendar') params.prompt = 'consent';
     for (const [key, value] of Object.entries(params))

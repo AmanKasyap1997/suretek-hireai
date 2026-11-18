@@ -70,7 +70,9 @@ export class ErrorBoundary extends Component<
 export function Guard() {
   const auth = useAuth(),
     location = useLocation();
-  if (auth.status === 'loading')
+  // A focus-triggered refresh keeps the current session while it is checked.
+  // Preserve mounted pages (especially one-time OAuth callbacks) during that check.
+  if (auth.status === 'loading' && !auth.session)
     return (
       <main className="standalone" role="status">
         Loading your workspace…

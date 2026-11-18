@@ -1,5 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { ServiceUnavailableException } from '@nestjs/common';
+export function integrationEncryptionConfigured() {
+  return /^[a-f0-9]{64}$/i.test(process.env.INTEGRATION_ENCRYPTION_KEY ?? '');
+}
 function key() {
   const raw = process.env.INTEGRATION_ENCRYPTION_KEY;
   if (!raw || !/^[a-f0-9]{64}$/i.test(raw))
