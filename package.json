@@ -21,7 +21,8 @@
     "test": "jest --runInBand",
     "enums:generate": "tsx scripts/generate-enum-migration.ts",
     "enums:check": "tsx scripts/generate-enum-migration.ts --check",
-    "documents:scan": "node dist/scripts/documents-scan.js"
+    "documents:scan": "node dist/scripts/documents-scan.js",
+    "api:check": "tsx scripts/check-api-routes.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",

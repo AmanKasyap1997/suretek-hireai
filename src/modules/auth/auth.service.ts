@@ -35,9 +35,19 @@ export class AuthService {
     }
     if (!tenantId) {
       await verifyPassword(input.password, await this.dummyHash);
+      await this.db.query('SELECT audit_unresolved_login()');
       throw new UnauthorizedException('Invalid credentials');
     }
     setTenantId(tenantId);
+    const tenant = await this.db.one(
+      'SELECT status,deleted_at FROM tenants WHERE id=$1',
+      [tenantId],
+    );
+    if (!tenant) {
+      await verifyPassword(input.password, await this.dummyHash);
+      await this.db.query('SELECT audit_unresolved_login()');
+      throw new UnauthorizedException('Invalid credentials');
+    }
     const user = await this.db.one(
       'SELECT id,tenant_id,password_hash,active FROM users WHERE tenant_id=$1 AND lower(email)=$2',
       [tenantId, input.email],
@@ -56,15 +66,20 @@ export class AuthService {
       );
       throw new UnauthorizedException('Invalid credentials');
     }
-    const tenant = await this.db.one(
-      'SELECT status,deleted_at FROM tenants WHERE id=$1',
-      [tenantId],
-    );
-    if (!tenant || tenant.status === 'suspended' || tenant.deleted_at)
+    if (tenant.status === 'suspended' || tenant.deleted_at) {
+      await audit(
+        this.db,
+        { tenantId, userId: user.id },
+        'auth.login_failed',
+        'user',
+        user.id,
+        { reason: 'organization_unavailable' },
+      );
       throw new HttpException(
         'Organization is suspended. Contact your administrator.',
         423,
       );
+    }
     await this.db.query(
       'UPDATE users SET last_login_at=now() WHERE tenant_id=$1 AND id=$2',
       [tenantId, user.id],
@@ -162,6 +177,11 @@ export class AuthService {
       throw new ForbiddenException(
         'Organization administrators can create staff only; use organization provisioning for initial administrators',
       );
+    const policy = await this.db.one(
+      "SELECT value FROM platform_settings WHERE key='defaults'",
+    );
+    if (input.password.length < (policy?.value.password_min_length ?? 12))
+      throw new BadRequestException('Password is shorter than platform policy');
     const hash = await hashPassword(input.password);
     return this.db.transaction(async (tx) => {
       const user = await tx.one(

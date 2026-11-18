@@ -87,7 +87,10 @@ export class SuperAdminService {
         `SELECT (SELECT count(*)::int FROM users WHERE tenant_id=$1) AS users,
     (SELECT coalesce(sum(byte_size),0)::float/1048576 FROM candidate_documents WHERE tenant_id=$1) AS storage_mb,
     (SELECT coalesce(sum(duration_seconds),0)::float/60 FROM call_requests WHERE tenant_id=$1 AND created_at>=date_trunc('month',now())) AS call_minutes,
-    (SELECT count(*)::int FROM call_requests WHERE tenant_id=$1 AND duration_seconds IS NULL AND created_at>=date_trunc('month',now())) AS unmetered_calls`,
+    (SELECT count(*)::int FROM call_requests WHERE tenant_id=$1 AND duration_seconds IS NULL AND created_at>=date_trunc('month',now())) AS unmetered_calls,
+    (SELECT coalesce(sum(error_count),0)::int FROM integration_configs WHERE tenant_id=$1 AND organization_id=$1) AS integration_errors,
+    (SELECT count(*)::int FROM integration_configs c JOIN integration_providers p ON p.provider=c.provider AND p.enabled AND p.revision=c.provider_revision WHERE c.tenant_id=$1 AND c.organization_id=$1 AND c.status IN ('ok','enabled')) AS integrations_ok,
+    (SELECT count(*)::int FROM integration_configs c JOIN integration_providers p ON p.provider=c.provider AND p.enabled AND p.revision=c.provider_revision WHERE c.tenant_id=$1 AND c.organization_id=$1 AND c.status='failing') AS integrations_failing`,
         [id],
       );
       await tx.query("SELECT set_config('app.tenant_id',$1,true)", [
@@ -240,17 +243,22 @@ export class SuperAdminService {
       total_users: rows.reduce((n, r) => n + r.usage.users, 0),
       new_this_month: rows.filter((r) => new Date(r.created_at) >= month)
         .length,
-      integrations_ok: report.integrations.filter((r) =>
-        ['ok', 'enabled'].includes(r.status),
-      ).length,
-      integrations_failing: report.integrations.filter(
-        (r) => r.status === 'failing',
-      ).length,
+      integrations_ok:
+        report.integrations.filter((r) => ['ok', 'enabled'].includes(r.status))
+          .length +
+        rows.reduce((n, r) => n + (r.usage.integrations_ok ?? 0), 0),
+      integrations_failing:
+        report.integrations.filter((r) => r.status === 'failing').length +
+        rows.reduce((n, r) => n + (r.usage.integrations_failing ?? 0), 0),
       attention: rows.filter(
         (r) =>
           r.usage.users >= r.limits.max_users * 0.9 ||
-          r.usage.storage_mb >= r.limits.storage_mb * 0.9 ||
-          (r.trial_ends_at &&
+          (r.usage.storage_mb > 0 &&
+            r.usage.storage_mb >= r.limits.storage_mb * 0.9) ||
+          (r.usage.call_minutes > 0 &&
+            r.usage.call_minutes >= r.limits.call_minutes_per_month * 0.9) ||
+          (r.status === 'trial' &&
+            r.trial_ends_at &&
             new Date(r.trial_ends_at).getTime() < Date.now() + 7 * 86400000),
       ),
       recent_events: (
@@ -267,7 +275,7 @@ export class SuperAdminService {
   async logs(actor: Actor, f: Filters) {
     await requirePlatform(this.db, actor);
     const where =
-      'tenant_id=$1 AND ($2::text IS NULL OR action=$2) AND ($3::uuid IS NULL OR entity_id=$3) AND ($4::timestamptz IS NULL OR created_at>=$4) AND ($5::timestamptz IS NULL OR created_at<=$5)';
+      "tenant_id=$1 AND ($2::text IS NULL OR action=$2) AND ($3::uuid IS NULL OR (entity_type='organization' AND entity_id=$3) OR metadata->>'organization_id'=$3::text OR (entity_type='integration' AND entity_id IN (SELECT id FROM integration_configs WHERE tenant_id=$1 AND organization_id=$3))) AND ($4::timestamptz IS NULL OR created_at>=$4) AND ($5::timestamptz IS NULL OR created_at<=$5)";
     const params = [
       actor.tenantId,
       f.action ?? null,
@@ -335,6 +343,7 @@ export class SuperAdminService {
       await audit(tx, actor, 'integration.saved', 'integration', row!.id, {
         provider: input.provider,
         environment: input.environment,
+        organization_id: input.organization_id,
       });
       return row;
     });
@@ -383,6 +392,11 @@ export class SuperAdminService {
       /* Provider errors may contain secrets. */
     }
     await this.db.transaction(async (tx) => {
+      // Use the same lock order as rotation and enable. A failed sandbox test
+      // must revoke production approval even when enable is concurrent.
+      await tx.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE', [
+        actor.tenantId,
+      ]);
       const updated = await tx.one(
         "UPDATE integration_configs SET status=$3,last_verified_at=CASE WHEN $3='ok' THEN now() ELSE NULL END,error_count=error_count+$4 WHERE tenant_id=$1 AND id=$2 AND encrypted_credentials=$5 RETURNING id",
         [
@@ -395,7 +409,15 @@ export class SuperAdminService {
       );
       if (!updated)
         throw new ConflictException('Credentials changed; test again');
-      await audit(tx, actor, 'integration.tested', 'integration', id, { ok });
+      if (!ok && row.environment === 'sandbox')
+        await tx.query(
+          "UPDATE integration_configs SET status='unverified' WHERE tenant_id=$1 AND provider=$2 AND organization_id IS NOT DISTINCT FROM $3::uuid AND environment='production'",
+          [actor.tenantId, row.provider, row.organization_id],
+        );
+      await audit(tx, actor, 'integration.tested', 'integration', id, {
+        ok,
+        organization_id: row.organization_id,
+      });
     });
     return { ok };
   }
@@ -427,7 +449,9 @@ export class SuperAdminService {
         "UPDATE integration_configs SET status='enabled' WHERE tenant_id=$1 AND id=$2",
         [actor.tenantId, id],
       );
-      await audit(tx, actor, 'integration.enabled', 'integration', id);
+      await audit(tx, actor, 'integration.enabled', 'integration', id, {
+        organization_id: row.organization_id,
+      });
       return { id };
     });
   }
@@ -440,7 +464,18 @@ export class SuperAdminService {
     return {
       defaults: row?.value ?? defaultSettings,
       roles: Object.values(Role),
-      role_templates: {SUPER_ADMIN:['Platform governance; no tenant business access'],HR_ADMIN:['Organization staff administration','Hiring','Core HR'],RECRUITER:['Hiring and recruitment reports'],HIRING_MANAGER:['Assigned jobs, applications and interviews'],INTERVIEWER:['Assigned interviews and scorecards'],CANDIDATE:['Own authenticated profile'],EMPLOYEE:['Own authenticated profile'],REPORTING_MANAGER:['Own authenticated profile'],PAYROLL_FINANCE:['Own authenticated profile'],IT_ASSET_ADMIN:['Own authenticated profile']},
+      role_templates: {
+        SUPER_ADMIN: ['Platform governance; no tenant business access'],
+        HR_ADMIN: ['Organization staff administration', 'Hiring', 'Core HR'],
+        RECRUITER: ['Hiring and recruitment reports'],
+        HIRING_MANAGER: ['Assigned jobs, applications and interviews'],
+        INTERVIEWER: ['Assigned interviews and scorecards'],
+        CANDIDATE: ['Own authenticated profile'],
+        EMPLOYEE: ['Own authenticated profile'],
+        REPORTING_MANAGER: ['Own authenticated profile'],
+        PAYROLL_FINANCE: ['Own authenticated profile'],
+        IT_ASSET_ADMIN: ['Own authenticated profile'],
+      },
     };
   }
   async saveSettings(actor: Actor, value: z.infer<typeof settingsSchema>) {
@@ -463,8 +498,9 @@ export class SuperAdminService {
   }
   async addAdmin(actor: Actor, input: z.infer<typeof adminSchema>) {
     await requirePlatform(this.db, actor);
-    const policy=await this.settings(actor);
-    if(input.password.length<policy.defaults.password_min_length) throw new BadRequestException('Password is shorter than platform policy');
+    const policy = await this.settings(actor);
+    if (input.password.length < policy.defaults.password_min_length)
+      throw new BadRequestException('Password is shorter than platform policy');
     const hash = await hashPassword(input.password);
     return this.db.transaction(async (tx) => {
       const row = await tx.one(

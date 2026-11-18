@@ -66,3 +66,9 @@ F1 provides unified sign-in and a shared role console with disabled coming-soon 
 ## SaaS onboarding extension
 
 Platform Super Admin provisions organizations and their initial admin via invitation email. Organization Admin manages scoped staff invitations/status; recipients set their own password before sign-in. One console build serves all organization keys. This user-requested extension supersedes F1's original single-tenant scope, without adding business-module screens or billing. See [SaaS onboarding](saas-onboarding.md).
+
+## Super Admin governance completion
+
+The platform owner now has all six governance screens, real aggregate dashboard/reports, organization lifecycle and phase/module controls, encrypted sandbox/production provider configuration, global policies, administrator management and read-only audit export. Migration 016 adds anonymous audit evidence for unresolved-organization login failures. Tenant IDs and existing RLS are preserved; Super Admin cannot access candidate/employee business records. Integration verification is an explicit operator action against fixed/configured HTTPS endpoints; it does not execute screening, scheduling or calls.
+
+This supersedes the earlier F1 limitations for branding and forced initial password changes: supplied Suretek assets are present, and new platform accounts must change their initial password. Refresh/revocation, optional TOTP/recovery enrollment, support impersonation and unfinished tenant business screens remain outside this completion. See [operations](super-admin.md) and [verification](super-admin-verification.md).

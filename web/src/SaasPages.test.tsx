@@ -72,7 +72,10 @@ it('gives Super Admin organization provisioning only and reports email failure a
     screen.getByLabelText('First HR Admin name'),
     'Acme administrator',
   );
-  await userEvent.type(screen.getByLabelText('First HR Admin email'), 'admin@acme.test');
+  await userEvent.type(
+    screen.getByLabelText('First HR Admin email'),
+    'admin@acme.test',
+  );
   await userEvent.click(
     screen.getByRole('button', { name: 'Create organization & invite admin' }),
   );

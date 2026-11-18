@@ -70,11 +70,11 @@ export class SaasService {
   async organizations(actor: Actor, page: ListInput) {
     await this.platform(actor);
     const data = await this.db.query(
-      'SELECT organization_id AS id,name,slug,admin_name,admin_email,delivery_status,created_at FROM platform_organizations WHERE tenant_id=$1 ORDER BY created_at DESC,id LIMIT $2 OFFSET $3',
+      'SELECT organization_id AS id,name,slug,admin_name,admin_email,delivery_status,created_at FROM platform_organizations WHERE tenant_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id LIMIT $2 OFFSET $3',
       [actor.tenantId, page.limit, page.offset],
     );
     const count = await this.db.one(
-      'SELECT count(*)::int AS total FROM platform_organizations WHERE tenant_id=$1',
+      'SELECT count(*)::int AS total FROM platform_organizations WHERE tenant_id=$1 AND deleted_at IS NULL',
       [actor.tenantId],
     );
     return { data, pagination: { ...page, total: count!.total } };
@@ -101,9 +101,16 @@ export class SaasService {
             invitation.expiresAt,
           ],
         ))!;
-        await tx.query("SELECT set_config('app.tenant_id',$1,true)",[created.organization_id]);
-        await tx.query('UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',[created.organization_id,created.invitation_id,actor.userId]);
-        await tx.query("SELECT set_config('app.tenant_id',$1,true)",[actor.tenantId]);
+        await tx.query("SELECT set_config('app.tenant_id',$1,true)", [
+          created.organization_id,
+        ]);
+        await tx.query(
+          'UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',
+          [created.organization_id, created.invitation_id, actor.userId],
+        );
+        await tx.query("SELECT set_config('app.tenant_id',$1,true)", [
+          actor.tenantId,
+        ]);
         await tx.query(
           'UPDATE platform_organizations SET domain=$3,country=$4,timezone=$5,status=$6,plan=$7,enabled_modules=$8,limits=$9,trial_ends_at=$10,created_by=$11 WHERE tenant_id=$1 AND organization_id=$2',
           [
@@ -177,11 +184,16 @@ export class SaasService {
         admin_user_id: string;
         name: string;
         slug: string;
+        status: string;
       }>(
-        'SELECT organization_id,admin_user_id,name,slug FROM platform_organizations WHERE tenant_id=$1 AND organization_id=$2 FOR UPDATE',
+        'SELECT organization_id,admin_user_id,name,slug,status FROM platform_organizations WHERE tenant_id=$1 AND organization_id=$2 AND deleted_at IS NULL FOR UPDATE',
         [actor.tenantId, organizationId],
       );
       if (!row) throw new NotFoundException();
+      if (row.status === 'suspended')
+        throw new ConflictException(
+          'Reactivate the organization before resending invitations',
+        );
       // Switch only this transaction's RLS scope, then restore the platform
       // scope before updating its directory. Token rotation and metadata commit together.
       await tx.query("SELECT set_config('app.tenant_id',$1,true)", [
@@ -193,8 +205,13 @@ export class SaasService {
         row.admin_user_id,
         null,
       );
-      await tx.query('UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',[row.organization_id,invite.id,actor.userId]);
-      await tx.query("SELECT set_config('app.tenant_id',$1,true)", [actor.tenantId]);
+      await tx.query(
+        'UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',
+        [row.organization_id, invite.id, actor.userId],
+      );
+      await tx.query("SELECT set_config('app.tenant_id',$1,true)", [
+        actor.tenantId,
+      ]);
       await tx.query(
         'UPDATE platform_organizations SET last_invitation_id=$3,delivery_status=$4 WHERE tenant_id=$1 AND organization_id=$2',
         [actor.tenantId, organizationId, invite.id, 'PENDING'],
@@ -297,7 +314,10 @@ export class SaasService {
           'INSERT INTO user_invitations(tenant_id,user_id,token_hash,expires_at) VALUES($1,$2,$3,$4) RETURNING id',
           [actor.tenantId, user!.id, invitation.hash, invitation.expiresAt],
         );
-        await tx.query('UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',[actor.tenantId,row!.id,actor.userId]);
+        await tx.query(
+          'UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',
+          [actor.tenantId, row!.id, actor.userId],
+        );
         await audit(tx, actor, 'user.invited', 'user', user!.id, {
           role: input.role,
         });
@@ -380,7 +400,10 @@ export class SaasService {
       'INSERT INTO user_invitations(tenant_id,user_id,token_hash,expires_at) VALUES($1,$2,$3,$4) RETURNING id',
       [tenantId, userId, invitation.hash, invitation.expiresAt],
     );
-    await tx.query('UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',[tenantId,row!.id,actorId]);
+    await tx.query(
+      'UPDATE user_invitations SET invited_by=$3 WHERE tenant_id=$1 AND id=$2',
+      [tenantId, row!.id, actorId],
+    );
     await audit(
       tx,
       { tenantId, userId: actorId },

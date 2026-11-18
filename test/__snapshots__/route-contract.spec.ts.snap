@@ -573,6 +573,118 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     ],
   },
   {
+    "method": "GET",
+    "path": "/api/v1/organization/integrations",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/organization/integrations",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/organization/integrations/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/organization/integrations/:id/enable",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/organization/integrations/:id/test",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/organization/integrations/linkedin/jobs",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/organization/integrations/linkedin/pages",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/organization/integrations/linkedin/preview",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/organization/integrations/linkedin/publications",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/organization/integrations/linkedin/publications/:id/publish",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/organization/integrations/linkedin/publications/:id/refresh",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/organization/integrations/oauth/complete",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/organization/integrations/oauth/start",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/organization/integrations/providers",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
     "method": "POST",
     "path": "/api/v1/public/:tenantSlug/contact-verification",
     "public": true,
@@ -737,6 +849,30 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
   {
     "method": "GET",
     "path": "/api/v1/super-admin/dashboard",
+    "public": false,
+    "roles": [
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/super-admin/integration-providers",
+    "public": false,
+    "roles": [
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/super-admin/integration-providers/:provider",
+    "public": false,
+    "roles": [
+      "SUPER_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/super-admin/integration-providers/linkedin-jobs/organizations/:id",
     "public": false,
     "roles": [
       "SUPER_ADMIN",

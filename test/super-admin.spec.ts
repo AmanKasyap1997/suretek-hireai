@@ -90,4 +90,28 @@ describe('Super Admin security policy', () => {
     expect(csvCell('=HYPERLINK("bad")')).toBe('"\'=HYPERLINK(""bad"")"');
     expect(csvCell('normal, "quoted"')).toBe('"normal, ""quoted"""');
   });
+  it('warns on actual usage and active trials without zero-quota false alarms', async () => {
+    const service = new SuperAdminService({} as DbService);
+    const base = {
+      status: 'active',
+      created_at: new Date(0),
+      limits: { max_users: 100, storage_mb: 0, call_minutes_per_month: 100 },
+      usage: { users: 1, storage_mb: 0, call_minutes: 0 },
+    };
+    jest.spyOn(service, 'reports').mockResolvedValue({
+      organizations: [
+        { ...base, id: 'normal', trial_ends_at: new Date(0) },
+        { ...base, id: 'calls', usage: { ...base.usage, call_minutes: 95 } },
+        { ...base, id: 'trial', status: 'trial', trial_ends_at: new Date() },
+      ],
+      integrations: [],
+    });
+    jest.spyOn(service, 'logs').mockResolvedValue({
+      data: [],
+      pagination: { limit: 10, offset: 0, total: 0 },
+    });
+    expect((await service.dashboard(actor)).attention.map((r) => r.id)).toEqual(
+      ['calls', 'trial'],
+    );
+  });
 });

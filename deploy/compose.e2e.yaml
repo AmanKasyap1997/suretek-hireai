@@ -54,6 +54,7 @@ services:
       DATABASE_URL: postgresql://hireai_app:${HIREAI_APP_PASSWORD}@postgres:5432/hireai_test
       JWT_SECRET: ${JWT_SECRET:?}
       JWT_EXPIRES_IN_SECONDS: '60'
+      INTEGRATION_ENCRYPTION_KEY: abababababababababababababababababababababababababababababababab
       CORS_ORIGINS: http://localhost:5173
       EMAIL_ADAPTER: smtp
       SMTP_HOST: mail

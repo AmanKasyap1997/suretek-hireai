@@ -1,4 +1,8 @@
 import {
+  OrganizationIntegrations,
+  IntegrationOAuthCallback,
+} from './OrganizationIntegrations';
+import {
   SuperAdminPage,
   SuperAdminDetail,
   PasswordChange,
@@ -66,7 +70,9 @@ export class ErrorBoundary extends Component<
 export function Guard() {
   const auth = useAuth(),
     location = useLocation();
-  if (auth.status === 'loading')
+  // A focus-triggered refresh keeps the current session while it is checked.
+  // Preserve mounted pages (especially one-time OAuth callbacks) during that check.
+  if (auth.status === 'loading' && !auth.session)
     return (
       <main className="standalone" role="status">
         Loading your workspace…
@@ -292,6 +298,7 @@ function Shell() {
         Skip to content
       </a>
       <header className="app-header">
+        <Brand />
         <button
           className="menu-toggle"
           aria-label="Toggle navigation"
@@ -300,7 +307,6 @@ function Shell() {
         >
           Menu
         </button>
-        <Brand />
         <span className="platform-label">
           Recruitment &amp; People Platform
         </span>
@@ -333,7 +339,18 @@ function Shell() {
           </button>
         </details>
       </header>
-      <aside>
+      <aside
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setMenuOpen(false);
+            document.querySelector<HTMLButtonElement>('.menu-toggle')?.focus();
+          }
+        }}
+        onClick={(e) => {
+          if (window.innerWidth <= 900 && (e.target as Element).closest('a'))
+            setMenuOpen(false);
+        }}
+      >
         <div className="sidebar-title">
           Suretek <strong>HireAI</strong>
           <span>{user.organization_name ?? 'by Suretek Infosoft'}</span>
@@ -505,6 +522,10 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
+      {/* Own the one-time callback outside Guard: session retries must not
+          unmount it after its authorization code has been removed from the URL.
+          The callback checks the session/role before any exchange itself. */}
+      <Route path="integrations/oauth" element={<IntegrationOAuthCallback />} />
       <Route element={<Guard />}>
         <Route element={<Shell />}>
           <Route index element={<Index />} />
@@ -513,10 +534,13 @@ export default function App() {
             path="super-admin/organizations/:id"
             element={<SuperAdminDetail />}
           />
+          <Route path="integrations" element={<OrganizationIntegrations />} />
           <Route path="home/:role" element={<Home />} />
-          {navigation.map((n) => (
-            <Route key={n.id} path={n.id} element={<Future id={n.id} />} />
-          ))}
+          {navigation
+            .filter((n) => n.id !== 'integrations')
+            .map((n) => (
+              <Route key={n.id} path={n.id} element={<Future id={n.id} />} />
+            ))}
           <Route path="forbidden" element={<Forbidden />} />
           <Route
             path="*"

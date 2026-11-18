@@ -26,7 +26,13 @@ for (const [index, role] of roles.entries())
             : `${roleLabel(role)} overview`,
       }),
     ).toBeVisible();
-    for (const item of visibleNavigation(role)) {
+    for (const item of visibleNavigation(role, [
+      'hiring',
+      'core_hr',
+      'leave',
+      'attendance',
+      'onboarding',
+    ])) {
       const nav = page.getByRole('navigation');
       if (item.built)
         await expect(
@@ -37,6 +43,10 @@ for (const [index, role] of roles.entries())
           nav.getByRole('button', { name: new RegExp(item.label) }),
         ).toBeDisabled();
     }
+    if (role === 'HR_ADMIN')
+      await expect(
+        page.getByRole('navigation').getByRole('button', { name: /Payroll/ }),
+      ).toHaveCount(0);
     await page.reload();
     await expect(
       page.getByRole('heading', {
