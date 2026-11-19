@@ -19,8 +19,6 @@ import { effectiveCredentials } from './hosted-oauth';
 import { exchange } from './provider-client';
 import { linkedinPreviewSchema, linkedinSetupSchema } from './linkedin.schemas';
 import {
-  companyPages,
-  ownsPage,
   sendLinkedIn,
   jobTask,
 } from './linkedin-client';
@@ -67,7 +65,7 @@ export class LinkedInService {
   }
   private async connection(
     actor: Actor,
-    provider: 'linkedin' | 'linkedin_jobs',
+    provider: 'linkedin_jobs',
   ) {
     await this.organization(actor);
     return this.db.transaction(async (tx) => {
@@ -92,23 +90,13 @@ export class LinkedInService {
         Number(credentials.expiresAt ?? 0) <= Date.now() + 60000
       ) {
         const auth = effectiveCredentials(provider, credentials);
-        if (provider === 'linkedin' && !auth.refreshToken)
-          throw new ConflictException(
-            'LinkedIn authorization expired; reconnect',
-          );
         try {
           const tokens = await exchange(
             provider,
             new URLSearchParams({
-              grant_type:
-                provider === 'linkedin_jobs'
-                  ? 'client_credentials'
-                  : 'refresh_token',
+              grant_type: 'client_credentials',
               client_id: auth.clientId,
               client_secret: auth.clientSecret,
-              ...(provider === 'linkedin'
-                ? { refresh_token: auth.refreshToken }
-                : {}),
             }),
           );
           credentials = { ...credentials, ...tokens };
@@ -203,88 +191,45 @@ export class LinkedInService {
       [actor.tenantId],
     );
   }
-  async pages(actor: Actor, start: number) {
-    const c = await this.connection(actor, 'linkedin');
-    try {
-      return await companyPages(c.token, start);
-    } catch {
-      throw new BadRequestException(
-        'LinkedIn pages could not be loaded. Check organization permissions or reconnect.',
-      );
-    }
-  }
   async history(actor: Actor) {
     await this.organization(actor);
     return this.db.query(
-      'SELECT id,job_id,channel,status,remote_id,remote_url,error_code,created_at FROM integration_publications WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 100',
+      "SELECT id,job_id,channel,status,remote_id,remote_url,error_code,created_at FROM integration_publications WHERE tenant_id=$1 AND channel='job_listing' ORDER BY created_at DESC LIMIT 100",
       [actor.tenantId],
     );
   }
   async preview(actor: Actor, input: z.infer<typeof linkedinPreviewSchema>) {
-    const provider =
-      input.channel === 'job_listing' ? 'linkedin_jobs' : 'linkedin';
-    const c = await this.connection(actor, provider);
+    const c = await this.connection(actor, 'linkedin_jobs');
     const job = await this.db.one(
       "SELECT id,title,description,location,created_at,updated_at,updated_at::text AS version FROM jobs WHERE tenant_id=$1 AND id=$2 AND status='PUBLISHED'",
       [actor.tenantId, input.jobId],
     );
     if (!job) throw new NotFoundException('Published job not found');
-    let request: Record<string, unknown>;
-    if (input.channel === 'company_announcement') {
-      if (
-        !input.pageUrn ||
-        !(await ownsPage(c.token, input.pageUrn, input.pageStart))
-      )
-        throw new ForbiddenException(
-          'Choose a company page you are authorized to publish for',
-        );
-      request = {
-        author: input.pageUrn,
-        commentary:
-          input.commentary || `We are hiring: ${job.title} — ${job.location}`,
-        visibility: 'PUBLIC',
-        distribution: {
-          feedDistribution: 'MAIN_FEED',
-          targetEntities: [],
-          thirdPartyDistributionChannels: [],
-        },
-        content: {
-          article: {
-            source: input.applicationUrl,
-            title: job.title,
-            description: 'View this opportunity and apply on our careers site.',
-          },
-        },
-        lifecycleState: 'PUBLISHED',
-        isReshareDisabledByAuthor: false,
-      };
-    } else {
-      if (!/^urn:li:organization:[0-9]+$/.test(c.credentials.companyUrn ?? ''))
-        throw new ConflictException('Partner company mapping is missing');
-      const description = String(job.description)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      if (
-        description.length < 100 ||
-        description.length > 25000 ||
-        !job.location.trim()
-      )
-        throw new BadRequestException(
-          'LinkedIn Jobs requires a location and a description between 100 and 25000 characters',
-        );
-      request = {
-        integrationContext: c.credentials.companyUrn,
-        companyApplyUrl: input.applicationUrl,
-        externalJobPostingId: actor.tenantId + ':' + job.id,
-        jobPostingOperationType: 'CREATE',
-        title: job.title,
-        description,
-        listedAt: new Date(job.created_at).getTime(),
-        location: job.location,
-        listingType: 'BASIC',
-      };
-    }
+    if (!/^urn:li:organization:[0-9]+$/.test(c.credentials.companyUrn ?? ''))
+      throw new ConflictException('Partner company mapping is missing');
+    const description = String(job.description)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    if (
+      description.length < 100 ||
+      description.length > 25000 ||
+      !job.location.trim()
+    )
+      throw new BadRequestException(
+        'LinkedIn Jobs requires a location and a description between 100 and 25000 characters',
+      );
+    const request = {
+      integrationContext: c.credentials.companyUrn,
+      companyApplyUrl: input.applicationUrl,
+      externalJobPostingId: actor.tenantId + ':' + job.id,
+      jobPostingOperationType: 'CREATE',
+      title: job.title,
+      description,
+      listedAt: new Date(job.created_at).getTime(),
+      location: job.location,
+      listingType: 'BASIC',
+    };
     return this.db.transaction(async (tx) => {
       const row = await tx.one(
         `INSERT INTO integration_publications(tenant_id,job_id,connection_id,channel,payload,job_updated_at,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
@@ -295,7 +240,6 @@ export class LinkedInService {
           input.channel,
           JSON.stringify({
             request,
-            pageStart: input.pageStart,
             connectionUpdatedAt: c.row.version,
             providerRevision: c.row.provider_revision,
           }),
@@ -327,18 +271,12 @@ export class LinkedInService {
     );
     if (!preview) throw new NotFoundException();
     if (preview.status !== 'DRAFT') return { id, status: preview.status };
-    const provider =
-        preview.channel === 'job_listing' ? 'linkedin_jobs' : 'linkedin',
+    if (preview.channel !== 'job_listing')
+      throw new ConflictException(
+        'This publication channel is retired',
+      );
+    const provider = 'linkedin_jobs',
       c = await this.connection(actor, provider);
-    if (
-      preview.channel === 'company_announcement' &&
-      !(await ownsPage(
-        c.token,
-        preview.payload.request.author,
-        preview.payload.pageStart,
-      ))
-    )
-      throw new ForbiddenException('Company-page access was revoked');
     const claimed = await this.db.transaction(async (tx) => {
       const revision = await this.availability(tx, provider);
       await tx.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE', [
@@ -402,16 +340,11 @@ export class LinkedInService {
     try {
       result = await sendLinkedIn(
         c.token,
-        preview.channel,
         preview.payload.request,
       );
     } catch {
       /* Never retry ambiguous external writes automatically or expose provider errors. */
     }
-    const url =
-      result.status === 'PUBLISHED' && result.remoteId
-        ? 'https://www.linkedin.com/feed/update/' + result.remoteId + '/'
-        : null;
     await this.db.transaction(async (tx) => {
       await tx.query(
         'UPDATE integration_publications SET status=$3,remote_id=$4,remote_url=$5,error_code=$6,updated_at=now() WHERE tenant_id=$1 AND id=$2',
@@ -420,7 +353,7 @@ export class LinkedInService {
           id,
           result.status,
           result.remoteId,
-          url,
+          null,
           result.errorCode,
         ],
       );

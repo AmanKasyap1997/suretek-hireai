@@ -5,7 +5,6 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Query,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Actor, CurrentUser, Role } from '../../shared/actor';
@@ -13,7 +12,6 @@ import { Roles } from '../../shared/roles.decorator';
 import { BodySchema, parse } from '../../platform/http/validation';
 import { LinkedInService } from './linkedin.service';
 import {
-  linkedinPageQuery,
   linkedinPreviewSchema,
   linkedinPublishSchema,
   linkedinSetupSchema,
@@ -38,11 +36,6 @@ export class LinkedInController {
   constructor(private readonly service: LinkedInService) {}
   @Get('jobs') jobs(@CurrentUser() actor: Actor) {
     return this.service.jobs(actor);
-  }
-  @Get('pages')
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  pages(@CurrentUser() actor: Actor, @Query() q: unknown) {
-    return this.service.pages(actor, parse(linkedinPageQuery, q).start);
   }
   @Get('publications') history(@CurrentUser() actor: Actor) {
     return this.service.history(actor);

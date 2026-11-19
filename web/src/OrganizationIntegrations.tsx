@@ -116,9 +116,8 @@ export function ProviderAvailability() {
     <section>
       <h2>Available to organizations</h2>
       <p>
-        Google, Microsoft and LinkedIn use a provider authorization screen.
-        Configure the platform OAuth application once; organization admins never
-        need its client secret.
+        Google and Microsoft use provider authorization. LinkedIn Jobs requires
+        partner-approved onboarding managed by the platform.
       </p>
       <LinkedInPartnerSetup />
       <p>
@@ -600,15 +599,8 @@ function OrganizationConnections() {
         </>
       )}
       {session?.user.enabled_modules?.includes('hiring') &&
-        providers.data?.some(
-          (p) => p.provider === 'linkedin' || p.provider === 'linkedin_jobs',
-        ) && (
-          <LinkedInPublishing
-            social={!!providers.data?.some((p) => p.provider === 'linkedin')}
-            jobsEnabled={
-              !!providers.data?.some((p) => p.provider === 'linkedin_jobs')
-            }
-          />
+        providers.data?.some((p) => p.provider === 'linkedin_jobs') && (
+          <LinkedInPublishing />
         )}
     </>
   );

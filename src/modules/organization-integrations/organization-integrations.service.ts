@@ -142,7 +142,7 @@ export class OrganizationIntegrationsService {
     return this.db.query(
       `SELECT c.id,c.provider,c.environment,c.method,c.credential_hint,c.last_verified_at,c.error_count,
    CASE WHEN NOT coalesce(p.enabled,false) THEN 'disabled' WHEN c.provider_revision<>p.revision THEN 'unverified' ELSE c.status END AS status
-   FROM integration_configs c LEFT JOIN integration_providers p ON p.provider=c.provider WHERE c.tenant_id=$1 AND c.organization_id=$1 ORDER BY c.provider,c.environment`,
+   FROM integration_configs c LEFT JOIN integration_providers p ON p.provider=c.provider WHERE c.tenant_id=$1 AND c.organization_id=$1 AND c.provider<>'linkedin' ORDER BY c.provider,c.environment`,
       [actor.tenantId],
     );
   }
@@ -334,8 +334,6 @@ export class OrganizationIntegrationsService {
       throw new BadRequestException(
         'Your platform administrator must configure the provider application',
       );
-    if (input.provider === 'linkedin' && !hosted)
-      throw new BadRequestException('Use the platform LinkedIn application');
     input = {
       ...input,
       credentials: hosted

@@ -1,9 +1,6 @@
 import { BadGatewayException, BadRequestException } from '@nestjs/common';
-export function linkedinHeaders(token: string, jobs = false) {
-  const version =
-    process.env[
-      jobs ? 'LINKEDIN_JOBS_VERSION' : 'LINKEDIN_MARKETING_VERSION'
-    ] || (jobs ? '202604' : '202611');
+export function linkedinHeaders(token: string) {
+  const version = process.env.LINKEDIN_JOBS_VERSION || '202604';
   if (!/^20[0-9]{2}(0[1-9]|1[0-2])$/.test(version))
     throw new BadRequestException('Invalid LinkedIn API version configuration');
   return {
@@ -13,98 +10,19 @@ export function linkedinHeaders(token: string, jobs = false) {
     'Content-Type': 'application/json',
   };
 }
-export async function companyPages(token: string, start = 0) {
-  const response = await fetch(
-    'https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&state=APPROVED&count=25&start=' +
-      start,
-    {
-      headers: linkedinHeaders(token),
-      redirect: 'error',
-      signal: AbortSignal.timeout(10000),
-    },
-  );
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw new BadGatewayException(
-      'LinkedIn page access was denied or unavailable. Reconnect with approved company-page permissions.',
-    );
-  }
-  const data = (await response.json()) as {
-    elements?: {
-      organization?: string;
-      organizationTarget?: string;
-      role?: string;
-      state?: string;
-    }[];
-    paging?: { links?: { rel: string }[] };
-  };
-  const entries = (data.elements ?? []).filter(
-    (v) =>
-      v.state === 'APPROVED' &&
-      [
-        'ADMINISTRATOR',
-        'CONTENT_ADMIN',
-        'DIRECT_SPONSORED_CONTENT_POSTER',
-      ].includes(v.role ?? ''),
-  );
-  const urns = [
-    ...new Set(
-      entries
-        .map((v) => v.organization ?? v.organizationTarget)
-        .filter(
-          (v): v is string => !!v && /^urn:li:organization:[0-9]+$/.test(v),
-        ),
-    ),
-  ];
-  const pages = await Promise.all(
-    urns.map(async (urn) => {
-      let name = 'Company page ' + urn.split(':').pop();
-      try {
-        const detail = await fetch(
-          'https://api.linkedin.com/rest/organizations/' + urn.split(':').pop(),
-          {
-            headers: linkedinHeaders(token),
-            redirect: 'error',
-            signal: AbortSignal.timeout(5000),
-          },
-        );
-        if (detail.ok) {
-          const result = (await detail.json()) as { localizedName?: string };
-          if (typeof result.localizedName === 'string')
-            name = result.localizedName.slice(0, 200);
-        } else await detail.body?.cancel();
-      } catch {
-        /* The verified page ID remains usable if optional naming is unavailable. */
-      }
-      return { urn, name };
-    }),
-  );
-  return {
-    pages,
-    nextStart: data.paging?.links?.some((v) => v.rel === 'next')
-      ? start + 25
-      : null,
-  };
-}
-export async function ownsPage(token: string, urn: string, start = 0) {
-  const result = await companyPages(token, start);
-  return result.pages.some((p) => p.urn === urn);
-}
 export async function sendLinkedIn(
   token: string,
-  channel: string,
-  payload: unknown,
+  payload: Record<string, unknown>,
 ) {
-  const jobs = channel === 'job_listing';
   const response = await fetch(
-    'https://api.linkedin.com/rest/' + (jobs ? 'simpleJobPostings' : 'posts'),
+    'https://api.linkedin.com/rest/simpleJobPostings',
     {
       method: 'POST',
       headers: {
-        ...linkedinHeaders(token, jobs),
-        ...(jobs ? { 'X-Restli-Method': 'batch_create' } : {}),
+        ...linkedinHeaders(token),
+        'X-Restli-Method': 'batch_create',
       },
-      body: JSON.stringify(jobs ? { elements: [payload] } : payload),
+      body: JSON.stringify({ elements: [payload] }),
       redirect: 'error',
       signal: AbortSignal.timeout(10000),
     },
@@ -116,13 +34,6 @@ export async function sendLinkedIn(
       remoteId: null,
       errorCode: 'LINKEDIN_HTTP_' + response.status,
     };
-  }
-  if (!jobs) {
-    const id = response.headers.get('x-restli-id');
-    await response.body?.cancel();
-    return id && /^urn:li:(share|ugcPost):[0-9]+$/.test(id)
-      ? { status: 'PUBLISHED', remoteId: id, errorCode: null }
-      : { status: 'UNKNOWN', remoteId: null, errorCode: 'MISSING_RECEIPT' };
   }
   const data = (await response.json()) as {
     elements?: { id?: string; status?: number }[];
@@ -150,7 +61,7 @@ export async function jobTask(token: string, id: string) {
     'https://api.linkedin.com/rest/simpleJobPostingTasks?ids=' +
       encodeURIComponent(id),
     {
-      headers: linkedinHeaders(token, true),
+      headers: linkedinHeaders(token),
       redirect: 'error',
       signal: AbortSignal.timeout(10000),
     },

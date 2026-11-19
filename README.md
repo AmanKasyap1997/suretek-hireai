@@ -15,7 +15,7 @@ The attached blueprint is requirements input. Vendor recommendations, prices, pu
 - Basic employee, leave and attendance administration, audit records and health endpoints.
 - PostgreSQL schema migrations, administrator bootstrap, API documentation, Docker and GitHub Actions.
 
-Live AI calls, resume parsing, external calendar integration, payroll, e-signature and additional job-board publishing require further implementation. LinkedIn company announcements and partner-gated BASIC Jobs submissions are implemented; see [setup and limitations](docs/linkedin-integrations.md). [Scope and next steps](docs/blueprint-scope.md) map the starter to the full blueprint.
+Live AI calls, resume parsing, external calendar integration, payroll, e-signature and additional job-board publishing require further implementation. Partner-gated LinkedIn BASIC Jobs submissions are implemented; see [setup and limitations](docs/linkedin-integrations.md). [Scope and next steps](docs/blueprint-scope.md) map the starter to the full blueprint.
 
 ## Project layout
 
@@ -116,7 +116,7 @@ Use [api-examples.http](docs/api-examples.http) with a REST client or copy its J
 5. Prepare and approve an offer. An HR administrator records acceptance with an evidence reference.
 6. Convert the accepted offer to an employee. Retrying the same conversion returns the existing employee; it does not create another employee or duplicate onboarding tasks.
 
-`PUBLISHED` is an internal database state. It does not publish a vacancy to a careers CMS or LinkedIn. Offer acceptance records an HR user's attestation; this starter has no candidate acceptance portal or e-signature verification.
+`PUBLISHED` is an internal database state; it does not automatically publish a vacancy to a careers CMS or LinkedIn. LinkedIn Jobs publishing is a separate, partner-gated action. Offer acceptance records an HR user's attestation; this starter has no candidate acceptance portal or e-signature verification.
 
 ## Access and data model
 
@@ -296,4 +296,4 @@ Super Admin enables providers under Integrations → Available to organizations.
 
 If Super Admin APIs return 404, rebuild/restart the backend from this branch and run `npm run api:check`; the registered protected routes return 401 without credentials. See [API/proxy troubleshooting](docs/super-admin.md#diagnosing-apiv1super-admin-404s).
 
-Hosted provider authorization windows and both LinkedIn publishing paths are documented in [LinkedIn integrations](docs/linkedin-integrations.md). Apply migrations through 019 before deploying these changes.
+Hosted calendar authorization and partner-gated LinkedIn Jobs publishing are documented in [LinkedIn integrations](docs/linkedin-integrations.md). Apply migrations through 020 before deploying these changes.

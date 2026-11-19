@@ -1,15 +1,8 @@
 import { test, expect } from '@playwright/test';
-test('hosted LinkedIn consent opens a provider window without requesting app secrets', async ({
+
+test('organization integrations expose LinkedIn Jobs without Company Pages', async ({
   page,
-  context,
 }) => {
-  let submitted: unknown;
-  await context.route('https://www.linkedin.com/oauth/**', (route) =>
-    route.fulfill({
-      contentType: 'text/html',
-      body: '<h1>Provider authorization test</h1>',
-    }),
-  );
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/auth/session'))
@@ -27,53 +20,32 @@ test('hosted LinkedIn consent opens a provider window without requesting app sec
           expiresAt: Date.now() + 900000,
         },
       });
-    if (path.endsWith('/providers'))
+    if (path.endsWith('/organization/integrations/providers'))
       return route.fulfill({
         json: [
           {
-            provider: 'linkedin',
-            label: 'LinkedIn company pages',
+            provider: 'linkedin_jobs',
+            label: 'LinkedIn Jobs',
             enabled: true,
-            methods: ['oauth2'],
-            fields: { oauth2: [] },
-            hostedOAuth: true,
-            oauthReady: true,
+            platformManaged: true,
+            methods: ['oauth_client_credentials'],
+            fields: { oauth_client_credentials: [] },
+            setupMessage:
+              'LinkedIn partner approval and organization onboarding are required.',
           },
         ],
       });
-    if (path.endsWith('/oauth/start')) {
-      submitted = route.request().postDataJSON();
-      return route.fulfill({
-        json: {
-          authorizationUrl:
-            'https://www.linkedin.com/oauth/v2/authorization?client_id=platform-app&state=test-state',
-        },
-      });
-    }
-    if (path.endsWith('/pages'))
-      return route.fulfill({ json: { pages: [], nextStart: null } });
     return route.fulfill({ json: [] });
   });
+
   await page.goto('integrations');
-  await expect(page.getByLabel('Client secret')).toHaveCount(0);
-  await expect(page.getByLabel('Client ID')).toHaveCount(0);
-  const opened = context.waitForEvent('page');
-  await page
-    .getByRole('button', {
-      name: 'Authorize LinkedIn company pages',
-      exact: true,
-    })
-    .click();
-  const popup = await opened;
-  await expect(popup.getByRole('heading')).toHaveText(
-    'Provider authorization test',
-  );
-  expect(submitted).toEqual({
-    provider: 'linkedin',
-    environment: 'sandbox',
-    method: 'oauth2',
-    credentials: {},
-  });
-  await expect(page).toHaveURL(/\/integrations$/);
-  await popup.close();
+  await expect(
+    page.getByText('No published jobs are available yet.'),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'LinkedIn company pages' }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: /Authorize LinkedIn/ }),
+  ).toHaveCount(0);
 });

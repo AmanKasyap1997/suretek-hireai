@@ -212,7 +212,7 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
     [tenantId, userId, randomUUID()],
   );
   await client.query(
-    "INSERT INTO integration_publications(tenant_id,job_id,connection_id,channel,payload,job_updated_at,created_by) SELECT $1,$2,id,'company_announcement','{}',now(),$3 FROM integration_configs WHERE tenant_id=$1 LIMIT 1",
+    "INSERT INTO integration_publications(tenant_id,job_id,connection_id,channel,payload,job_updated_at,created_by) SELECT $1,$2,id,'job_listing','{}',now(),$3 FROM integration_configs WHERE tenant_id=$1 LIMIT 1",
     [tenantId, jobId, userId],
   );
   return { tenantId, organizationId, userId, candidateId, consentId, auditId };
