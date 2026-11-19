@@ -25,6 +25,8 @@ import { z } from 'zod';
 import { useAuth } from './auth';
 import { loginError } from './api';
 import { Brand, WorkspaceIcon } from './Brand';
+import { Dashboard } from './Dashboard';
+import { JobsPage } from './Jobs';
 import { Team, AcceptInvitation } from './SaasPages';
 import {
   allowedDestination,
@@ -363,7 +365,19 @@ function Shell() {
               }
               to={homePath(user.role)}
             >
-              <WorkspaceIcon name="home" /> Overview
+              <WorkspaceIcon
+                name={
+                  ['HR_ADMIN', 'RECRUITER'].includes(user.role) &&
+                  (!user.enabled_modules ||
+                    user.enabled_modules.includes('hiring'))
+                    ? 'dashboard'
+                    : 'home'
+                }
+              />{' '}
+              {['HR_ADMIN', 'RECRUITER'].includes(user.role) &&
+              (!user.enabled_modules || user.enabled_modules.includes('hiring'))
+                ? 'Dashboard'
+                : 'Overview'}
             </NavLink>
           )}
           {visibleNavigation(user.role, user.enabled_modules, user.roles).map(
@@ -422,6 +436,12 @@ function Home() {
   if (role !== session.user.role.toLowerCase()) return <Forbidden />;
   if (session.user.role === 'SUPER_ADMIN')
     return <Navigate replace to="/super-admin/dashboard" />;
+  if (
+    ['HR_ADMIN', 'RECRUITER'].includes(session.user.role) &&
+    (!session.user.enabled_modules ||
+      session.user.enabled_modules.includes('hiring'))
+  )
+    return <Dashboard />;
   const items = visibleNavigation(
     session.user.role,
     session.user.enabled_modules,
@@ -485,7 +505,7 @@ function Home() {
     </>
   );
 }
-function Future({ id }: { id: string }) {
+function Future({ id, children }: { id: string; children?: ReactNode }) {
   const { session } = useAuth();
   if (
     session?.user.enabled_modules &&
@@ -502,6 +522,7 @@ function Future({ id }: { id: string }) {
     if (id === 'organizations')
       return <Navigate replace to="/super-admin/organizations" />;
     if (id === 'team') return <Team />;
+    if (children) return children;
   }
   return session && permissionMap[session.user.role].includes(id) ? (
     <section className="state">
@@ -535,9 +556,17 @@ export default function App() {
             element={<SuperAdminDetail />}
           />
           <Route path="integrations" element={<OrganizationIntegrations />} />
+          <Route
+            path="jobs"
+            element={
+              <Future id="jobs">
+                <JobsPage />
+              </Future>
+            }
+          />
           <Route path="home/:role" element={<Home />} />
           {navigation
-            .filter((n) => n.id !== 'integrations')
+            .filter((n) => n.id !== 'integrations' && n.id !== 'jobs')
             .map((n) => (
               <Route key={n.id} path={n.id} element={<Future id={n.id} />} />
             ))}
