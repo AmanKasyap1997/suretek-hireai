@@ -8,12 +8,6 @@ import nodemailer from 'nodemailer';
 import { Method, Provider } from './catalog';
 import { effectiveCredentials } from './hosted-oauth';
 export const oauthEndpoints = {
-  linkedin: {
-    authorize: 'https://www.linkedin.com/oauth/v2/authorization',
-    token: 'https://www.linkedin.com/oauth/v2/accessToken',
-    scope: 'rw_organization_admin w_organization_social',
-    pkce: false,
-  },
   google_calendar: {
     pkce: true,
     authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -153,8 +147,6 @@ export async function verify(
     return { ok: true, credentials: { ...credentials, ...tokens } };
   }
   const fixed: Partial<Record<Provider, string>> = {
-    linkedin:
-      'https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&state=APPROVED&count=1',
     openai: 'https://api.openai.com/v1/models',
     anthropic: 'https://api.anthropic.com/v1/models',
     google_calendar:
@@ -189,14 +181,7 @@ export async function verify(
       token = refreshed.accessToken;
     }
   }
-  const headers: Record<string, string> =
-    provider === 'linkedin'
-      ? {
-          'LinkedIn-Version':
-            process.env.LINKEDIN_MARKETING_VERSION || '202611',
-          'X-Restli-Protocol-Version': '2.0.0',
-        }
-      : {};
+  const headers: Record<string, string> = {};
   if (method === 'basic')
     headers.Authorization =
       'Basic ' +

@@ -72,7 +72,7 @@ export class JobsController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      'Publish the internal job record; no external CMS/LinkedIn integration is enabled.',
+      'Publish the internal job record; external job-board publishing is a separate action.',
   })
   publish(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.hiring.transitionJob(actor, id, JobStatus.PUBLISHED);

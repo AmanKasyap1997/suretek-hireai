@@ -33,22 +33,23 @@ it('requires preview and explicit approval before publishing a Jobs listing', as
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <LinkedInPublishing social={false} jobsEnabled />
+      <LinkedInPublishing />
     </QueryClientProvider>,
   );
   await userEvent.selectOptions(
     await screen.findByLabelText('Published job'),
     'job',
   );
+  expect(screen.queryByLabelText('Publish as')).not.toBeInTheDocument();
   await userEvent.type(
     screen.getByLabelText('Application page URL'),
     'https://example.com/jobs/1',
   );
   await userEvent.click(
-    screen.getByRole('button', { name: 'Preview publication' }),
+    screen.getByRole('button', { name: 'Preview LinkedIn Jobs listing' }),
   );
   const publish = await screen.findByRole('button', {
-    name: 'Publish to LinkedIn',
+    name: 'Publish LinkedIn Jobs listing',
   });
   expect(publish).toBeDisabled();
   expect(fetcher.mock.calls.some(([url]) => url.endsWith('/publish'))).toBe(

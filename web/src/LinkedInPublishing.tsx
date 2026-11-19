@@ -4,16 +4,12 @@ import { api } from './api';
 const base = '/organization/integrations/linkedin';
 type Preview = {
   id: string;
-  channel: string;
   jobTitle: string;
   request: {
-    commentary?: string;
-    author?: string;
     integrationContext?: string;
     companyApplyUrl?: string;
     description?: string;
     location?: string;
-    content?: { article: { source: string } };
   };
 };
 type Publication = {
@@ -24,18 +20,8 @@ type Publication = {
   remote_url: string | null;
   created_at: string;
 };
-export function LinkedInPublishing({
-  social,
-  jobsEnabled,
-}: {
-  social: boolean;
-  jobsEnabled: boolean;
-}) {
-  const [channel, setChannel] = useState(
-      social ? 'company_announcement' : 'job_listing',
-    ),
-    [start, setStart] = useState(0),
-    [preview, setPreview] = useState<Preview | null>(null),
+export function LinkedInPublishing() {
+  const [preview, setPreview] = useState<Preview | null>(null),
     [confirmed, setConfirmed] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState(''),
@@ -45,15 +31,6 @@ export function LinkedInPublishing({
     queryKey: ['organization-integrations', 'linkedin-jobs'],
     queryFn: () =>
       api<{ id: string; title: string; location: string }[]>(base + '/jobs'),
-    retry: false,
-  });
-  const pages = useQuery({
-    queryKey: ['organization-integrations', 'linkedin-pages', start],
-    queryFn: () =>
-      api<{ pages: { urn: string; name: string }[]; nextStart: number | null }>(
-        base + '/pages?start=' + start,
-      ),
-    enabled: channel === 'company_announcement',
     retry: false,
   });
   const history = useQuery({
@@ -83,11 +60,10 @@ export function LinkedInPublishing({
   }
   return (
     <section className="integration-card">
-      <h2>Publish jobs to LinkedIn</h2>
+      <h2>LinkedIn Jobs</h2>
       <p>
-        Choose an existing published job, preview the content, then confirm
-        publication. Company-page announcements and LinkedIn Jobs listings are
-        separate actions.
+        Choose a published job and its public career page, review the listing,
+        then confirm publication to LinkedIn Jobs.
       </p>
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
@@ -112,15 +88,8 @@ export function LinkedInPublishing({
             const values = new FormData(e.currentTarget);
             const result = await run('/preview', {
               jobId: values.get('jobId'),
-              channel,
+              channel: 'job_listing',
               applicationUrl: values.get('applicationUrl'),
-              ...(channel === 'company_announcement'
-                ? {
-                    pageUrn: values.get('pageUrn'),
-                    pageStart: start,
-                    commentary: values.get('commentary'),
-                  }
-                : {}),
             });
             if (result) setPreview(result);
           }}
@@ -136,87 +105,11 @@ export function LinkedInPublishing({
               ))}
             </select>
           </label>
-          <label>
-            Publish as
-            <select
-              value={channel}
-              onChange={(e) => setChannel(e.target.value)}
-            >
-              {social && (
-                <option value="company_announcement">
-                  Company-page announcement
-                </option>
-              )}
-              {jobsEnabled && (
-                <option value="job_listing">LinkedIn Jobs listing</option>
-              )}
-            </select>
-          </label>
-          {channel === 'company_announcement' ? (
-            <>
-              {pages.isPending ? (
-                <p>Loading authorized company pages…</p>
-              ) : pages.isError ? (
-                <p role="alert">
-                  Connect, verify and enable LinkedIn company pages first, then{' '}
-                  <button type="button" onClick={() => void pages.refetch()}>
-                    load pages again
-                  </button>
-                  .
-                </p>
-              ) : (
-                <>
-                  <label>
-                    Company page
-                    <select key={start} name="pageUrn" required>
-                      <option value="">Select an authorized page</option>
-                      {pages.data?.pages.map((p) => (
-                        <option key={p.urn} value={p.urn}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="integration-actions">
-                    <button
-                      type="button"
-                      disabled={start === 0}
-                      onClick={() => {
-                        setStart(Math.max(0, start - 25));
-                        setPreview(null);
-                      }}
-                    >
-                      Previous pages
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pages.data?.nextStart == null}
-                      onClick={() => {
-                        setStart(pages.data!.nextStart!);
-                        setPreview(null);
-                      }}
-                    >
-                      More pages
-                    </button>
-                  </div>
-                </>
-              )}
-              <label>
-                Announcement text
-                <textarea
-                  name="commentary"
-                  maxLength={2000}
-                  placeholder="Optional: write your job announcement"
-                />
-              </label>
-            </>
-          ) : (
-            <p>
-              Requires LinkedIn partner-approved onboarding for this
-              organization. Basic job submissions are asynchronous; provider
-              eligibility rules still apply.
-            </p>
-          )}
+          <p>
+            Requires LinkedIn partner-approved onboarding for this
+            organization. Basic job submissions are asynchronous; provider
+            eligibility rules still apply.
+          </p>
           <label>
             Application page URL
             <input
@@ -227,15 +120,7 @@ export function LinkedInPublishing({
               maxLength={2048}
             />
           </label>
-          <button
-            disabled={
-              busy ||
-              (channel === 'company_announcement' &&
-                (pages.isPending || pages.isError || !pages.data?.pages.length))
-            }
-          >
-            Preview publication
-          </button>
+          <button disabled={busy}>Preview LinkedIn Jobs listing</button>
         </form>
       )}
       {preview && (
@@ -244,34 +129,23 @@ export function LinkedInPublishing({
           <p>
             <strong>{preview.jobTitle}</strong>
           </p>
-          <p>
-            {preview.channel === 'job_listing'
-              ? 'LinkedIn Jobs listing'
-              : 'Company-page announcement'}
-          </p>
-          <p>
-            Company:{' '}
-            {preview.request.author ?? preview.request.integrationContext}
-          </p>
+          <p>LinkedIn Jobs listing</p>
+          <p>Company: {preview.request.integrationContext}</p>
           {preview.request.location && (
             <p>Location: {preview.request.location}</p>
           )}
           <p className="publication-copy">
-            {preview.request.commentary ?? preview.request.description}
+            {preview.request.description}
           </p>
-          <p>
-            Apply at:{' '}
-            {preview.request.companyApplyUrl ??
-              preview.request.content?.article.source}
-          </p>
+          <p>Apply at: {preview.request.companyApplyUrl}</p>
           <label>
             <input
               type="checkbox"
               checked={confirmed}
               onChange={(e) => setConfirmed(e.target.checked)}
             />{' '}
-            I have reviewed this content and authorize publishing it publicly to
-            LinkedIn.
+            I have reviewed this job listing and authorize publishing it to
+            LinkedIn Jobs.
           </label>
           <button
             disabled={busy || !confirmed}
@@ -287,7 +161,7 @@ export function LinkedInPublishing({
               }
             }}
           >
-            Publish to LinkedIn
+            Publish LinkedIn Jobs listing
           </button>
         </section>
       )}
@@ -305,11 +179,7 @@ export function LinkedInPublishing({
         <div className="integration-grid">
           {history.data.map((p) => (
             <article key={p.id} className="integration-card">
-              <p>
-                {p.channel === 'job_listing'
-                  ? 'LinkedIn Jobs'
-                  : 'Company-page announcement'}
-              </p>
+              <p>LinkedIn Jobs</p>
               <p>Status: {p.status}</p>
               <p>{new Date(p.created_at).toLocaleString()}</p>
               {['SENDING', 'UNKNOWN'].includes(p.status) && (
@@ -361,8 +231,8 @@ export function LinkedInPartnerSetup() {
       <summary>LinkedIn Jobs partner onboarding</summary>
       <p>
         Configure each organization's LinkedIn-issued customer application and
-        company mapping after partner approval. Credentials remain encrypted;
-        organization admins verify and enable each environment.
+        Jobs employer mapping after partner approval. Credentials remain
+        encrypted; organization admins verify and enable each environment.
       </p>
       <form
         className="platform-form"
@@ -410,7 +280,7 @@ export function LinkedInPartnerSetup() {
           </select>
         </label>
         <label>
-          LinkedIn company URN
+          LinkedIn organization URN (Jobs employer mapping)
           <input
             name="companyUrn"
             required
