@@ -45,6 +45,7 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
   const employeeId = randomUUID();
   const consentId = randomUUID();
   const auditId = randomUUID();
+  const documentId = randomUUID();
   await client.query('INSERT INTO tenants(id,name) VALUES($1,$2)', [
     tenantId,
     `RLS fixture ${tenantId}`,
@@ -69,12 +70,36 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
     [candidateId, tenantId, `${candidateId}@example.test`],
   );
   await client.query(
-    `INSERT INTO candidate_documents(tenant_id,candidate_id,object_key,original_name,content_type,byte_size,sha256) VALUES($1,$2,$3,'fixture.pdf','application/pdf',8,$4)`,
-    [tenantId, candidateId, `${tenantId}/${randomUUID()}`, '0'.repeat(64)],
+    `INSERT INTO candidate_documents(id,tenant_id,candidate_id,object_key,original_name,content_type,byte_size,sha256) VALUES($1,$2,$3,$4,'fixture.pdf','application/pdf',8,$5)`,
+    [
+      documentId,
+      tenantId,
+      candidateId,
+      `${tenantId}/${randomUUID()}`,
+      '0'.repeat(64),
+    ],
   );
   await client.query(
     `INSERT INTO applications(id,tenant_id,job_id,candidate_id,stage) VALUES($1,$2,$3,$4,$5)`,
     [applicationId, tenantId, jobId, candidateId, ApplicationStage.HIRED],
+  );
+  await client.query(
+    `INSERT INTO application_details(tenant_id,application_id,current_location,total_experience_months,notice_period,expected_ctc)
+     VALUES($1,$2,'Remote',24,'IMMEDIATE','900000.00')`,
+    [tenantId, applicationId],
+  );
+  await client.query(
+    'INSERT INTO application_repeat_notices(tenant_id,application_id) VALUES($1,$2)',
+    [tenantId, applicationId],
+  );
+  await client.query(
+    `INSERT INTO application_screenings(tenant_id,application_id,document_id,trigger,requested_by,criteria)
+     VALUES($1,$2,$3,'MANUAL',$4,'[]'::jsonb)`,
+    [tenantId, applicationId, documentId, userId],
+  );
+  await client.query(
+    'INSERT INTO organization_ai_settings(tenant_id,updated_by) VALUES($1,$2)',
+    [tenantId, userId],
   );
   const startsAt = new Date(Date.now() + 7 * 86400000).toISOString();
   const endsAt = new Date(Date.parse(startsAt) + 3600000).toISOString();
@@ -292,6 +317,10 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
         ],
       );
       for (const table of [
+        'application_screenings',
+        'application_details',
+        'application_repeat_notices',
+        'organization_ai_settings',
         'integration_oauth_states',
         'integration_publications',
         'integration_configs',

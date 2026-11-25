@@ -205,6 +205,12 @@ describe('Milestone D readiness', () => {
     const scanner = jest
       .spyOn(f.app!.get(MalwareScanPort), 'scan')
       .mockResolvedValue(S.PENDING);
+    // Earlier tests' applications uploaded resumes; mark those scanned so the
+    // sweep sees only this test's two uploads.
+    await f.pool.query(
+      "UPDATE candidate_documents SET scan_status='CLEAN',scanned_at=now() WHERE tenant_id=$1 AND scan_status IN ('PENDING','FAILED','ERROR')",
+      [f.tenantA],
+    );
     const upload = () =>
       f
         .authorized('post', `/candidates/${f.candidateA}/documents`)
