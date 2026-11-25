@@ -27,6 +27,8 @@ import { loginError } from './api';
 import { Brand, WorkspaceIcon } from './Brand';
 import { Dashboard } from './Dashboard';
 import { JobsPage } from './Jobs';
+import { ApplicationsPage } from './Applications';
+import { ApplyPage, CareersJobsPage } from './Careers';
 import { Team, AcceptInvitation } from './SaasPages';
 import {
   allowedDestination,
@@ -481,7 +483,8 @@ function Home() {
               <h3>{item.label}</h3>
               <p>
                 {item.built
-                  ? 'Invite staff and manage access within your organization.'
+                  ? (builtDescriptions[item.id] ??
+                    'Invite staff and manage access within your organization.')
                   : `Tools for your ${item.label.toLowerCase()} workflow will be available in a future update.`}
               </p>
               {item.built ? (
@@ -505,6 +508,10 @@ function Home() {
     </>
   );
 }
+const builtDescriptions: Record<string, string> = {
+  jobs: 'Create, approve and publish job openings.',
+  applications: 'Review applications and what candidates told you.',
+};
 function Future({ id, children }: { id: string; children?: ReactNode }) {
   const { session } = useAuth();
   if (
@@ -543,6 +550,9 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
+      {/* Public careers pages: candidates apply without an account. */}
+      <Route path="/careers/:slug" element={<CareersJobsPage />} />
+      <Route path="/careers/:slug/jobs/:id" element={<ApplyPage />} />
       {/* Own the one-time callback outside Guard: session retries must not
           unmount it after its authorization code has been removed from the URL.
           The callback checks the session/role before any exchange itself. */}
@@ -564,9 +574,19 @@ export default function App() {
               </Future>
             }
           />
+          <Route
+            path="applications"
+            element={
+              <Future id="applications">
+                <ApplicationsPage />
+              </Future>
+            }
+          />
           <Route path="home/:role" element={<Home />} />
           {navigation
-            .filter((n) => n.id !== 'integrations' && n.id !== 'jobs')
+            .filter(
+              (n) => !['integrations', 'jobs', 'applications'].includes(n.id),
+            )
             .map((n) => (
               <Route key={n.id} path={n.id} element={<Future id={n.id} />} />
             ))}

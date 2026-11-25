@@ -35,12 +35,42 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
   },
   {
     "method": "GET",
+    "path": "/api/v1/applications/:id/details",
+    "public": false,
+    "roles": [
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "INTERVIEWER",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/applications/:id/history",
     "public": false,
     "roles": [
       "HIRING_MANAGER",
       "HR_ADMIN",
       "INTERVIEWER",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/applications/:id/screening",
+    "public": false,
+    "roles": [
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/applications/:id/screening",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
       "RECRUITER",
     ],
   },
@@ -451,6 +481,30 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     ],
   },
   {
+    "method": "GET",
+    "path": "/api/v1/jobs/:id/channels",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/jobs/:id/channels",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/jobs/:id/channels/:channel",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
     "method": "POST",
     "path": "/api/v1/jobs/:id/close",
     "public": false,
@@ -466,6 +520,69 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
     "roles": [
       "HR_ADMIN",
       "RECRUITER",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/jobs/:id/screening",
+    "public": false,
+    "roles": [
+      "HIRING_MANAGER",
+      "HR_ADMIN",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/jobs/:id/screening",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/jobs/ai-description",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/jobs/ai-description/providers",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/jobs/call-questions",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/jobs/call-questions/settings",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+      "RECRUITER",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/jobs/publishing/channels",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
     ],
   },
   {
@@ -567,6 +684,30 @@ exports[`HTTP route and access contract preserves every registered HTTP method, 
   {
     "method": "PATCH",
     "path": "/api/v1/onboarding-tasks/:id",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/organization/ai-settings",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/organization/ai-settings",
+    "public": false,
+    "roles": [
+      "HR_ADMIN",
+    ],
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/organization/ai-settings/calling",
     "public": false,
     "roles": [
       "HR_ADMIN",

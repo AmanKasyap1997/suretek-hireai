@@ -222,7 +222,8 @@ describe('role shell and sessions', () => {
             String(url).includes('/jobs') && init?.method === 'POST',
         ),
     ).toBe(true);
-  });
+    // Typing through the whole builder takes about 5s on a busy machine.
+  }, 20000);
   it('protects the Jobs page from roles without recruitment access', async () => {
     setup('/jobs', 'EMPLOYEE');
     expect(

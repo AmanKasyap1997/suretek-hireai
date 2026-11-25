@@ -18,7 +18,15 @@
 	}
 }
 {$DOMAIN} {
-	request_body {
+	# Resume uploads (public applications and staff uploads) may carry up to
+	# RESUME_MAX_BYTES (5 MB by default) plus form overhead; everything else 1 MB.
+	# Raise both together if RESUME_MAX_BYTES grows.
+	@uploads path_regexp ^/api/v1/(public/[a-z0-9-]+/jobs/[0-9a-f-]+/applications|candidates/[0-9a-f-]+/documents)$
+	request_body @uploads {
+		max_size 6MB
+	}
+	@small not path_regexp ^/api/v1/(public/[a-z0-9-]+/jobs/[0-9a-f-]+/applications|candidates/[0-9a-f-]+/documents)$
+	request_body @small {
 		max_size 1MB
 	}
 	header {
@@ -35,6 +43,9 @@
 	@console path /console /console/*
 	handle @console {
 		header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+		# Public careers pages may show the Cloudflare Turnstile check.
+		@careers path /console/careers /console/careers/*
+		header @careers Content-Security-Policy "default-src 'none'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 		root * /srv
 		@assets path /console/assets/*
 		header @assets Cache-Control "public, max-age=31536000, immutable"

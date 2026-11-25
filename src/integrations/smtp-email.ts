@@ -1,5 +1,10 @@
 import nodemailer from 'nodemailer';
-import { ContactEmail, EmailPort, InvitationEmail } from './email';
+import {
+  ContactEmail,
+  EmailPort,
+  InvitationEmail,
+  RepeatApplicationEmail,
+} from './email';
 export interface SmtpOptions {
   host: string;
   port: number;
@@ -60,6 +65,20 @@ export class SmtpEmail extends EmailPort {
       `You're invited to ${message.organizationName} on Suretek HireAI`,
       `Hello ${message.fullName},\nYou have been invited to ${message.organizationName} as ${role}.\nSet your password: ${link.href}\nOrganization sign-in key: ${message.organizationSlug}\nExpires: ${message.expiresAt.toISOString()}\nThis link can only be used once. If you did not expect this invitation, ignore it.`,
       `<p>Hello ${escape(message.fullName)},</p><p>You have been invited to <strong>${escape(message.organizationName)}</strong> as ${escape(role)}.</p><p><a href="${escape(link.href)}">Accept invitation and set password</a></p><p>Organization sign-in key: <strong>${escape(message.organizationSlug)}</strong></p><p>Expires: ${escape(message.expiresAt.toISOString())}</p><p>This link can only be used once. If you did not expect this invitation, ignore it.</p>`,
+    );
+  }
+  async sendRepeatApplication(
+    message: RepeatApplicationEmail,
+  ): Promise<boolean> {
+    const date = new Intl.DateTimeFormat('en-GB', {
+      dateStyle: 'long',
+      timeZone: 'UTC',
+    }).format(message.appliedAt);
+    return this.send(
+      message.to,
+      `You've already applied to ${message.organizationName}`,
+      `You've already applied for ${message.jobTitle} at ${message.organizationName}, on ${date}.\nWe received another application for this job from this email address and didn't save it. Your first application is unchanged.\nIf you didn't apply again, you can ignore this email.`,
+      `<p>You've already applied for <strong>${escape(message.jobTitle)}</strong> at ${escape(message.organizationName)}, on ${escape(date)}.</p><p>We received another application for this job from this email address and didn't save it. Your first application is unchanged.</p><p>If you didn't apply again, you can ignore this email.</p>`,
     );
   }
   private async send(

@@ -1,9 +1,11 @@
 import { z } from 'zod';
 export const providerIds = [
   'linkedin',
+  'linkedin_profile',
   'linkedin_jobs',
   'openai',
   'anthropic',
+  'google_ai',
   'google_calendar',
   'microsoft_calendar',
   'telephony',
@@ -34,12 +36,22 @@ export const catalog: {
     methods: ['oauth2'],
   },
   {
+    provider: 'linkedin_profile',
+    label: 'LinkedIn profile',
+    methods: ['oauth2'],
+  },
+  {
     provider: 'linkedin_jobs',
     label: 'LinkedIn Jobs',
     methods: ['oauth_client_credentials'],
   },
   { provider: 'openai', label: 'OpenAI', methods: ['api_key'] },
   { provider: 'anthropic', label: 'Anthropic', methods: ['api_key'] },
+  {
+    provider: 'google_ai',
+    label: 'Google AI Studio (Gemini)',
+    methods: ['api_key'],
+  },
   {
     provider: 'google_calendar',
     label: 'Google Calendar',
@@ -141,7 +153,12 @@ export const oauthStartSchema = z.union([
   connectionSchema,
   z
     .object({
-      provider: z.enum(['linkedin', 'google_calendar', 'microsoft_calendar']),
+      provider: z.enum([
+        'linkedin',
+        'linkedin_profile',
+        'google_calendar',
+        'microsoft_calendar',
+      ]),
       environment: z.enum(['sandbox', 'production']),
       method: z.literal('oauth2'),
       credentials: z.object({}).strict().default({}),

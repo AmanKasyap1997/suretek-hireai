@@ -25,6 +25,7 @@
     "api:check": "tsx scripts/check-api-routes.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.11.0",
     "@nestjs/common": "^11.1.9",
     "@nestjs/core": "^11.1.9",
     "@nestjs/jwt": "^11.0.1",

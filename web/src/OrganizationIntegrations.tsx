@@ -1,7 +1,34 @@
 import { LinkedInPublishing, LinkedInPartnerSetup } from './LinkedInPublishing';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AiCallingSettings, AiScreeningSettings } from './AiScreeningSettings';
 import { Link } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
+import {
+  faArrowUpRightFromSquare,
+  faBriefcase,
+  faCalendarDays,
+  faCircleInfo,
+  faCode,
+  faEllipsisVertical,
+  faEnvelope,
+  faFileSignature,
+  faFlask,
+  faLayerGroup,
+  faLink,
+  faListCheck,
+  faLock,
+  faPhone,
+  faPlug,
+  faPlus,
+  faRocket,
+  faToggleOn,
+  faUsers,
+  faWandMagicSparkles,
+  faXmark,
+} from '@fortawesome/free-solid-svg-icons';
+import logo from './assets/suretek-logo.png';
 import { api } from './api';
 import { useAuth } from './auth';
 import { AIProviderSetup } from './AIProviderSetup';
@@ -48,19 +75,360 @@ const labels: Record<string, string> = {
 };
 const label = (s: string) =>
   labels[s] ?? s[0].toUpperCase() + s.slice(1).replace(/_/g, ' ');
-function connectionStatus(connection: Connection) {
-  if (connection.credential_hint === 'Disconnected')
-    return { text: 'Disconnected', tone: 'neutral' };
-  if (connection.status === 'ok')
-    return { text: 'Connected · verified', tone: 'success' };
-  if (connection.status === 'enabled')
-    return { text: 'Connected · enabled', tone: 'success' };
-  if (connection.status === 'failing')
-    return { text: 'Connected · check needed', tone: 'warning' };
-  if (connection.status === 'disabled')
-    return { text: 'Connected · provider disabled', tone: 'warning' };
-  return { text: 'Connected · verification needed', tone: 'warning' };
+type Tone = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
+type Status = { text: string; tone: Tone; help: string };
+const isDisconnected = (connection: Connection) =>
+  connection.credential_hint === 'Disconnected';
+/** Each status says what it means and what to do next. */
+function connectionStatus(connection: Connection): Status {
+  if (isDisconnected(connection))
+    return {
+      text: 'Disconnected',
+      tone: 'neutral',
+      help: 'Credentials were removed. Reconnect to use this environment again.',
+    };
+  switch (connection.status) {
+    case 'enabled':
+      return { text: 'Active', tone: 'success', help: 'In use by HireAI.' };
+    case 'ok':
+      return {
+        text: 'Verified',
+        tone: 'info',
+        help: 'The test passed. Enable this connection to start using it.',
+      };
+    case 'failing':
+      return {
+        text: 'Test failed',
+        tone: 'danger',
+        help: 'Check the credentials with the provider, then test again.',
+      };
+    case 'disabled':
+      return {
+        text: 'Provider disabled',
+        tone: 'neutral',
+        help: 'Suretek has turned this provider off, so testing and enabling are paused.',
+      };
+    default:
+      return {
+        text: 'Not tested',
+        tone: 'warning',
+        help: 'Test the connection before you enable it.',
+      };
+  }
 }
+/** Card-level summary; worded differently from row statuses on purpose. */
+function providerStatus(list: Connection[]): { text: string; tone: Tone } {
+  const live = list.filter((connection) => !isDisconnected(connection));
+  if (live.some((c) => c.status === 'enabled'))
+    return { text: 'In use', tone: 'success' };
+  if (live.some((c) => c.status === 'failing'))
+    return { text: 'Needs attention', tone: 'danger' };
+  if (live.some((c) => c.status === 'ok'))
+    return { text: 'Ready to enable', tone: 'info' };
+  if (live.length) return { text: 'Awaiting test', tone: 'warning' };
+  return { text: 'Not connected', tone: 'neutral' };
+}
+type Category = {
+  id: string;
+  title: string;
+  description: string;
+  icon: IconDefinition;
+  providers: string[];
+};
+const categories: Category[] = [
+  {
+    id: 'ai',
+    title: 'AI providers',
+    description:
+      'Draft job descriptions and power AI-assisted hiring with your organization’s own keys.',
+    icon: faWandMagicSparkles,
+    providers: ['openai', 'anthropic', 'google_ai'],
+  },
+  {
+    id: 'calendar',
+    title: 'Calendars',
+    description: 'Check interviewer availability and book interviews.',
+    icon: faCalendarDays,
+    providers: ['google_calendar', 'microsoft_calendar'],
+  },
+  {
+    id: 'communication',
+    title: 'Communication',
+    description:
+      'Email candidates and interviewers, and place screening calls.',
+    icon: faEnvelope,
+    providers: ['email', 'telephony'],
+  },
+  {
+    id: 'publishing',
+    title: 'Careers & job boards',
+    description: 'Publish approved openings to your careers site and LinkedIn.',
+    icon: faBriefcase,
+    providers: ['careers_cms', 'linkedin', 'linkedin_profile', 'linkedin_jobs'],
+  },
+  {
+    id: 'records',
+    title: 'Documents & HR systems',
+    description:
+      'Send offers for signature and sync hires with your HR system.',
+    icon: faFileSignature,
+    providers: ['e_signature', 'hris'],
+  },
+];
+const otherCategory: Category = {
+  id: 'other',
+  title: 'Other services',
+  description: 'Additional services enabled by Suretek.',
+  icon: faPlug,
+  providers: [],
+};
+/** Shorter names for the filter tabs. */
+const tabLabels: Record<string, string> = {
+  ai: 'AI providers',
+  calendar: 'Calendars',
+  communication: 'Communication',
+  publishing: 'Job boards',
+  records: 'Documents & HR',
+  other: 'Other',
+};
+const categoryOf = (provider: string) =>
+  categories.find((c) => c.providers.includes(provider)) ?? otherCategory;
+const providerInfo: Record<
+  string,
+  { name: string; description: string; keyUrl?: string; keyLabel?: string }
+> = {
+  openai: {
+    name: 'OpenAI',
+    description: 'Drafts job descriptions with your OpenAI API key.',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    keyLabel: 'Create an OpenAI API key',
+  },
+  anthropic: {
+    name: 'Anthropic',
+    description: 'Drafts job descriptions with Claude and your Anthropic key.',
+    keyUrl: 'https://platform.claude.com/settings/keys',
+    keyLabel: 'Create an Anthropic API key',
+  },
+  google_ai: {
+    name: 'Google AI Studio (Gemini)',
+    description:
+      'Drafts job descriptions with Gemini. Google AI Studio has a free usage tier.',
+    keyUrl: 'https://aistudio.google.com/apikey',
+    keyLabel: 'Create a Google AI Studio API key',
+  },
+  google_calendar: {
+    name: 'Google Calendar',
+    description: 'Checks availability and books interview events.',
+  },
+  microsoft_calendar: {
+    name: 'Microsoft Calendar',
+    description: 'Checks availability and books interviews in Outlook.',
+  },
+  email: {
+    name: 'Email',
+    description:
+      'Sends candidate and interviewer emails for your organization.',
+  },
+  telephony: {
+    name: 'Telephony',
+    description: 'Places consent-based AI screening calls.',
+  },
+  careers_cms: {
+    name: 'Careers CMS / API',
+    description: 'Publishes approved jobs to your careers website.',
+  },
+  linkedin: {
+    name: 'LinkedIn company pages',
+    description: 'Shares published jobs on your LinkedIn company page.',
+  },
+  linkedin_profile: {
+    name: 'LinkedIn profile',
+    description:
+      'Shares published jobs on the personal LinkedIn profile of the admin who connects it.',
+  },
+  linkedin_jobs: {
+    name: 'LinkedIn Jobs',
+    description:
+      'Lists jobs on LinkedIn Jobs through Suretek’s partner access.',
+  },
+  e_signature: {
+    name: 'E-signature',
+    description: 'Sends offer letters for electronic signature.',
+  },
+  hris: {
+    name: 'HRIS',
+    description: 'Keeps hired candidates in sync with your HR system.',
+  },
+};
+const providerName = (id: string) => providerInfo[id]?.name ?? label(id);
+
+/**
+ * A provider's tile: its initial or a matching icon in colours that hint at
+ * the brand. HireAI doesn't ship the providers' own logos.
+ */
+const marks: Record<
+  string,
+  { text?: string; icon?: IconDefinition; tone: string }
+> = {
+  openai: { text: 'O', tone: 'dark' },
+  anthropic: { text: 'A', tone: 'clay' },
+  google_ai: { text: 'G', tone: 'blue' },
+  google_calendar: { icon: faCalendarDays, tone: 'blue' },
+  microsoft_calendar: { icon: faCalendarDays, tone: 'sky' },
+  email: { icon: faEnvelope, tone: 'brand' },
+  telephony: { icon: faPhone, tone: 'brand' },
+  careers_cms: { icon: faCode, tone: 'brand' },
+  linkedin: { text: 'in', tone: 'linkedin' },
+  linkedin_profile: { text: 'in', tone: 'linkedin' },
+  linkedin_jobs: { text: 'in', tone: 'linkedin' },
+  e_signature: { icon: faFileSignature, tone: 'brand' },
+  hris: { icon: faUsers, tone: 'brand' },
+};
+function ProviderMark({ provider }: { provider: string }) {
+  const mark = marks[provider] ?? {
+    icon: categoryOf(provider).icon,
+    tone: 'brand',
+  };
+  return (
+    <span className={`int-mark int-mark-${mark.tone}`} aria-hidden="true">
+      {mark.icon ? <FontAwesomeIcon icon={mark.icon} /> : mark.text}
+    </span>
+  );
+}
+
+/** Decorative: HireAI in the middle, connected to the organization's services. */
+const artOrder = [
+  'google_ai',
+  'openai',
+  'google_calendar',
+  'linkedin',
+  'microsoft_calendar',
+  'email',
+  'anthropic',
+  'telephony',
+];
+const artSpots = [
+  [10, 45],
+  [32, 14],
+  [32, 80],
+  [68, 14],
+  [90, 45],
+  [68, 80],
+];
+function HeroArt({ providers }: { providers: string[] }) {
+  const shown = [
+    ...artOrder.filter((p) => providers.includes(p)),
+    ...providers.filter((p) => !artOrder.includes(p)),
+  ].slice(0, 6);
+  if (!shown.length) return null;
+  return (
+    <div className="int-hero-art" aria-hidden="true">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+        {shown.map((p, index) => {
+          const [x, y] = artSpots[index];
+          return (
+            <path
+              key={p}
+              d={`M50 47 Q ${(x + 50) / 2} ${y < 47 ? y - 4 : y + 4} ${x} ${y}`}
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
+      </svg>
+      <span className="int-hero-center">
+        <img src={logo} alt="" />
+      </span>
+      {shown.map((p, index) => (
+        <span
+          key={p}
+          className="int-hero-spot"
+          style={{
+            left: `${artSpots[index][0]}%`,
+            top: `${artSpots[index][1]}%`,
+          }}
+        >
+          <ProviderMark provider={p} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+type MenuItem = { text: string; onSelect: () => void; danger?: boolean };
+/** A "⋮" menu for a connection's less frequent actions. */
+function MoreActions({
+  label: name,
+  items,
+  disabled,
+}: {
+  label: string;
+  items: MenuItem[];
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    document.addEventListener('mousedown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('mousedown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+  if (!items.length) return null;
+  return (
+    <div className="int-more" ref={box}>
+      <button
+        ref={button}
+        type="button"
+        className="int-more-button"
+        aria-label={name}
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <FontAwesomeIcon icon={faEllipsisVertical} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="int-more-menu">
+          {items.map((item) => (
+            <button
+              key={item.text}
+              type="button"
+              className={item.danger ? 'int-danger-button' : undefined}
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+            >
+              {item.text}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+const environments = ['sandbox', 'production'];
+const verifiedOn = (value: string) =>
+  new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+    new Date(value),
+  );
+const verifiedAt = (value: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
 function useAction() {
   const client = useQueryClient(),
     [busy, setBusy] = useState(false),
@@ -101,8 +469,23 @@ function useAction() {
 function Feedback({ action }: { action: ReturnType<typeof useAction> }) {
   return (
     <>
-      {action.error && <p role="alert">{action.error}</p>}
-      {action.message && <p role="status">{action.message}</p>}
+      {action.error && (
+        <p className="form-error" role="alert">
+          {action.error}
+        </p>
+      )}
+      {action.message && (
+        <p
+          className={
+            action.message.startsWith('Connection verification failed')
+              ? 'form-error'
+              : 'form-success'
+          }
+          role="status"
+        >
+          {action.message}
+        </p>
+      )}
     </>
   );
 }
@@ -219,26 +602,62 @@ export function ProviderAvailability() {
     </section>
   );
 }
+type Selection = { provider: string; method: string; environment: string };
+const steps: [string, string, IconDefinition][] = [
+  ['Connect sandbox', 'Add test credentials for the provider.', faLink],
+  ['Test', 'HireAI checks the credentials with the provider.', faFlask],
+  ['Enable', 'Turn on a verified connection to start using it.', faToggleOn],
+  ['Go live', 'Repeat with production credentials when ready.', faRocket],
+];
+const isSecret = (field: string) =>
+  !['username', 'clientId', 'scope'].includes(field);
 function ConnectionForm({
   provider,
   initialMethod,
+  initialEnvironment,
   onClose,
 }: {
   provider: Provider;
   initialMethod: string;
+  initialEnvironment: string;
   onClose: () => void;
 }) {
   const [method, setMethod] = useState(initialMethod),
-    action = useAction();
+    [saved, setSaved] = useState(false),
+    action = useAction(),
+    id = useId(),
+    heading = useRef<HTMLHeadingElement>(null);
+  const info = providerInfo[provider.provider];
+  useEffect(() => {
+    // Bring the form into view next to the card the admin clicked.
+    heading.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    heading.current?.focus({ preventScroll: true });
+  }, []);
   return (
-    <section className="integration-card">
-      <h2>Connect {provider.label}</h2>
-      <p>
-        Credentials belong only to your organization. Test sandbox before
-        enabling production.
-      </p>
+    <section className="int-form-panel" aria-labelledby={id + 'title'}>
+      <div className="int-form-header">
+        <div>
+          <h4 id={id + 'title'} ref={heading} tabIndex={-1}>
+            Connect {provider.label}
+          </h4>
+          <p>
+            <FontAwesomeIcon icon={faLock} aria-hidden="true" /> Credentials are
+            encrypted, used only for your organization and never shown again
+            after saving.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="int-icon-button"
+          aria-label="Close connection form"
+          disabled={action.busy}
+          onClick={onClose}
+        >
+          <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
+        </button>
+      </div>
       <form
-        className="platform-form"
+        className="int-form"
         onSubmit={async (e) => {
           e.preventDefault();
           const form = e.currentTarget,
@@ -257,101 +676,481 @@ function ConnectionForm({
               .map((field) => [field, String(values.get(field) ?? '')])
               .filter(([, value]) => value),
           );
-          const input = {
-            provider: provider.provider,
-            environment: values.get('environment'),
-            method,
-            credentials,
-          };
           const result = await action.run(
             base + (method === 'oauth2' ? '/oauth/start' : ''),
             'POST',
-            input,
+            {
+              provider: provider.provider,
+              environment: values.get('environment'),
+              method,
+              credentials,
+            },
           );
           if (result?.authorizationUrl) {
             if (popup) popup.location.replace(result.authorizationUrl);
             else window.location.assign(result.authorizationUrl);
           } else {
             popup?.close();
-            if (result) form.reset();
+            if (result) {
+              form.reset();
+              setSaved(true);
+            }
           }
         }}
       >
-        <label>
-          Environment
-          <select name="environment">
-            <option value="sandbox">Sandbox</option>
-            <option value="production">Production</option>
-          </select>
-        </label>
-        <label>
-          Connection method
-          <select value={method} onChange={(e) => setMethod(e.target.value)}>
-            {provider.methods.map((m) => (
-              <option key={m} value={m}>
-                {label(m)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div key={method}>
-          {provider.fields[method].map((field) => (
-            <label key={field}>
-              {label(field)}
-              <input
-                name={field}
-                type={
-                  ['username', 'clientId', 'scope'].includes(field)
-                    ? 'text'
-                    : 'password'
-                }
-                autoComplete="off"
-                required={field !== 'scope'}
-                minLength={
-                  ['username', 'clientId', 'scope'].includes(field) ? 1 : 8
-                }
-                maxLength={8192}
-              />
-            </label>
-          ))}
+        <div className="int-form-grid">
+          <div className="int-field">
+            <label htmlFor={id + 'environment'}>Environment</label>
+            <select
+              id={id + 'environment'}
+              name="environment"
+              defaultValue={initialEnvironment}
+              aria-describedby={id + 'environment-help'}
+            >
+              <option value="sandbox">Sandbox</option>
+              <option value="production">Production</option>
+            </select>
+            <small id={id + 'environment-help'}>
+              Start with sandbox. Production can be enabled after sandbox passes
+              its test.
+            </small>
+          </div>
+          {provider.methods.length > 1 && (
+            <div className="int-field">
+              <label htmlFor={id + 'method'}>Connection method</label>
+              <select
+                id={id + 'method'}
+                value={method}
+                onChange={(e) => {
+                  setMethod(e.target.value);
+                  setSaved(false);
+                }}
+              >
+                {provider.methods.map((m) => (
+                  <option key={m} value={m}>
+                    {label(m)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
+        {provider.fields[method].length > 0 && (
+          <div className="int-form-grid" key={method}>
+            {provider.fields[method].map((field) => (
+              <div className="int-field" key={field}>
+                <label htmlFor={id + field}>{label(field)}</label>
+                <input
+                  id={id + field}
+                  name={field}
+                  type={isSecret(field) ? 'password' : 'text'}
+                  autoComplete="off"
+                  spellCheck={false}
+                  required={field !== 'scope'}
+                  minLength={isSecret(field) ? 8 : 1}
+                  maxLength={8192}
+                  onInput={() => setSaved(false)}
+                />
+                {field === 'apiKey' && info?.keyUrl && (
+                  <small>
+                    <a
+                      href={info.keyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {info.keyLabel}{' '}
+                      <FontAwesomeIcon
+                        icon={faArrowUpRightFromSquare}
+                        aria-hidden="true"
+                      />
+                      <span className="sr-only"> (opens in a new tab)</span>
+                    </a>
+                  </small>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         {method === 'oauth2' && provider.hostedOAuth && (
-          <p>
+          <p className="int-note">
             You will sign in and approve access on {provider.label}’s website.
             HireAI does not ask for your provider password.
           </p>
         )}
         {method === 'oauth2' && !provider.hostedOAuth && (
-          <p>
+          <p className="int-note int-note-warning">
             Authorization requires platform setup. Contact your platform
             administrator to enable this connection method.
           </p>
         )}
+        {method === 'oauth2' && provider.setupMessage && (
+          <p className="int-note int-note-warning" role="status">
+            {provider.setupMessage}
+          </p>
+        )}
         {method === 'smtp' && (
-          <p>
+          <p className="int-note">
             The platform operator configures the trusted SMTP server. Enter your
             organization’s SMTP credentials.
           </p>
         )}
-        {provider.setupMessage && <p role="status">{provider.setupMessage}</p>}
-        <button
-          disabled={
-            action.busy ||
-            (method === 'oauth2' && provider.oauthReady === false)
-          }
-        >
-          {action.busy
-            ? 'Saving…'
-            : method === 'oauth2'
-              ? 'Connect with ' + provider.label
-              : 'Save connection'}
-        </button>
-        <button type="button" disabled={action.busy} onClick={onClose}>
-          Close
-        </button>
+        <div className="int-form-actions">
+          <button
+            className="button-primary"
+            disabled={
+              action.busy ||
+              (method === 'oauth2' && provider.oauthReady === false)
+            }
+          >
+            {action.busy
+              ? 'Saving…'
+              : method === 'oauth2'
+                ? 'Connect with ' + provider.label
+                : 'Save connection'}
+          </button>
+          <button type="button" disabled={action.busy} onClick={onClose}>
+            Cancel
+          </button>
+        </div>
       </form>
       <Feedback action={action} />
+      {saved && (
+        <p className="int-next">
+          <strong>Next:</strong> select <strong>Test connection</strong> for
+          this environment, then <strong>Enable connection</strong> once the
+          test passes.
+        </p>
+      )}
     </section>
+  );
+}
+function ConnectionRow({
+  connection: c,
+  busy,
+  run,
+  onUpdate,
+  extra = [],
+}: {
+  connection: Connection;
+  busy: boolean;
+  run: ReturnType<typeof useAction>['run'];
+  onUpdate?: () => void;
+  /** More menu items, such as adding the other environment. */
+  extra?: MenuItem[];
+}) {
+  const status = connectionStatus(c),
+    id = useId(),
+    disconnected = isDisconnected(c);
+  return (
+    <li className="int-env-row">
+      <div className="int-env-main">
+        <div className="int-env-title">
+          <strong id={id}>{label(c.environment)}</strong>
+          <span className={`int-pill int-pill-${status.tone}`}>
+            {status.text}
+          </span>
+          <MoreActions
+            label={`More actions for ${providerName(c.provider)} ${c.environment}`}
+            disabled={busy}
+            items={[
+              ...extra,
+              ...(disconnected
+                ? []
+                : [
+                    {
+                      text: 'Disconnect',
+                      danger: true,
+                      onSelect: () => {
+                        if (
+                          window.confirm(
+                            `Disconnect the ${c.environment} ${providerName(c.provider)} connection and remove its credentials?`,
+                          )
+                        )
+                          void run(`${base}/${c.id}`, 'DELETE');
+                      },
+                    },
+                  ]),
+            ]}
+          />
+        </div>
+        <p className="int-env-detail">
+          <span>
+            {label(c.method)}
+            {disconnected ? '' : ` ${c.credential_hint}`}
+          </span>
+          <span
+            title={
+              c.last_verified_at ? verifiedAt(c.last_verified_at) : undefined
+            }
+          >
+            {c.last_verified_at
+              ? `Verified ${verifiedOn(c.last_verified_at)}`
+              : 'Not verified yet'}
+          </span>
+        </p>
+        {/* "In use by HireAI" repeats the Active pill, so it's for screen readers. */}
+        <p
+          className={
+            c.status === 'enabled' && !disconnected
+              ? 'int-env-help sr-only'
+              : 'int-env-help'
+          }
+          id={id + 'help'}
+        >
+          {status.help}
+        </p>
+      </div>
+      <div className="int-env-actions">
+        {disconnected ? (
+          onUpdate && (
+            <button type="button" disabled={busy} onClick={onUpdate}>
+              Reconnect
+            </button>
+          )
+        ) : c.status === 'disabled' ? null : (
+          <>
+            <button
+              type="button"
+              className={
+                ['ok', 'enabled'].includes(c.status)
+                  ? undefined
+                  : 'button-primary'
+              }
+              disabled={busy}
+              aria-describedby={id}
+              onClick={() => void run(`${base}/${c.id}/test`, 'POST')}
+            >
+              Test connection
+            </button>
+            {c.status !== 'enabled' && (
+              <button
+                type="button"
+                className={c.status === 'ok' ? 'button-primary' : undefined}
+                disabled={busy || c.status !== 'ok'}
+                title={
+                  c.status === 'ok'
+                    ? undefined
+                    : 'Test this connection successfully first'
+                }
+                aria-describedby={id + 'help'}
+                onClick={() => void run(`${base}/${c.id}/enable`, 'POST')}
+              >
+                Enable connection
+              </button>
+            )}
+            {onUpdate && (
+              <button type="button" disabled={busy} onClick={onUpdate}>
+                {c.method === 'oauth2' ? 'Reauthorize' : 'Update credentials'}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </li>
+  );
+}
+function ProviderCard({
+  provider: p,
+  connections: list,
+  selection,
+  onSelect,
+  onClose,
+}: {
+  provider: Provider;
+  connections: Connection[];
+  selection: Selection | null;
+  onSelect: (selection: Selection) => void;
+  onClose: () => void;
+}) {
+  const action = useAction(),
+    id = useId();
+  const status = providerStatus(list);
+  const manual = p.methods.filter((m) => m !== 'oauth2');
+  const oauth = p.methods.includes('oauth2');
+  const canAuthorize = oauth && !!p.hostedOAuth && !!p.oauthReady;
+  const rows = environments.flatMap((env) =>
+    list.filter((c) => c.environment === env),
+  );
+  // Disconnected rows offer their own Reconnect action.
+  const missing = environments.filter(
+    (env) => !list.some((c) => c.environment === env),
+  );
+  const open = selection?.provider === p.provider;
+  const canAdd = !p.platformManaged && (canAuthorize || manual.length > 0);
+  async function authorize(environment: string) {
+    const popup = window.open(
+      'about:blank',
+      'hireai-provider',
+      'popup,width=620,height=760',
+    );
+    if (popup) popup.opener = null;
+    const result = await action.run(base + '/oauth/start', 'POST', {
+      provider: p.provider,
+      environment,
+      method: 'oauth2',
+      credentials: {},
+    });
+    if (result?.authorizationUrl) {
+      if (popup) popup.location.replace(result.authorizationUrl);
+      else window.location.assign(result.authorizationUrl);
+    } else popup?.close();
+  }
+  function connect(environment: string, method?: string) {
+    const chosen =
+      method ?? (canAuthorize ? 'oauth2' : (manual[0] ?? 'oauth2'));
+    if (chosen === 'oauth2' && canAuthorize) void authorize(environment);
+    else onSelect({ provider: p.provider, environment, method: chosen });
+  }
+  return (
+    <article
+      className={open ? 'int-card is-open' : 'int-card'}
+      aria-labelledby={id}
+    >
+      <header className="int-card-header">
+        <ProviderMark provider={p.provider} />
+        <div>
+          <div className="int-card-title">
+            <h3 id={id}>{p.label}</h3>
+            <span className={`int-pill int-pill-${status.tone}`}>
+              {status.text}
+            </span>
+          </div>
+          {providerInfo[p.provider] && (
+            <p>{providerInfo[p.provider].description}</p>
+          )}
+        </div>
+      </header>
+      {rows.length > 0 && (
+        <ul className="int-env-list" aria-label={`${p.label} connections`}>
+          {rows.map((c, index) => (
+            <ConnectionRow
+              key={c.id}
+              connection={c}
+              busy={action.busy}
+              run={action.run}
+              onUpdate={
+                p.platformManaged
+                  ? undefined
+                  : () => connect(c.environment, c.method)
+              }
+              extra={
+                index === rows.length - 1 && canAdd && missing.length
+                  ? [
+                      {
+                        text: `Add ${missing[0]} connection`,
+                        onSelect: () => connect(missing[0]),
+                      },
+                    ]
+                  : []
+              }
+            />
+          ))}
+        </ul>
+      )}
+      {p.platformManaged ? (
+        <p className="int-note">
+          <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" />{' '}
+          {p.setupMessage}
+        </p>
+      ) : (
+        <>
+          {oauth && !canAuthorize && (
+            <div className="int-note">
+              <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" /> Sign-in
+              authorization isn’t set up by Suretek yet.
+              {manual.length
+                ? ' You can connect with credentials instead.'
+                : ' Contact your platform administrator.'}
+              {p.setupMessage && (
+                <details>
+                  <summary>Details for your platform administrator</summary>
+                  <p>{p.setupMessage}</p>
+                </details>
+              )}
+            </div>
+          )}
+          {!open && canAdd && missing.length === environments.length && (
+            <div className="int-card-actions">
+              {canAuthorize && (
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={action.busy}
+                  onClick={() => void authorize('sandbox')}
+                >
+                  Authorize {p.label}
+                </button>
+              )}
+              {manual.length > 0 && (
+                <button
+                  type="button"
+                  className={canAuthorize ? undefined : 'button-primary'}
+                  disabled={action.busy}
+                  onClick={() =>
+                    onSelect({
+                      provider: p.provider,
+                      environment: 'sandbox',
+                      method: manual[0],
+                    })
+                  }
+                >
+                  {canAuthorize
+                    ? 'Use credentials instead'
+                    : `Connect ${p.label}`}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      <Feedback action={action} />
+      {open && selection && (
+        <ConnectionForm
+          key={selection.environment + ':' + selection.method}
+          provider={p}
+          initialMethod={selection.method}
+          initialEnvironment={selection.environment}
+          onClose={onClose}
+        />
+      )}
+    </article>
+  );
+}
+function UnavailableCard({
+  provider,
+  connections: list,
+}: {
+  provider: string;
+  connections: Connection[];
+}) {
+  const action = useAction(),
+    id = useId();
+  return (
+    <article className="int-card" aria-labelledby={id}>
+      <header className="int-card-header">
+        <ProviderMark provider={provider} />
+        <div>
+          <h3 id={id}>{providerName(provider)}</h3>
+          <p>Paused by Suretek.</p>
+        </div>
+      </header>
+      <ul
+        className="int-env-list"
+        aria-label={`${providerName(provider)} connections`}
+      >
+        {environments
+          .flatMap((env) => list.filter((c) => c.environment === env))
+          .map((c) => (
+            <ConnectionRow
+              key={c.id}
+              connection={c}
+              busy={action.busy}
+              run={action.run}
+            />
+          ))}
+      </ul>
+      <Feedback action={action} />
+    </article>
   );
 }
 export function OrganizationIntegrations() {
@@ -384,58 +1183,136 @@ function OrganizationConnections() {
       queryKey: ['organization-integrations', 'connections'],
       queryFn: () => api<Connection[]>(base),
     }),
-    action = useAction(),
-    [selected, setSelected] = useState<{
-      provider: string;
-      method: string;
-    } | null>(null);
-  const provider = providers.data?.find(
-    (p) => p.provider === selected?.provider,
+    [selected, setSelected] = useState<Selection | null>(null);
+  const providerList = providers.data ?? [],
+    connectionList = connections.data ?? [];
+  const forProvider = (provider: string) =>
+    connectionList.filter((c) => c.provider === provider);
+  const available = new Set(providerList.map((p) => p.provider));
+  const unavailable = [
+    ...new Set(
+      connectionList
+        .filter((c) => !available.has(c.provider))
+        .map((c) => c.provider),
+    ),
+  ];
+  const summaries = providerList.map((p) =>
+    providerStatus(forProvider(p.provider)),
   );
-  const [oauthEnvironment, setOAuthEnvironment] = useState('sandbox');
-  async function authorize(p: Provider) {
-    const popup = window.open(
-      'about:blank',
-      'hireai-provider',
-      'popup,width=620,height=760',
-    );
-    if (popup) popup.opener = null;
-    const result = await action.run(base + '/oauth/start', 'POST', {
-      provider: p.provider,
-      environment: oauthEnvironment,
-      method: 'oauth2',
-      credentials: {},
-    });
-    if (result?.authorizationUrl) {
-      if (popup) popup.location.replace(result.authorizationUrl);
-      else window.location.assign(result.authorizationUrl);
-    } else popup?.close();
-  }
+  const inUse = summaries.filter((s) => s.tone === 'success').length;
+  const attention = summaries.filter((s) => s.tone === 'danger').length;
+  const groups = [...categories, otherCategory]
+    .map((category) => ({
+      category,
+      items: providerList.filter(
+        (p) => categoryOf(p.provider).id === category.id,
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
+  const ready = providers.isSuccess && connections.isSuccess;
+  const hiring = !!session?.user.enabled_modules?.includes('hiring');
+  const linkedIn = providerList.some(
+    (p) => p.provider === 'linkedin' || p.provider === 'linkedin_jobs',
+  );
+  // Filters: every category, plus the AI hiring tools after AI providers.
+  const [tab, setTab] = useState('all');
+  const tabs: {
+    id: string;
+    label: string;
+    icon: IconDefinition;
+    count: number;
+  }[] = [
+    {
+      id: 'all',
+      label: 'All integrations',
+      icon: faLayerGroup,
+      count: providerList.length,
+    },
+    ...groups.flatMap(({ category, items }) => [
+      {
+        id: category.id,
+        label: tabLabels[category.id] ?? category.title,
+        icon: category.icon,
+        count: items.length,
+      },
+      ...(category.id === 'ai' && hiring
+        ? [
+            {
+              id: 'ai-tools',
+              label: 'AI hiring tools',
+              icon: faListCheck,
+              count: 2,
+            },
+          ]
+        : []),
+    ]),
+  ];
+  const shows = (id: string) => tab === 'all' || tab === id;
+  const heading = (
+    id: string,
+    icon: IconDefinition,
+    title: string,
+    text: string,
+  ) => (
+    <div className="int-category-heading">
+      <span className="icon-tile" aria-hidden="true">
+        <FontAwesomeIcon icon={icon} />
+      </span>
+      <div>
+        <h2 id={'integration-category-' + id}>{title}</h2>
+        <p>{text}</p>
+      </div>
+    </div>
+  );
   return (
-    <>
-      <h1>Integrations</h1>
-      {providers.data?.some((p) => p.methods.includes('oauth2')) && (
-        <label>
-          Authorization environment
-          <select
-            value={oauthEnvironment}
-            onChange={(e) => setOAuthEnvironment(e.target.value)}
-          >
-            <option value="sandbox">Sandbox</option>
-            <option value="production">Production</option>
-          </select>
-        </label>
-      )}
-      <p>
-        Connect your organization’s accounts to providers enabled by Suretek.
-      </p>
-      <Feedback action={action} />
+    <section className="integrations-page">
+      <header className="int-hero">
+        <div className="int-hero-text">
+          <p className="eyebrow">ADMINISTRATION</p>
+          <h1>Integrations</h1>
+          <p className="intro">
+            Connect your organization’s accounts to the services enabled by
+            Suretek. Credentials are encrypted and used only for your
+            organization.
+          </p>
+          {ready && providerList.length > 0 && (
+            <div className="int-summary" role="group" aria-label="Summary">
+              <span className="int-pill int-pill-success">{inUse} in use</span>
+              {attention > 0 && (
+                <span className="int-pill int-pill-danger">
+                  {attention} {attention === 1 ? 'needs' : 'need'} attention
+                </span>
+              )}
+              <span className="int-pill int-pill-neutral">
+                {providerList.length} available
+              </span>
+            </div>
+          )}
+        </div>
+        <HeroArt providers={providerList.map((p) => p.provider)} />
+      </header>
+      <ol className="int-steps" aria-label="How connections work">
+        {steps.map(([title, text, icon]) => (
+          <li key={title}>
+            <span className="int-step-icon" aria-hidden="true">
+              <FontAwesomeIcon icon={icon} />
+            </span>
+            <div>
+              <strong>{title}</strong>
+              <p>{text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
       {providers.isPending || connections.isPending ? (
-        <p role="status">Loading integrations…</p>
+        <p role="status" className="int-empty">
+          Loading integrations…
+        </p>
       ) : providers.isError || connections.isError ? (
-        <p role="alert">
+        <div role="alert" className="int-empty">
           Unable to load integrations.{' '}
           <button
+            type="button"
             onClick={() => {
               void providers.refetch();
               void connections.refetch();
@@ -443,174 +1320,132 @@ function OrganizationConnections() {
           >
             Retry
           </button>
-        </p>
+        </div>
       ) : (
         <>
-          {providers.data.length === 0 ? (
-            <p>
-              No providers are enabled. Contact your platform administrator.
-            </p>
+          {providerList.length === 0 ? (
+            <div className="int-empty">
+              <span className="icon-tile" aria-hidden="true">
+                <FontAwesomeIcon icon={faPlug} />
+              </span>
+              <p>
+                No providers are enabled. Contact your platform administrator.
+              </p>
+            </div>
           ) : (
-            <div className="integration-grid">
-              {providers.data.map((p) => {
-                const providerConnections = connections.data.filter(
-                  (connection) => connection.provider === p.provider,
-                );
-                return (
-                  <article className="integration-card" key={p.provider}>
-                    <div className="integration-card-heading">
-                      <h2>{p.label}</h2>
-                      {providerConnections.length > 0 && (
-                        <div
-                          className="integration-status-list"
-                          role="group"
-                          aria-label={`${p.label} connection status`}
-                        >
-                          {providerConnections.map((connection) => {
-                            const status = connectionStatus(connection);
-                            return (
-                              <span
-                                className={`integration-status integration-status-${status.tone}`}
-                                key={connection.id}
-                              >
-                                {label(connection.environment)} · {status.text}
-                              </span>
-                            );
-                          })}
-                        </div>
+            <>
+              <div
+                className="int-tabs"
+                role="group"
+                aria-label="Show integrations"
+              >
+                {tabs.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={tab === item.id}
+                    onClick={() => setTab(item.id)}
+                  >
+                    <FontAwesomeIcon icon={item.icon} aria-hidden="true" />
+                    {item.label} <span>({item.count})</span>
+                  </button>
+                ))}
+              </div>
+              {groups.map(({ category, items }) => (
+                <Fragment key={category.id}>
+                  {shows(category.id) && (
+                    <section
+                      className="int-category"
+                      aria-labelledby={'integration-category-' + category.id}
+                    >
+                      {heading(
+                        category.id,
+                        category.icon,
+                        category.title,
+                        category.description,
                       )}
-                    </div>
-                    {p.platformManaged ? (
-                      <p>{p.setupMessage}</p>
-                    ) : (
-                      <>
-                        <p>
-                          Connect using {p.methods.map(label).join(' or ')}.
-                        </p>
-                        <div className="integration-actions">
-                          {p.methods.map((method) => (
-                            <button
-                              key={method}
-                              disabled={action.busy}
-                              onClick={() => {
-                                if (
-                                  method === 'oauth2' &&
-                                  p.oauthReady &&
-                                  p.hostedOAuth
-                                )
-                                  void authorize(p);
-                                else
-                                  setSelected({
-                                    provider: p.provider,
-                                    method,
-                                  });
-                              }}
+                      <div className="int-grid">
+                        {items.map((p) => (
+                          <ProviderCard
+                            key={p.provider}
+                            provider={p}
+                            connections={forProvider(p.provider)}
+                            selection={selected}
+                            onSelect={setSelected}
+                            onClose={() => setSelected(null)}
+                          />
+                        ))}
+                        {category.id === 'ai' && (
+                          <div className="int-card int-card-more">
+                            <span
+                              className="int-card-more-icon"
+                              aria-hidden="true"
                             >
-                              {method === 'oauth2'
-                                ? `Authorize ${p.label}`
-                                : p.methods.length === 1
-                                  ? `Connect ${p.label}`
-                                  : `Use ${label(method)}`}
-                            </button>
-                          ))}
-                        </div>
-                        {p.setupMessage && <p>{p.setupMessage}</p>}
-                        <AIProviderSetup provider={p.provider} />
-                      </>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-          {provider && selected && (
-            <ConnectionForm
-              key={provider.provider + ':' + selected.method}
-              provider={provider}
-              initialMethod={selected.method}
-              onClose={() => setSelected(null)}
-            />
-          )}
-          <h2>Your connections</h2>
-          {connections.data.length === 0 ? (
-            <p>No connections yet.</p>
-          ) : (
-            <div className="integration-grid">
-              {connections.data.map((c) => (
-                <article className="integration-card" key={c.id}>
-                  <h3>
-                    {label(c.provider)} · {c.environment}
-                  </h3>
-                  <p>
-                    {label(c.method)} · {c.credential_hint}
-                  </p>
-                  <p>
-                    Status:{' '}
-                    {c.status === 'ok' ? 'Connected (verified)' : c.status}
-                  </p>
-                  <p>
-                    Last verified:{' '}
-                    {c.last_verified_at
-                      ? new Date(c.last_verified_at).toLocaleString()
-                      : 'Not verified'}
-                  </p>
-                  <div className="integration-actions">
-                    <button
-                      disabled={
-                        action.busy ||
-                        c.status === 'disabled' ||
-                        c.credential_hint === 'Disconnected'
-                      }
-                      onClick={() =>
-                        void action.run(base + '/' + c.id + '/test', 'POST')
-                      }
+                              <FontAwesomeIcon icon={faPlus} />
+                            </span>
+                            <strong>Need another AI provider?</strong>
+                            <p>
+                              Suretek enables AI providers for your
+                              organization. Ask your Suretek administrator to
+                              add one.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  )}
+                  {category.id === 'ai' && hiring && shows('ai-tools') && (
+                    <section
+                      className="int-category"
+                      aria-labelledby="integration-category-ai-tools"
                     >
-                      Test connection
-                    </button>
-                    <button
-                      disabled={
-                        action.busy || !['ok', 'enabled'].includes(c.status)
-                      }
-                      onClick={() =>
-                        void action.run(base + '/' + c.id + '/enable', 'POST')
-                      }
-                    >
-                      Enable connection
-                    </button>
-                    <button
-                      disabled={
-                        action.busy || c.credential_hint === 'Disconnected'
-                      }
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            'Disconnect this account and remove its credentials?',
-                          )
-                        )
-                          void action.run(base + '/' + c.id, 'DELETE');
-                      }}
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-                </article>
+                      {heading(
+                        'ai-tools',
+                        faListCheck,
+                        'AI hiring tools',
+                        'Resume screening and candidate calls, using the AI providers above.',
+                      )}
+                      <div className="int-grid int-grid-wide">
+                        <AiScreeningSettings />
+                        <AiCallingSettings />
+                      </div>
+                    </section>
+                  )}
+                </Fragment>
               ))}
-            </div>
+            </>
+          )}
+          {unavailable.length > 0 && tab === 'all' && (
+            <section
+              className="int-category"
+              aria-labelledby="integration-category-unavailable"
+            >
+              {heading(
+                'unavailable',
+                faPlug,
+                'Unavailable providers',
+                'Suretek has turned these providers off. Saved connections stay paused until you disconnect them or the provider returns.',
+              )}
+              <div className="int-grid">
+                {unavailable.map((provider) => (
+                  <UnavailableCard
+                    key={provider}
+                    provider={provider}
+                    connections={forProvider(provider)}
+                  />
+                ))}
+              </div>
+            </section>
           )}
         </>
       )}
-      {session?.user.enabled_modules?.includes('hiring') &&
-        providers.data?.some(
-          (p) => p.provider === 'linkedin' || p.provider === 'linkedin_jobs',
-        ) && (
-          <LinkedInPublishing
-            social={!!providers.data?.some((p) => p.provider === 'linkedin')}
-            jobsEnabled={
-              !!providers.data?.some((p) => p.provider === 'linkedin_jobs')
-            }
-          />
-        )}
-    </>
+      {hiring && linkedIn && (tab === 'all' || tab === 'publishing') && (
+        <LinkedInPublishing
+          social={providerList.some((p) => p.provider === 'linkedin')}
+          jobsEnabled={providerList.some((p) => p.provider === 'linkedin_jobs')}
+        />
+      )}
+    </section>
   );
 }
 export function IntegrationOAuthCallback() {

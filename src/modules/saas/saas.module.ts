@@ -3,6 +3,10 @@ import {
   LinkedInSetupController,
 } from '../organization-integrations/linkedin.controller';
 import { LinkedInService } from '../organization-integrations/linkedin.service';
+import { JobPublishingController } from '../organization-integrations/job-publishing.controller';
+import { AiSettingsController } from '../organization-integrations/ai-settings.controller';
+import { OrganizationAiService } from '../organization-integrations/organization-ai';
+import { JobPublishingService } from '../organization-integrations/job-publishing.service';
 import {
   IntegrationProvidersController,
   OrganizationIntegrationsController,
@@ -23,12 +27,16 @@ import { SaasService } from './saas.service';
     OrganizationIntegrationsController,
     LinkedInController,
     LinkedInSetupController,
+    JobPublishingController,
+    AiSettingsController,
   ],
   providers: [
     SaasService,
     SuperAdminService,
     OrganizationIntegrationsService,
     LinkedInService,
+    JobPublishingService,
+    OrganizationAiService,
   ],
   exports: [SaasService],
 })

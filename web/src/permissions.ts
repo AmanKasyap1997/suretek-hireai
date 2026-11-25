@@ -125,7 +125,7 @@ export const navigation: {
   { id: 'team', label: 'Team & invitations', built: true },
   { id: 'integrations', label: 'Integrations', built: true },
   { id: 'jobs', label: 'Jobs', built: true },
-  { id: 'applications', label: 'Applications' },
+  { id: 'applications', label: 'Applications', built: true },
   { id: 'candidates', label: 'Candidates' },
   { id: 'interviews', label: 'Interviews' },
   { id: 'reports', label: 'Reports' },

@@ -45,6 +45,8 @@ export class DocumentsService {
     candidateId: string,
     file: ResumeUpload,
     stored: (object: StoredObject) => void,
+    /** The application this resume was sent with; none for staff uploads. */
+    applicationId: string | null = null,
   ) {
     const cfg = readConfig();
     const format = validateResume(
@@ -69,7 +71,7 @@ export class DocumentsService {
     );
     stored({ key, versionId });
     const row = await tx.one(
-      `INSERT INTO candidate_documents(id,tenant_id,candidate_id,object_key,original_name,content_type,byte_size,sha256,scan_status,storage_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,original_name,content_type,byte_size,sha256,scan_status,created_at`,
+      `INSERT INTO candidate_documents(id,tenant_id,candidate_id,object_key,original_name,content_type,byte_size,sha256,scan_status,storage_version,application_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,original_name,content_type,byte_size,sha256,scan_status,created_at,application_id`,
       [
         id,
         actor.tenantId,
@@ -81,6 +83,7 @@ export class DocumentsService {
         createHash('sha256').update(file.buffer).digest('hex'),
         status,
         versionId ?? null,
+        applicationId,
       ],
     );
     await tx.query(

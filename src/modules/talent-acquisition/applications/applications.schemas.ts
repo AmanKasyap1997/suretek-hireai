@@ -1,7 +1,21 @@
 import { z } from 'zod';
 import { RejectionReason, ApplicationStage } from '../../../shared/enums';
-import { listSchema as paginationSchema } from '../../../shared/ta-list';
-export { paginationSchema };
+import { listFields, validDateRange } from '../../../shared/ta-list';
+
+export const screeningFilters = [
+  'screened',
+  'not_screened',
+  'in_progress',
+  'failed',
+] as const;
+
+/** The shared list filters, plus AI screening sort and filter. */
+export const paginationSchema = listFields
+  .extend({
+    sort: z.enum(['created_at', 'updated_at', 'score']).default('created_at'),
+    screening: z.enum(screeningFilters).optional(),
+  })
+  .refine(validDateRange, { message: 'Invalid date range' });
 
 export const applicationSchema = z
   .object({

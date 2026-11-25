@@ -72,7 +72,7 @@ export class JobsController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      'Publish the internal job record; no external CMS/LinkedIn integration is enabled.',
+      'Publish the job in HireAI. POST /jobs/{id}/channels then posts it to enabled external channels.',
   })
   publish(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.hiring.transitionJob(actor, id, JobStatus.PUBLISHED);

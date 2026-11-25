@@ -38,7 +38,7 @@ test('platform enables a provider and organization admin owns and disconnects it
       .getByLabel('API key', { exact: true })
       .fill('browser-fixture-secret-1234');
     await admin.getByRole('button', { name: 'Save connection' }).click();
-    await expect(admin.getByText('Status: unverified')).toBeVisible();
+    await expect(admin.getByText('Not tested', { exact: true })).toBeVisible();
     await expect(admin.getByLabel('API key', { exact: true })).toHaveValue('');
     const connections = await admin.request.get(
       'http://localhost:5173/api/v1/organization/integrations',
@@ -67,14 +67,23 @@ test('platform enables a provider and organization admin owns and disconnects it
     await expect(
       admin.getByRole('button', { name: 'Connect OpenAI' }),
     ).toHaveCount(0);
-    await expect(admin.getByText('Status: disabled')).toBeVisible();
+    await expect(
+      admin.getByText('Provider disabled', { exact: true }),
+    ).toBeVisible();
     admin.once('dialog', (d) => d.accept());
+    // Disconnect is in the connection's "⋮" menu.
+    await admin
+      .getByRole('button', { name: 'More actions for OpenAI sandbox' })
+      .click();
     await admin
       .getByRole('button', { name: 'Disconnect', exact: true })
       .click();
     await expect(
+      admin.getByText('Disconnected', { exact: true }),
+    ).toBeVisible();
+    await expect(
       admin.getByRole('button', { name: 'Disconnect', exact: true }),
-    ).toBeDisabled();
+    ).toHaveCount(0);
   } finally {
     await organization.close();
   }

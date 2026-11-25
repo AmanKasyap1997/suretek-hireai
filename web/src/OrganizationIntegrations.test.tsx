@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ function setup(
   ready = false,
   startFails = false,
   connected = false,
+  connectionList?: Record<string, unknown>[],
 ) {
   const fetcher = vi.fn(async (url: string, init: RequestInit) => {
     if (url === '/api/v1/auth/session')
@@ -36,6 +37,12 @@ function setup(
         authorizationUrl:
           'https://accounts.google.com/o/oauth2/v2/auth?state=fixture',
       });
+    if (
+      url === '/api/v1/organization/integrations' &&
+      connectionList &&
+      !init.method
+    )
+      return Response.json(connectionList);
     if (url === '/api/v1/organization/integrations')
       return Response.json(
         connected
@@ -139,12 +146,24 @@ it('opens Google authorization directly from the provider card when configured',
   expect(screen.queryByLabelText('Client secret')).not.toBeInTheDocument();
   open.mockRestore();
 });
-it('offers authorization and manual credentials separately and explains missing setup', async () => {
+it('falls back to manual credentials and explains missing authorization setup', async () => {
   setup('HR_ADMIN', true, true);
+  expect(
+    await screen.findByText(/Sign-in authorization isn’t set up by Suretek/),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole('button', { name: 'Authorize Google Calendar' }),
+  ).not.toBeInTheDocument();
   await userEvent.click(
-    await screen.findByRole('button', { name: 'Authorize Google Calendar' }),
+    screen.getByRole('button', { name: 'Connect Google Calendar' }),
   );
-  expect(screen.getByLabelText('Connection method')).toHaveValue('oauth2');
+  expect(screen.getByLabelText('Connection method')).toHaveValue('bearer');
+  expect(screen.getByLabelText('Access token')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Save connection' })).toBeEnabled();
+  await userEvent.selectOptions(
+    screen.getByLabelText('Connection method'),
+    'oauth2',
+  );
   expect(
     screen.getByRole('button', { name: 'Connect with Google Calendar' }),
   ).toBeDisabled();
@@ -153,17 +172,103 @@ it('offers authorization and manual credentials separately and explains missing 
   ).toBeVisible();
   expect(screen.queryByLabelText('Client secret')).not.toBeInTheDocument();
   await userEvent.click(
-    screen.getByRole('button', { name: 'Use Access token' }),
+    screen.getByRole('button', { name: 'Close connection form' }),
   );
-  expect(screen.getByLabelText('Connection method')).toHaveValue('bearer');
-  expect(screen.getByLabelText('Access token')).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Save connection' })).toBeEnabled();
+  expect(screen.queryByLabelText('Connection method')).not.toBeInTheDocument();
 });
-it('shows connected provider status on its integration card', async () => {
+it('shows connected provider status and the next step on its card', async () => {
   setup('HR_ADMIN', true, true, true, false, true);
+  const card = await screen.findByRole('article', { name: 'Google Calendar' });
+  expect(within(card).getByText('Sandbox')).toBeVisible();
+  expect(within(card).getByText('Verified')).toBeVisible();
+  expect(within(card).getByText('Ready to enable')).toBeVisible();
   expect(
-    await screen.findByText('Sandbox · Connected · verified'),
+    within(card).getByRole('button', { name: 'Enable connection' }),
+  ).toBeEnabled();
+  // Less frequent actions sit in the row's "⋮" menu.
+  const more = within(card).getByRole('button', {
+    name: 'More actions for Google Calendar sandbox',
+  });
+  expect(more).toHaveAttribute('aria-expanded', 'false');
+  await userEvent.click(more);
+  expect(more).toHaveAttribute('aria-expanded', 'true');
+  expect(
+    within(card).getByRole('button', { name: 'Add production connection' }),
   ).toBeVisible();
+  expect(
+    within(card).getByRole('button', { name: 'Disconnect' }),
+  ).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  expect(
+    within(card).queryByRole('button', { name: 'Disconnect' }),
+  ).not.toBeInTheDocument();
+  expect(more).toHaveFocus();
+});
+it('guides a connection through testing and keeps paused connections removable', async () => {
+  const fetcher = setup('HR_ADMIN', true, false, false, false, false, [
+    {
+      id: 'openai-sandbox',
+      provider: 'openai',
+      environment: 'sandbox',
+      method: 'api_key',
+      status: 'unverified',
+      credential_hint: '****1234',
+      last_verified_at: null,
+    },
+    {
+      id: 'hris-sandbox',
+      provider: 'hris',
+      environment: 'sandbox',
+      method: 'api_key',
+      status: 'disabled',
+      credential_hint: '****9876',
+      last_verified_at: null,
+    },
+  ]);
+  const card = await screen.findByRole('article', { name: 'OpenAI' });
+  expect(within(card).getByText('Not tested')).toBeVisible();
+  expect(
+    within(card).getByRole('button', { name: 'Enable connection' }),
+  ).toBeDisabled();
+  expect(
+    within(card).queryByRole('button', { name: 'Connect OpenAI' }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(
+    within(card).getByRole('button', { name: 'Test connection' }),
+  );
+  await waitFor(() =>
+    expect(
+      fetcher.mock.calls.some(
+        ([url, init]) =>
+          url === '/api/v1/organization/integrations/openai-sandbox/test' &&
+          init.method === 'POST',
+      ),
+    ).toBe(true),
+  );
+  const paused = screen.getByRole('article', { name: 'HRIS' });
+  expect(within(paused).getByText('Provider disabled')).toBeVisible();
+  expect(
+    within(paused).queryByRole('button', { name: 'Test connection' }),
+  ).not.toBeInTheDocument();
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  await userEvent.click(
+    within(paused).getByRole('button', {
+      name: 'More actions for HRIS sandbox',
+    }),
+  );
+  await userEvent.click(
+    within(paused).getByRole('button', { name: 'Disconnect' }),
+  );
+  await waitFor(() =>
+    expect(
+      fetcher.mock.calls.some(
+        ([url, init]) =>
+          url === '/api/v1/organization/integrations/hris-sandbox' &&
+          init.method === 'DELETE',
+      ),
+    ).toBe(true),
+  );
+  vi.restoreAllMocks();
 });
 it('shows only enabled providers and saves credentials without client tenant scope', async () => {
   const fetcher = setup();
@@ -176,6 +281,7 @@ it('shows only enabled providers and saves credentials without client tenant sco
     screen.getByRole('button', { name: 'Save connection' }),
   );
   await screen.findByText('Changes saved.');
+  expect(screen.getByText(/once the test passes/)).toBeVisible();
   const call = fetcher.mock.calls.find(
     ([url, init]) =>
       url === '/api/v1/organization/integrations' && init.method === 'POST',
@@ -228,4 +334,33 @@ it('lets Super Admin disable provider availability separately from platform cred
     ).toBe(true),
   );
   vi.restoreAllMocks();
+});
+
+it('filters the page by category', async () => {
+  setup('HR_ADMIN', true, false, false, false, false, [
+    {
+      id: 'hris-sandbox',
+      provider: 'hris',
+      environment: 'sandbox',
+      method: 'api_key',
+      status: 'disabled',
+      credential_hint: '****9876',
+      last_verified_at: null,
+    },
+  ]);
+  const all = await screen.findByRole('button', {
+    name: 'All integrations (1)',
+  });
+  expect(all).toHaveAttribute('aria-pressed', 'true');
+  expect(
+    screen.getByRole('heading', { name: 'Unavailable providers' }),
+  ).toBeVisible();
+  const ai = screen.getByRole('button', { name: 'AI providers (1)' });
+  await userEvent.click(ai);
+  expect(ai).toHaveAttribute('aria-pressed', 'true');
+  expect(all).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.getByRole('heading', { name: 'AI providers' })).toBeVisible();
+  expect(
+    screen.queryByRole('heading', { name: 'Unavailable providers' }),
+  ).not.toBeInTheDocument();
 });

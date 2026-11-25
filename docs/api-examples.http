@@ -436,6 +436,51 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/super-admin/audit-logs/export?organization_id={{organizationId}}&limit=25&offset=0
 Authorization: Bearer {{token}}
 
+### Resume screening: newest result for an application (or null)
+GET {{baseUrl}}/applications/{{applicationId}}/screening
+Authorization: Bearer {{token}}
+
+### Screen an application's resume now (returns the result or the failure)
+POST {{baseUrl}}/applications/{{applicationId}}/screening
+Authorization: Bearer {{token}}
+
+### Screening progress for a job
+GET {{baseUrl}}/jobs/{{jobId}}/screening
+Authorization: Bearer {{token}}
+
+### Queue screening for a job's unscreened or failed applications
+POST {{baseUrl}}/jobs/{{jobId}}/screening
+Authorization: Bearer {{token}}
+
+### Best matches first, screened only
+GET {{baseUrl}}/applications?jobId={{jobId}}&sort=score&screening=screened
+Authorization: Bearer {{token}}
+
+### HR Admin: which AI screens resumes
+GET {{baseUrl}}/organization/ai-settings
+Authorization: Bearer {{token}}
+
+### HR Admin: turn on AI calling (calls aren't placed yet; jobs get call questions)
+PUT {{baseUrl}}/organization/ai-settings/calling
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enabled":true}
+
+### Draft a job's AI call questions for review (not saved)
+POST {{baseUrl}}/jobs/call-questions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title":"Senior PHP Developer","department":"Engineering","location":"Noida","description":"Build and maintain Laravel services. Night shifts twice a month.","screeningCriteria":[{"id":"c1","label":"4+ years of Laravel","must_have":true}]}
+
+### HR Admin: screen with Anthropic only (null = automatic order)
+PUT {{baseUrl}}/organization/ai-settings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"screeningProvider":"anthropic","screeningFallback":false}
+
 ### A failed sandbox test revokes corresponding production approval
 POST {{baseUrl}}/super-admin/integrations/{{integrationId}}/test
 Authorization: Bearer {{token}}

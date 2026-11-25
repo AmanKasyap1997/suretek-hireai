@@ -297,3 +297,7 @@ Super Admin enables providers under Integrations → Available to organizations.
 If Super Admin APIs return 404, rebuild/restart the backend from this branch and run `npm run api:check`; the registered protected routes return 401 without credentials. See [API/proxy troubleshooting](docs/super-admin.md#diagnosing-apiv1super-admin-404s).
 
 Hosted provider authorization windows and both LinkedIn publishing paths are documented in [LinkedIn integrations](docs/linkedin-integrations.md). Apply migrations through 019 before deploying these changes.
+
+## Candidate applications and AI resume screening
+
+Candidates apply on HireAI's hosted apply page or through the public API ([candidate applications](docs/candidate-applications.md)). The organization's enabled AI provider rates each resume against the job's screening criteria, HireAI computes the match score from the criteria weights, and recruiters shortlist or reject; a screening never changes a stage ([resume screening](docs/resume-screening.md)). AI calling isn't built yet, but each job's [AI call questions](docs/ai-call-questions.md) can be prepared once an HR Admin turns AI calling on. Apply migrations through 029.

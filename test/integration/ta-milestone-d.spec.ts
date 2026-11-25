@@ -36,8 +36,20 @@ describe('Milestone D readiness', () => {
     const body = {
       fullName: 'Verified Applicant',
       email: `${randomUUID()}@example.test`,
+      phone: '+919876543210',
+      currentLocation: 'Noida',
+      totalExperienceMonths: 24,
+      noticePeriod: 'IMMEDIATE',
+      expectedCtc: 900000,
+      privacyAccepted: true,
       noticeVersion: '2026-11-v1',
       consents: { CALL: true, RECORDING: false, TRANSCRIPTION: false },
+      resume: {
+        filename: 'resume.pdf',
+        base64: Buffer.from('%PDF-1.7\nSample resume\n%%EOF').toString(
+          'base64',
+        ),
+      },
     };
     const response = await request(f.app!.getHttpServer())
       .post(`${api}/public/${slug()}/jobs/${jobId}/applications`)

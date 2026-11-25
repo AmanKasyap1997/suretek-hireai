@@ -7,11 +7,20 @@ import { BadRequestException } from '@nestjs/common';
 import nodemailer from 'nodemailer';
 import { Method, Provider } from './catalog';
 import { effectiveCredentials } from './hosted-oauth';
+import { linkedinMember } from './linkedin-client';
 export const oauthEndpoints = {
   linkedin: {
     authorize: 'https://www.linkedin.com/oauth/v2/authorization',
     token: 'https://www.linkedin.com/oauth/v2/accessToken',
     scope: 'rw_organization_admin w_organization_social',
+    pkce: false,
+  },
+  // Self-serve "Sign In with LinkedIn using OpenID Connect" and "Share on
+  // LinkedIn" products: posts on the member's own profile only.
+  linkedin_profile: {
+    authorize: 'https://www.linkedin.com/oauth/v2/authorization',
+    token: 'https://www.linkedin.com/oauth/v2/accessToken',
+    scope: 'openid profile w_member_social',
     pkce: false,
   },
   google_calendar: {
@@ -28,7 +37,7 @@ export const oauthEndpoints = {
     scope: 'offline_access https://graph.microsoft.com/Calendars.ReadWrite',
   },
 };
-function trustedUrl(value: string | undefined) {
+export function trustedUrl(value: string | undefined) {
   if (!value)
     throw new BadRequestException(
       'The operator must configure this provider endpoint',
@@ -152,11 +161,35 @@ export async function verify(
     );
     return { ok: true, credentials: { ...credentials, ...tokens } };
   }
+  if (provider === 'linkedin_profile') {
+    // Records whose profile the connection posts to.
+    const auth = await providerAuth(provider, method, credentials);
+    credentials = auth.credentials;
+    let member: { id: string; name: string } | null = null;
+    try {
+      member = await linkedinMember(credentials.accessToken);
+    } catch {
+      /* Reported as a failed test. */
+    }
+    if (credentials._hosted === 'true') delete credentials.clientSecret;
+    return member
+      ? {
+          ok: true,
+          credentials: {
+            ...credentials,
+            memberId: member.id,
+            memberName: member.name,
+          },
+        }
+      : { ok: false, credentials };
+  }
   const fixed: Partial<Record<Provider, string>> = {
     linkedin:
       'https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&state=APPROVED&count=1',
     openai: 'https://api.openai.com/v1/models',
     anthropic: 'https://api.anthropic.com/v1/models',
+    google_ai:
+      'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1',
     google_calendar:
       'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1',
     microsoft_calendar: 'https://graph.microsoft.com/v1.0/me/calendars?$top=1',
@@ -164,6 +197,33 @@ export async function verify(
   const endpoint =
     fixed[provider] ??
     trustedUrl(process.env[`INTEGRATION_${provider.toUpperCase()}_VERIFY_URL`]);
+  const auth = await providerAuth(provider, method, credentials);
+  credentials = auth.credentials;
+  try {
+    const response = await fetch(endpoint, {
+      headers: auth.headers,
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    await response.body?.cancel();
+    if (credentials._hosted === 'true') delete credentials.clientSecret;
+    return { ok: response.ok, credentials };
+  } catch {
+    // A successful token refresh may rotate the refresh token even if the
+    // subsequent verification request fails. Preserve the new credentials.
+    if (credentials._hosted === 'true') delete credentials.clientSecret;
+    return { ok: false, credentials };
+  }
+}
+/**
+ * Request headers for a connection, exchanging OAuth credentials for an access
+ * token first. Returned credentials include any rotated tokens to persist.
+ */
+export async function providerAuth(
+  provider: Provider,
+  method: Method,
+  credentials: Record<string, string>,
+) {
   let token = credentials.accessToken;
   if (
     method === 'oauth_client_credentials' ||
@@ -209,7 +269,10 @@ export async function verify(
     else if (provider === 'anthropic') {
       headers['x-api-key'] = credentials.apiKey;
       headers['anthropic-version'] = '2023-06-01';
-    } else {
+    } else if (provider === 'google_ai')
+      // Header, not the ?key= query form, so the key never appears in URLs.
+      headers['x-goog-api-key'] = credentials.apiKey;
+    else {
       const header =
         process.env[`INTEGRATION_${provider.toUpperCase()}_API_KEY_HEADER`] ||
         'X-API-Key';
@@ -221,19 +284,5 @@ export async function verify(
       headers[header] = credentials.apiKey;
     }
   } else headers.Authorization = 'Bearer ' + token;
-  try {
-    const response = await fetch(endpoint, {
-      headers,
-      redirect: 'error',
-      signal: AbortSignal.timeout(10000),
-    });
-    await response.body?.cancel();
-    if (credentials._hosted === 'true') delete credentials.clientSecret;
-    return { ok: response.ok, credentials };
-  } catch {
-    // A successful token refresh may rotate the refresh token even if the
-    // subsequent verification request fails. Preserve the new credentials.
-    if (credentials._hosted === 'true') delete credentials.clientSecret;
-    return { ok: false, credentials };
-  }
+  return { headers, credentials };
 }

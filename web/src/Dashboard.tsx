@@ -13,7 +13,6 @@ import {
   faCircleMinus,
   faCircleQuestion,
   faFileLines,
-  faFilter,
   faHandshake,
   faEnvelope,
   faPhone,
@@ -107,6 +106,38 @@ const relativeTime = (value: string) => {
   );
 };
 
+function AutomationItem({
+  title,
+  detail,
+  available,
+}: {
+  title: string;
+  detail: string;
+  available: boolean;
+}) {
+  return (
+    <li>
+      <span
+        className={`automation-status ${available ? 'available' : 'unavailable'}`}
+      >
+        <FontAwesomeIcon
+          icon={available ? faCircleCheck : faCircleMinus}
+          aria-hidden="true"
+        />
+      </span>
+      <span>
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+      <span
+        className={`status-pill ${available ? 'status-live' : 'status-muted'}`}
+      >
+        {available ? 'Available' : 'Unavailable'}
+      </span>
+    </li>
+  );
+}
+
 export function Dashboard() {
   const { session } = useAuth();
   const [range, setRange] = useState(30);
@@ -147,6 +178,17 @@ export function Dashboard() {
     queryFn: () =>
       api<{ data: FunnelRow[] }>(`/reports/recruitment/funnel?${query}`),
   });
+  // Optional extras: the dashboard still loads if these fail.
+  const screened = useQuery({
+    queryKey: ['dashboard', 'screened'],
+    queryFn: () =>
+      api<Page<Application>>('/applications?limit=1&screening=screened'),
+  });
+  const aiProviders = useQuery({
+    queryKey: ['job-ai-providers'],
+    queryFn: () => api<unknown[]>('/jobs/ai-description/providers'),
+  });
+  const aiOn = Array.isArray(aiProviders.data) && aiProviders.data.length > 0;
   const queries = [recentJobs, publishedJobs, applications, interviews, funnel];
   const pending = queries.some((item) => item.isPending);
   const failed = queries.some((item) => item.isError);
@@ -301,8 +343,16 @@ export function Dashboard() {
               </span>
               <div>
                 <h2>AI screened</h2>
-                <strong aria-label="Unavailable">—</strong>
-                <p>Screening is not enabled</p>
+                {screened.data ? (
+                  <strong>{screened.data.total}</strong>
+                ) : (
+                  <strong aria-label="Unavailable">—</strong>
+                )}
+                <p>
+                  {aiOn
+                    ? 'Resumes rated against job criteria'
+                    : 'Screening is not enabled'}
+                </p>
               </div>
             </article>
             <article className="dashboard-kpi">
@@ -333,10 +383,7 @@ export function Dashboard() {
                 <section className="dashboard-panel funnel-panel">
                   <div className="dashboard-panel-heading">
                     <div>
-                      <h2>
-                        <FontAwesomeIcon icon={faFilter} aria-hidden="true" />{' '}
-                        Recruitment funnel
-                      </h2>
+                      <h2>Recruitment funnel</h2>
                       <p>Applications entering each stage in this period.</p>
                     </div>
                     <span className="period-chip">Last {range} days</span>
@@ -375,10 +422,7 @@ export function Dashboard() {
                 <section className="dashboard-panel pipeline-panel">
                   <div className="dashboard-panel-heading">
                     <div>
-                      <h2>
-                        <FontAwesomeIcon icon={faUsers} aria-hidden="true" />{' '}
-                        Candidate pipeline
-                      </h2>
+                      <h2>Candidate pipeline</h2>
                       <p>Recorded stage changes for the selected period.</p>
                     </div>
                     <Link to="/applications">View applications</Link>
@@ -568,26 +612,24 @@ export function Dashboard() {
                 </div>
               </div>
               <ul className="automation-list">
-                <li>
-                  <span className="automation-status unavailable">
-                    <FontAwesomeIcon icon={faCircleMinus} aria-hidden="true" />
-                  </span>
-                  <span>
-                    <strong>Job description generation</strong>
-                    <small>Manual descriptions are supported</small>
-                  </span>
-                  <span className="status-pill status-muted">Unavailable</span>
-                </li>
-                <li>
-                  <span className="automation-status unavailable">
-                    <FontAwesomeIcon icon={faCircleMinus} aria-hidden="true" />
-                  </span>
-                  <span>
-                    <strong>Resume screening</strong>
-                    <small>Automated scoring is not enabled</small>
-                  </span>
-                  <span className="status-pill status-muted">Unavailable</span>
-                </li>
+                <AutomationItem
+                  title="Job description generation"
+                  available={aiOn}
+                  detail={
+                    aiOn
+                      ? 'Draft descriptions from the job details'
+                      : 'Manual descriptions are supported'
+                  }
+                />
+                <AutomationItem
+                  title="Resume screening"
+                  available={aiOn}
+                  detail={
+                    aiOn
+                      ? 'Resumes are rated against each job’s criteria'
+                      : 'Enable an AI provider in Integrations'
+                  }
+                />
                 <li>
                   <span className="automation-status unavailable">
                     <FontAwesomeIcon icon={faCircleMinus} aria-hidden="true" />

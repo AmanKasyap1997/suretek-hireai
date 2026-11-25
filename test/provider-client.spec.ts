@@ -1,8 +1,12 @@
 import {
   verify,
   exchange,
+  oauthEndpoints,
 } from '../src/modules/organization-integrations/provider-client';
-import { connectionSchema } from '../src/modules/organization-integrations/catalog';
+import {
+  connectionSchema,
+  oauthStartSchema,
+} from '../src/modules/organization-integrations/catalog';
 afterEach(() => {
   jest.restoreAllMocks();
   delete process.env.INTEGRATION_HRIS_VERIFY_URL;
@@ -21,6 +25,12 @@ it('uses the correct API key header without placing secrets in URLs', async () =
       headers: { Authorization: 'Bearer secret-key' },
       redirect: 'error',
     }),
+  );
+  mock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+  await verify('google_ai', 'api_key', { apiKey: 'google-secret' });
+  expect(mock).toHaveBeenLastCalledWith(
+    'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1',
+    expect.objectContaining({ headers: { 'x-goog-api-key': 'google-secret' } }),
   );
   mock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
   await verify('anthropic', 'api_key', { apiKey: 'anthropic-secret' });
@@ -165,4 +175,44 @@ it('verifies SMTP with required TLS and closes the transport', async () => {
     delete process.env.INTEGRATION_EMAIL_SMTP_HOST;
     delete process.env.INTEGRATION_EMAIL_SMTP_PORT;
   }
+});
+it('authorizes LinkedIn profile posting and records which member it posts as', async () => {
+  expect(oauthEndpoints.linkedin_profile.scope).toBe(
+    'openid profile w_member_social',
+  );
+  expect(
+    oauthStartSchema.safeParse({
+      provider: 'linkedin_profile',
+      environment: 'sandbox',
+      method: 'oauth2',
+    }).success,
+  ).toBe(true);
+  const mock = jest
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(
+      Response.json({ sub: 'member-1', name: 'Test Member' }),
+    )
+    .mockResolvedValueOnce(new Response(null, { status: 401 }));
+  await expect(
+    verify('linkedin_profile', 'oauth2', { accessToken: 'member-token' }),
+  ).resolves.toEqual({
+    ok: true,
+    credentials: {
+      accessToken: 'member-token',
+      memberId: 'member-1',
+      memberName: 'Test Member',
+    },
+  });
+  expect(mock).toHaveBeenCalledWith(
+    'https://api.linkedin.com/v2/userinfo',
+    expect.objectContaining({
+      headers: { Authorization: 'Bearer member-token' },
+    }),
+  );
+  await expect(
+    verify('linkedin_profile', 'oauth2', { accessToken: 'revoked-token' }),
+  ).resolves.toEqual({
+    ok: false,
+    credentials: { accessToken: 'revoked-token' },
+  });
 });

@@ -61,6 +61,15 @@ export class PrivacyService {
           "UPDATE candidate_documents SET original_name='erased-document' WHERE tenant_id=$1 AND candidate_id=$2",
           [actor.tenantId, id],
         );
+        await tx.query(
+          'DELETE FROM application_details d USING applications a WHERE d.tenant_id=$1 AND a.tenant_id=d.tenant_id AND a.id=d.application_id AND a.candidate_id=$2',
+          [actor.tenantId, id],
+        );
+        // AI screenings quote the resume, so they go with it.
+        await tx.query(
+          'DELETE FROM application_screenings s USING applications a WHERE s.tenant_id=$1 AND a.tenant_id=s.tenant_id AND a.id=s.application_id AND a.candidate_id=$2',
+          [actor.tenantId, id],
+        );
         await this.revoke(tx, actor, id);
         await audit(tx, actor, 'candidate.erased', 'candidate', id, {
           reason: cutoff ? 'retention' : 'staff-request',

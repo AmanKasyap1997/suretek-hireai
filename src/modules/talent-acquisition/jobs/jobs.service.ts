@@ -192,6 +192,8 @@ export class JobsService {
       hiringManagerUserId: 'hiring_manager_user_id',
       screeningCriteria: 'screening_criteria',
       closeReason: 'close_reason',
+      autoScreen: 'auto_screen',
+      callQuestions: 'call_questions',
     };
     const params: unknown[] = [actor.tenantId, id];
     const sets: string[] = [];
@@ -199,7 +201,9 @@ export class JobsService {
       if (key in input) {
         const value = input[key as keyof JobUpdate];
         params.push(
-          key === 'screeningCriteria' ? JSON.stringify(value) : value,
+          key === 'screeningCriteria' || key === 'callQuestions'
+            ? JSON.stringify(value)
+            : value,
         );
         sets.push(`${col}=$${params.length}`);
       }

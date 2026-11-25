@@ -42,6 +42,11 @@ const schema = z
       (v) => (v === '' ? undefined : v),
       z.string().min(1).optional(),
     ),
+    /** Public widget key for HireAI's hosted apply page (not a secret). */
+    TURNSTILE_SITE_KEY: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(1).max(200).optional(),
+    ),
     TURNSTILE_EXPECTED_HOSTNAME: z.preprocess(
       (v) => (v === '' ? undefined : v),
       z.string().min(1).optional(),

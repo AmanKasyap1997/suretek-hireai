@@ -334,7 +334,11 @@ export class OrganizationIntegrationsService {
       throw new BadRequestException(
         'Your platform administrator must configure the provider application',
       );
-    if (input.provider === 'linkedin' && !hosted)
+    if (
+      (input.provider === 'linkedin' ||
+        input.provider === 'linkedin_profile') &&
+      !hosted
+    )
       throw new BadRequestException('Use the platform LinkedIn application');
     input = {
       ...input,
