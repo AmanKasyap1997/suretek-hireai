@@ -157,8 +157,9 @@ test('platform creates organization; emailed admin and staff invitations activat
         await expect(
           staff.getByRole('heading', {
             level: 1,
-            name:
-              role === 'RECRUITER' ? /^Welcome back, / : `${label} overview`,
+            // Recruiters get the Dashboard; hiring managers and
+            // interviewers their own home.
+            name: role === 'RECRUITER' ? /^Welcome back, / : /^Welcome, /,
           }),
         ).toBeVisible();
         expect(

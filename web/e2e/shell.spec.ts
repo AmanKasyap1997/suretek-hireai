@@ -5,13 +5,16 @@ import {
   visibleNavigation,
   type Role,
 } from '../src/permissions';
-// HR Admins and Recruiters (with hiring on) land on the hiring Dashboard.
+// HR Admins and Recruiters (with hiring on) land on the hiring Dashboard;
+// hiring managers and interviewers on their own home.
 const homeHeading = (role: Role) =>
   role === 'SUPER_ADMIN'
     ? 'Platform dashboard'
     : ['HR_ADMIN', 'RECRUITER'].includes(role)
       ? /^Welcome back, /
-      : `${roleLabel(role)} overview`;
+      : ['HIRING_MANAGER', 'INTERVIEWER'].includes(role)
+        ? /^Welcome, /
+        : `${roleLabel(role)} overview`;
 // Login throttle is real: give each role group time to avoid five/minute per-IP limit.
 for (const [index, role] of roles.entries())
   test(`${role} session, navigation, forbidden and logout`, async ({
