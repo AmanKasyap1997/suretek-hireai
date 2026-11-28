@@ -74,7 +74,7 @@ describe('PostgreSQL-backed API invariants', () => {
     ).toBe(false);
   });
 
-  it('rejects planning outside the local calling window', async () => {
+  it('schedules a call asked for outside calling hours for when they open', async () => {
     const { app, authorized, scenario } = fixture;
     const { candidateId, applicationId } = await scenario();
     await authorized('post', `/candidates/${candidateId}/consents`)
@@ -87,7 +87,7 @@ describe('PostgreSQL-backed API invariants', () => {
     const clock = app!.get(CallingClock);
     jest.spyOn(clock, 'now').mockReturnValue(new Date('2026-01-01T18:00:00Z'));
     try {
-      await authorized('post', '/call-requests')
+      const planned = await authorized('post', '/call-requests')
         .send({
           applicationId,
           language: CallLanguage.EN,
@@ -95,7 +95,17 @@ describe('PostgreSQL-backed API invariants', () => {
           transcription: false,
           idempotencyKey: randomUUID(),
         })
-        .expect(403);
+        .expect(201);
+      expect(planned.body.status).toBe(CallRequestStatus.PLANNED);
+      expect(planned.body.next_attempt_at).toBe('2026-01-02T09:00:00.000Z');
+      // One active call per application.
+      await authorized('post', '/call-requests')
+        .send({
+          applicationId,
+          language: CallLanguage.EN,
+          idempotencyKey: randomUUID(),
+        })
+        .expect(409);
     } finally {
       jest
         .spyOn(clock, 'now')

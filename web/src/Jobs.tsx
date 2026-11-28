@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -10,7 +10,6 @@ import {
   faBullseye,
   faCalendarCheck,
   faChevronDown,
-  faCircleInfo,
   faCoins,
   faFileCircleCheck,
   faFileLines,
@@ -20,21 +19,27 @@ import {
   faMicrochip,
   faPaperPlane,
   faPhone,
+  faMicrophone,
   faPhoneVolume,
   faPlus,
-  faSquareCheck,
   faTags,
   faWandMagicSparkles,
-  faWaveSquare,
   faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 import { api } from './api';
 import { useAuth } from './auth';
+import { TestCallDialog } from './TestCall';
+import { HiringTeamDialog } from './HiringTeam';
+import {
+  InterviewBookingDialog,
+  type InterviewSetup,
+} from './HiringAutomation';
 import {
   ChannelPicker,
   ChannelResults,
   CloseJobDialog,
   emptySelection,
+  localDevLink,
   PublishDialog,
   selectionError,
   sendToChannels,
@@ -64,9 +69,19 @@ type Job = {
   screening_criteria: Criterion[] | null;
   auto_screen?: boolean;
   call_questions?: CallQuestion[];
+  /** How the AI books this job's interviews (null: recruiters book them). */
+  interview_setup?: InterviewSetup | null;
+  /** Submitted for an HR Admin's approval (a draft awaiting approval). */
+  requested_at?: string | null;
+  /** Why an HR Admin sent it back. */
+  review_note?: string | null;
+  /** Who created it: for a hiring manager's request, who asked. */
+  created_by_name?: string | null;
   created_at: string;
   updated_at: string;
 };
+/** Who is working on the job: approves and publishes, publishes, or asks. */
+export type JobRole = 'HR_ADMIN' | 'RECRUITER' | 'HIRING_MANAGER';
 type CallQuestion = {
   id: string;
   text: string;
@@ -74,6 +89,8 @@ type CallQuestion = {
   /** For a yes/no deal-breaker: a different answer is flagged. */
   expected_answer: 'yes' | 'no' | null;
   criterion_id: string | null;
+  /** Open questions: what a good answer covers (assessed after the call). */
+  key_points?: string[];
 };
 type DraftedQuestions = {
   questions: CallQuestion[];
@@ -81,10 +98,20 @@ type DraftedQuestions = {
   environment: 'production' | 'sandbox';
 };
 const answerTypeLabels: Record<CallQuestion['answer_type'], string> = {
+  text: 'Spoken answer (open or technical)',
   yes_no: 'Yes or no',
   number: 'A number',
-  text: 'Free answer',
 };
+
+/** Key points as saved: trimmed, non-empty, at most five. */
+const keyPoints = (item: CallQuestion) =>
+  item.answer_type === 'text'
+    ? (item.key_points ?? [])
+        .map((point) => point.trim())
+        .filter((point) => point.length >= 2)
+        .map((point) => point.slice(0, 200))
+        .slice(0, 5)
+    : [];
 type Page<T> = {
   data: T[];
   total: number;
@@ -170,12 +197,15 @@ function jobDraft(job: Job): Draft {
 
 export function JobBuilder({
   initialJob,
-  canPublish,
+  role,
   onCancel,
   onSaved,
+  applyPageFor,
 }: {
   initialJob: Job | null;
-  canPublish: boolean;
+  role: JobRole;
+  /** HireAI's apply page for a job, which LinkedIn posts link to. */
+  applyPageFor?: (jobId: string) => string | undefined;
   onCancel: () => void;
   onSaved: (job: Job, published: boolean, outcome?: PublishOutcome) => void;
 }) {
@@ -195,8 +225,11 @@ export function JobBuilder({
   const [questionsBusy, setQuestionsBusy] = useState(false);
   const [questionsError, setQuestionsError] = useState('');
   const [questionsNotice, setQuestionsNotice] = useState('');
+  const [testingCall, setTestingCall] = useState(false);
   const autoDrafted = useRef(false);
   const nextQuestionId = useRef(1);
+  const isAdmin = role === 'HR_ADMIN';
+  const isManager = role === 'HIRING_MANAGER';
   const callingQuery = useQuery({
     queryKey: ['call-questions-settings'],
     queryFn: () =>
@@ -212,6 +245,25 @@ export function JobBuilder({
   const skillInput = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(0);
   const [currentJob, setCurrentJob] = useState<Job | null>(initialJob);
+  // Approved or published: still editable until it closes.
+  const live = !!initialJob && initialJob.status !== 'DRAFT';
+  const published = currentJob?.status === 'PUBLISHED';
+  // What candidates see changes only with an HR Admin once approved.
+  const lockedDetails = live && !isAdmin;
+  const status = currentJob?.status ?? 'DRAFT';
+  // Published from here: by an HR Admin (approving it too), or by a
+  // recruiter once it's approved. Otherwise a draft goes for approval.
+  const canPublish =
+    !published && (isAdmin || (role === 'RECRUITER' && status === 'APPROVED'));
+  const canSubmit = isManager && status === 'DRAFT';
+  const awaiting = status === 'DRAFT' && !!currentJob?.requested_at;
+  const sentBack =
+    status === 'DRAFT' && !awaiting ? (currentJob?.review_note ?? null) : null;
+  const stepLabels = published
+    ? [...steps.slice(0, -1), 'Review Changes']
+    : canSubmit
+      ? [...steps.slice(0, -1), 'Submit for Approval']
+      : steps;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const nextCriterionId = useRef(1);
@@ -289,6 +341,7 @@ export function JobBuilder({
             callQuestions: usableQuestions.map((item) => ({
               ...item,
               text: item.text.trim(),
+              key_points: keyPoints(item),
               criterion_id: namedCriteria.some(
                 (criterion) => criterion.id === item.criterion_id,
               )
@@ -369,15 +422,37 @@ export function JobBuilder({
     return null;
   }
 
-  async function save(publish: boolean) {
+  /** The update: without the details candidates see when they're locked. */
+  function changes() {
+    const body = payload();
+    return lockedDetails
+      ? {
+          screeningCriteria: body.screeningCriteria,
+          autoScreen: body.autoScreen,
+          ...('callQuestions' in body
+            ? { callQuestions: body.callQuestions }
+            : {}),
+        }
+      : body;
+  }
+
+  /** Saves; then publishes, or submits it for approval. */
+  async function save(action: 'save' | 'publish' | 'submit') {
     const validation = validateDraft();
     if (validation) {
       setError(validation.message);
       setStep(validation.step);
       return;
     }
+    const publish = action === 'publish';
     const channelProblem =
-      publish && canPublish && selectionError(selection, 'publish');
+      publish &&
+      canPublish &&
+      selectionError(
+        selection,
+        'publish',
+        !!applyPageFor?.(currentJob?.id ?? 'new'),
+      );
     if (channelProblem) {
       setError(channelProblem);
       setStep(3);
@@ -393,16 +468,24 @@ export function JobBuilder({
           body: JSON.stringify(payload()),
         });
         setCurrentJob(job);
-      } else if (job.status === 'DRAFT') {
+      } else if (job.status !== 'CLOSED') {
+        // Drafts, and approved or published jobs too.
         job = await api<Job>(`/jobs/${job.id}`, {
           method: 'PATCH',
-          body: JSON.stringify(payload()),
+          body: JSON.stringify(changes()),
         });
         setCurrentJob(job);
       }
 
+      if (action === 'submit' && job.status === 'DRAFT') {
+        job = await api<Job>(`/jobs/${job.id}/submit`, { method: 'POST' });
+        setCurrentJob(job);
+        onSaved(job, false);
+        return;
+      }
+
       if (publish && canPublish) {
-        if (job.status === 'DRAFT') {
+        if (job.status === 'DRAFT' && isAdmin) {
           job = await api<Job>(`/jobs/${job.id}/approve`, {
             method: 'POST',
           });
@@ -418,7 +501,11 @@ export function JobBuilder({
           throw new Error(
             'The job was saved, but it could not be published. Use the job actions to continue.',
           );
-        onSaved(job, true, await sendToChannels(job.id, selection));
+        onSaved(
+          job,
+          true,
+          await sendToChannels(job.id, selection, applyPageFor?.(job.id)),
+        );
         return;
       }
 
@@ -617,17 +704,42 @@ export function JobBuilder({
         </button>
         <div>
           <h1 id="job-builder-title">
-            {initialJob ? 'Edit Job' : 'Create and Publish Job'}
+            {initialJob
+              ? isManager
+                ? 'Edit Job Request'
+                : 'Edit Job'
+              : isAdmin
+                ? 'Create and Publish Job'
+                : isManager
+                  ? 'Request a Job'
+                  : 'Create Job'}
           </h1>
           <p>
-            Add job details, define screening criteria, and publish your
-            opening.
+            {published
+              ? 'This job is published: your changes show on the careers page as soon as you save them.'
+              : live
+                ? role === 'HIRING_MANAGER'
+                  ? 'This job is approved: a recruiter publishes it.'
+                  : 'This job is approved. Save your changes, or publish it.'
+                : awaiting
+                  ? `Submitted for approval on ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(currentJob!.requested_at!))}. You can still change it while it waits.`
+                  : isAdmin
+                    ? 'Add job details, define screening criteria, and publish your opening.'
+                    : isManager
+                      ? 'Describe the role you need. An HR Admin approves it, then a recruiter publishes it.'
+                      : 'Add the job details and screening criteria, then submit it for an HR Admin’s approval.'}
           </p>
+          {sentBack && (
+            <p className="job-live-note" role="note">
+              <strong>Sent back by an HR Admin:</strong> {sentBack} Make the
+              changes, then submit it again.
+            </p>
+          )}
         </div>
       </header>
 
       <ol className="job-stepper" aria-label="Job creation steps">
-        {steps.map((label, index) => (
+        {stepLabels.map((label, index) => (
           <li
             key={label}
             className={
@@ -658,6 +770,13 @@ export function JobBuilder({
                       <p>Define the basic information for this job opening.</p>
                     </div>
                   </div>
+                  {lockedDetails && (
+                    <p className="job-live-note" role="note">
+                      Only an HR Admin can change these details now the job is
+                      approved: they&apos;re what candidates see. You can still
+                      change the skills, screening criteria and call questions.
+                    </p>
+                  )}
                   <div className="job-fields">
                     <label className="form-field">
                       <span className="form-field-label">
@@ -671,6 +790,7 @@ export function JobBuilder({
                         required
                         minLength={2}
                         maxLength={200}
+                        disabled={lockedDetails}
                         value={form.title}
                         onChange={(event) =>
                           update('title', event.target.value)
@@ -687,6 +807,7 @@ export function JobBuilder({
                         required
                         maxLength={150}
                         list="job-departments"
+                        disabled={lockedDetails}
                         value={form.department}
                         onChange={(event) =>
                           update('department', event.target.value)
@@ -711,6 +832,7 @@ export function JobBuilder({
                       <input
                         required
                         maxLength={200}
+                        disabled={lockedDetails}
                         value={form.location}
                         onChange={(event) =>
                           update('location', event.target.value)
@@ -728,6 +850,7 @@ export function JobBuilder({
                       </span>
                       <span className="select-control">
                         <select
+                          disabled={lockedDetails}
                           value={form.employmentType}
                           onChange={(event) =>
                             update('employmentType', event.target.value)
@@ -752,6 +875,7 @@ export function JobBuilder({
                         min="1"
                         max="100000"
                         step="1"
+                        disabled={lockedDetails}
                         value={form.openings}
                         onChange={(event) =>
                           update('openings', event.target.value)
@@ -770,6 +894,7 @@ export function JobBuilder({
                           min="0"
                           max="999999999999.99"
                           step="1000"
+                          disabled={lockedDetails}
                           value={form.salaryMin}
                           onChange={(event) =>
                             update('salaryMin', event.target.value)
@@ -783,6 +908,7 @@ export function JobBuilder({
                           min="0"
                           max="999999999999.99"
                           step="1000"
+                          disabled={lockedDetails}
                           value={form.salaryMax}
                           onChange={(event) =>
                             update('salaryMax', event.target.value)
@@ -802,6 +928,7 @@ export function JobBuilder({
                       minLength={10}
                       maxLength={30000}
                       rows={8}
+                      disabled={lockedDetails}
                       value={form.description}
                       readOnly={aiBusy}
                       onChange={(event) =>
@@ -885,39 +1012,67 @@ export function JobBuilder({
                         aria-hidden="true"
                       />
                       <div>
-                        <h3>AI Calling Settings</h3>
-                        <p>Configure automated candidate calls.</p>
+                        <h3>AI Calling</h3>
+                        <p>Screening calls to shortlisted candidates.</p>
                       </div>
+                      {callingQuery.isSuccess && (
+                        <span
+                          className={`status-pill ${calling ? 'status-live' : 'status-muted'}`}
+                        >
+                          {calling ? 'On' : 'Off'}
+                        </span>
+                      )}
                     </div>
-                    <p className="calling-label">
-                      <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" />{' '}
-                      Calling language
-                    </p>
-                    <div className="calling-options" aria-disabled="true">
-                      <span>
-                        <FontAwesomeIcon
-                          icon={faSquareCheck}
-                          aria-hidden="true"
-                        />{' '}
-                        English
-                      </span>
-                      <span>
-                        <FontAwesomeIcon
-                          icon={faSquareCheck}
-                          aria-hidden="true"
-                        />{' '}
-                        Hindi
-                      </span>
-                    </div>
-                    <p className="calling-label">AI call flow</p>
-                    <div className="calling-flow">
-                      <FontAwesomeIcon icon={faWaveSquare} aria-hidden="true" />{' '}
-                      Not configured for this workspace
-                    </div>
-                    <p className="calling-unavailable">
-                      Candidate calling is not enabled. These preferences cannot
-                      be saved yet.
-                    </p>
+                    {callingQuery.isPending ? (
+                      <p className="calling-note">Checking AI calling…</p>
+                    ) : calling ? (
+                      <>
+                        <p className="calling-note">
+                          The AI phones shortlisted candidates who agreed to be
+                          called, and asks this job’s call questions.
+                        </p>
+                        <p className="calling-label">Call questions</p>
+                        <div className="calling-flow">
+                          {usableQuestions.length
+                            ? `${usableQuestions.length} question${usableQuestions.length === 1 ? '' : 's'} ready`
+                            : 'None yet'}
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => {
+                              const problem = validateStep();
+                              if (problem) {
+                                setError(problem);
+                                return;
+                              }
+                              setError('');
+                              setStep(2);
+                            }}
+                          >
+                            {usableQuestions.length
+                              ? 'Review questions'
+                              : 'Add questions'}
+                          </button>
+                        </div>
+                        <p className="calling-label">Language</p>
+                        <p className="calling-note">
+                          English or Hindi, chosen when a recruiter starts a
+                          call. Automatic calls are in English.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="calling-unavailable">
+                        AI calling is off for your organization, so this job has
+                        no call questions.{' '}
+                        {isAdmin ? (
+                          <Link to="/integrations">
+                            Turn it on in Integrations → AI calling.
+                          </Link>
+                        ) : (
+                          'An HR Admin can turn it on in Integrations.'
+                        )}
+                      </p>
+                    )}
                   </section>
                 </div>
               </div>
@@ -926,6 +1081,12 @@ export function JobBuilder({
 
           {step === 1 && (
             <section className="job-form-section">
+              {lockedDetails && (
+                <p className="job-live-note" role="note">
+                  Only an HR Admin can change the description now the job is
+                  approved.
+                </p>
+              )}
               <div className="job-form-section-heading">
                 <FontAwesomeIcon icon={faFileLines} aria-hidden="true" />
                 <div>
@@ -1002,7 +1163,7 @@ export function JobBuilder({
                       <button
                         type="button"
                         className="button-primary"
-                        disabled={aiBusy || busy}
+                        disabled={aiBusy || busy || lockedDetails}
                         aria-busy={aiBusy}
                         onClick={() => void generateDescription()}
                       >
@@ -1049,6 +1210,7 @@ export function JobBuilder({
                   minLength={10}
                   maxLength={30000}
                   rows={14}
+                  disabled={lockedDetails}
                   value={form.description}
                   readOnly={aiBusy}
                   aria-busy={aiBusy}
@@ -1072,6 +1234,14 @@ export function JobBuilder({
                   </p>
                 </div>
               </div>
+              {live && (
+                <p className="job-live-note" role="note">
+                  Changes here apply to new screenings and new AI calls.
+                  Applicants already screened keep their score until you screen
+                  them again, and calls already planned ask the questions they
+                  were planned with.
+                </p>
+              )}
               <div className="criteria-list">
                 {criteria.map((criterion) => (
                   <fieldset className="criterion-row" key={criterion.id}>
@@ -1275,7 +1445,7 @@ export function JobBuilder({
                                   text: event.target.value,
                                 })
                               }
-                              placeholder="e.g. Are you comfortable working night shifts?"
+                              placeholder="e.g. What does a service provider do in Laravel?"
                             />
                           </label>
                           <label className="form-field">
@@ -1292,6 +1462,8 @@ export function JobBuilder({
                                       answer === 'yes_no'
                                         ? item.expected_answer
                                         : null,
+                                    key_points:
+                                      answer === 'text' ? item.key_points : [],
                                   });
                                 }}
                               >
@@ -1371,6 +1543,30 @@ export function JobBuilder({
                               />
                             </span>
                           </label>
+                          {item.answer_type === 'text' && (
+                            <label className="form-field call-question-points">
+                              What a good answer covers
+                              <textarea
+                                rows={3}
+                                maxLength={1000}
+                                value={(item.key_points ?? []).join('\n')}
+                                onChange={(event) =>
+                                  updateQuestion(item.id, {
+                                    key_points: event.target.value
+                                      .split('\n')
+                                      .slice(0, 5),
+                                  })
+                                }
+                                placeholder={
+                                  'One point per line, e.g.\nRegisters bindings in the service container\nboot() runs after every provider is registered'
+                                }
+                              />
+                              <small>
+                                Used to assess the answer after the call. The AI
+                                never reads these out.
+                              </small>
+                            </label>
+                          )}
                           <button
                             type="button"
                             className="text-button"
@@ -1396,9 +1592,10 @@ export function JobBuilder({
                           {
                             id: `question-${nextQuestionId.current++}`,
                             text: '',
-                            answer_type: 'yes_no',
+                            answer_type: 'text',
                             expected_answer: null,
                             criterion_id: null,
+                            key_points: [],
                           },
                         ])
                       }
@@ -1406,6 +1603,37 @@ export function JobBuilder({
                       <FontAwesomeIcon icon={faPlus} aria-hidden="true" /> Add
                       call question
                     </button>
+                  )}
+                  <div className="call-questions-try">
+                    {currentJob ? (
+                      <button
+                        type="button"
+                        disabled={!usableQuestions.length}
+                        onClick={() => setTestingCall(true)}
+                      >
+                        <FontAwesomeIcon
+                          icon={faMicrophone}
+                          aria-hidden="true"
+                        />{' '}
+                        Try a test call
+                      </button>
+                    ) : null}
+                    <small>
+                      {currentJob
+                        ? 'Talk to the AI from your browser, as a candidate would, with these questions.'
+                        : 'Save the job to try a call with these questions.'}
+                    </small>
+                  </div>
+                  {testingCall && currentJob && (
+                    <TestCallDialog
+                      jobId={currentJob.id}
+                      questions={usableQuestions.map((item) => ({
+                        ...item,
+                        text: item.text.trim(),
+                        key_points: keyPoints(item),
+                      }))}
+                      onClose={() => setTestingCall(false)}
+                    />
                   )}
                 </div>
               )}
@@ -1417,8 +1645,20 @@ export function JobBuilder({
               <div className="job-form-section-heading">
                 <FontAwesomeIcon icon={faFileCircleCheck} aria-hidden="true" />
                 <div>
-                  <h3>Review and publish</h3>
-                  <p>Check the details before saving or publishing this job.</p>
+                  <h3>
+                    {published
+                      ? 'Review changes'
+                      : canSubmit
+                        ? 'Review and submit'
+                        : 'Review and publish'}
+                  </h3>
+                  <p>
+                    {published
+                      ? 'Check the job before saving your changes.'
+                      : canSubmit
+                        ? 'Check the details before submitting this job for approval.'
+                        : 'Check the details before saving or publishing this job.'}
+                  </p>
                 </div>
               </div>
               <dl className="job-review">
@@ -1480,6 +1720,9 @@ export function JobBuilder({
                                 {item.expected_answer
                                   ? ` · flagged unless “${item.expected_answer === 'yes' ? 'Yes' : 'No'}”`
                                   : ''}
+                                {keyPoints(item).length
+                                  ? ` · ${keyPoints(item).length} key ${keyPoints(item).length === 1 ? 'point' : 'points'}`
+                                  : ''}
                               </small>
                             </li>
                           ))}
@@ -1491,7 +1734,16 @@ export function JobBuilder({
                   </div>
                 )}
               </dl>
-              {canPublish ? (
+              {published ? (
+                <div className="feature-notice">
+                  <strong>Your careers page shows the changes at once.</strong>
+                  <span>
+                    Posts already shared to LinkedIn or other channels
+                    aren&apos;t changed. Use Post to channels on the Jobs list
+                    to share the job again.
+                  </span>
+                </div>
+              ) : canPublish ? (
                 <ChannelPicker
                   query={channelsQuery}
                   selection={selection}
@@ -1501,10 +1753,26 @@ export function JobBuilder({
                   }}
                   job={form}
                   disabled={busy}
+                  applyUrl={
+                    currentJob ? applyPageFor?.(currentJob.id) : undefined
+                  }
+                  applyPageLater={!currentJob && !!applyPageFor?.('new')}
                 />
+              ) : canSubmit ? (
+                <div className="feature-notice">
+                  <strong>
+                    {awaiting
+                      ? 'Waiting for an HR Admin to approve it.'
+                      : 'Next: an HR Admin approves it.'}
+                  </strong>
+                  <span>
+                    Once approved, a recruiter publishes it to your careers page
+                    and the channels they choose, such as LinkedIn.
+                  </span>
+                </div>
               ) : (
                 <div className="feature-notice">
-                  <strong>An HR Admin publishes this job.</strong>
+                  <strong>Approved: a recruiter publishes it.</strong>
                   <span>
                     They choose where it&apos;s posted, such as your careers
                     website or LinkedIn.
@@ -1554,23 +1822,24 @@ export function JobBuilder({
             <div className="job-builder-operations">
               <button
                 type="button"
-                aria-label="Save draft"
+                aria-label={live ? 'Save changes' : 'Save draft'}
+                className={published ? 'button-primary' : undefined}
                 disabled={busy || aiBusy}
-                onClick={() => void save(false)}
+                onClick={() => void save('save')}
               >
                 {busy ? (
                   'Saving…'
                 ) : (
                   <>
                     <FontAwesomeIcon icon={faFloppyDisk} aria-hidden="true" />{' '}
-                    Save Draft
+                    {live ? 'Save Changes' : 'Save Draft'}
                   </>
                 )}
               </button>
               <button
                 type="button"
                 className="button-ai"
-                disabled={busy || aiBusy || !aiProvider}
+                disabled={busy || aiBusy || !aiProvider || lockedDetails}
                 title={
                   aiUnavailableReason ||
                   'Draft the job description from these details.'
@@ -1585,6 +1854,25 @@ export function JobBuilder({
               </button>
               {/* Publishing happens on the review step, where the
                   destinations are chosen. */}
+              {canSubmit && !awaiting && step === steps.length - 1 && (
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={busy || aiBusy}
+                  aria-label="Submit for approval"
+                  title="Saves the job and asks an HR Admin to approve it."
+                  onClick={() => void save('submit')}
+                >
+                  {busy ? (
+                    'Submitting…'
+                  ) : (
+                    <>
+                      <FontAwesomeIcon icon={faPaperPlane} aria-hidden="true" />{' '}
+                      Submit for Approval
+                    </>
+                  )}
+                </button>
+              )}
               {canPublish && step === steps.length - 1 && (
                 <button
                   type="button"
@@ -1592,7 +1880,7 @@ export function JobBuilder({
                   disabled={busy || aiBusy}
                   aria-label="Publish Job"
                   title="Publishes the job in HireAI and posts it to the channels you selected."
-                  onClick={() => void save(true)}
+                  onClick={() => void save('publish')}
                 >
                   {busy ? (
                     'Publishing…'
@@ -1667,16 +1955,20 @@ export function JobBuilder({
                 <strong>Candidate calling</strong>
                 <p>
                   {calling
-                    ? `Calls aren’t placed yet. ${
-                        usableQuestions.length
-                          ? `${usableQuestions.length} call question${usableQuestions.length === 1 ? ' is' : 's are'} ready.`
-                          : 'Prepare the call questions in the Screening Questions step.'
-                      }`
+                    ? usableQuestions.length
+                      ? `The AI calls shortlisted candidates with ${usableQuestions.length} question${usableQuestions.length === 1 ? '' : 's'}.`
+                      : 'Add the call questions in the Screening Questions step.'
                     : 'An HR Admin can turn on AI calling in Integrations.'}
                 </p>
               </div>
-              <span className="status-pill status-muted">
-                {calling ? 'Coming soon' : 'Unavailable'}
+              <span
+                className={`status-pill ${calling && usableQuestions.length ? 'status-live' : 'status-muted'}`}
+              >
+                {calling
+                  ? usableQuestions.length
+                    ? 'Available'
+                    : 'Needs questions'
+                  : 'Off'}
               </span>
             </li>
             <li>
@@ -1715,13 +2007,188 @@ export function JobBuilder({
   );
 }
 
+/** A job's status, and where it is in request → approval → publishing. */
+function JobStatusCell({
+  job,
+  canApprove,
+  canManage,
+}: {
+  job: Job;
+  canApprove: boolean;
+  canManage: boolean;
+}) {
+  const awaiting = job.status === 'DRAFT' && !!job.requested_at;
+  const sentBack = job.status === 'DRAFT' && !awaiting && !!job.review_note;
+  const label = awaiting
+    ? 'Awaiting approval'
+    : sentBack
+      ? 'Sent back'
+      : job.status[0] + job.status.slice(1).toLowerCase();
+  const hint = awaiting
+    ? job.created_by_name
+      ? `Requested by ${job.created_by_name}${
+          canManage && !canApprove ? ' · waiting for HR Admin approval' : ''
+        }`
+      : null
+    : sentBack
+      ? `Note: ${job.review_note}`
+      : job.status === 'DRAFT'
+        ? canApprove
+          ? job.created_by_name
+            ? `Being drafted by ${job.created_by_name}`
+            : null
+          : canManage
+            ? 'Not submitted for approval yet'
+            : 'Submit it for approval when it’s ready'
+        : job.status === 'APPROVED'
+          ? canManage
+            ? 'Ready to publish'
+            : 'A recruiter publishes it next'
+          : null;
+  return (
+    <>
+      <span
+        className={`status-pill status-${
+          awaiting
+            ? 'awaiting'
+            : sentBack
+              ? 'sent-back'
+              : job.status.toLowerCase()
+        }`}
+      >
+        {label}
+      </span>
+      {hint && <small className="job-status-hint">{hint}</small>}
+    </>
+  );
+}
+
+/** An HR Admin sends a request back to whoever asked, saying what to change. */
+function SendBackDialog({
+  job,
+  onClose,
+  onDone,
+}: {
+  job: Job;
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
+  const titleId = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    heading.current?.focus();
+    return () => opener?.focus();
+  }, []);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/jobs/${job.id}/send-back`, {
+        method: 'POST',
+        body: JSON.stringify({ note: note.trim() }),
+      });
+      onDone(
+        `${job.title} was sent back${
+          job.created_by_name ? ` to ${job.created_by_name}` : ''
+        } with your note.`,
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Unable to send it back.',
+      );
+      setBusy(false);
+    }
+  }
+  return (
+    <div
+      className="job-dialog-backdrop"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !busy) onClose();
+      }}
+    >
+      <div
+        className="job-dialog cand-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <header className="job-dialog-header">
+          <div>
+            <h2 id={titleId} ref={heading} tabIndex={-1}>
+              Send back
+            </h2>
+            <p>
+              {job.title}
+              {job.created_by_name
+                ? ` · requested by ${job.created_by_name}`
+                : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="channel-icon-button"
+            aria-label="Close"
+            disabled={busy}
+            onClick={onClose}
+          >
+            <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
+          </button>
+        </header>
+        <form className="cand-form" onSubmit={(event) => void submit(event)}>
+          <label className="form-field">
+            What should change?
+            <textarea
+              value={note}
+              required
+              maxLength={1000}
+              rows={4}
+              placeholder="e.g. Add the salary range and the team size."
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+          <p className="channel-hint">
+            They see your note on the job, change it, and submit it again.
+          </p>
+          {error && (
+            <p role="alert" className="form-error">
+              {error}
+            </p>
+          )}
+          <div className="cand-form-actions">
+            <button type="button" disabled={busy} onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="button-primary"
+              disabled={busy || !note.trim()}
+            >
+              {busy ? 'Sending…' : 'Send back'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function JobsPage() {
   const { session } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchText, setSearchText] = useState('');
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
+  // ?awaiting=approval or ?status=APPROVED, e.g. from the dashboard.
+  const [status, setStatus] = useState(() =>
+    searchParams.get('awaiting') === 'approval'
+      ? 'AWAITING'
+      : (statuses.find((item) => item === searchParams.get('status')) ?? ''),
+  );
   const [offset, setOffset] = useState(0);
   const [builderJob, setBuilderJob] = useState<Job | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
@@ -1733,6 +2200,8 @@ export function JobsPage() {
     mode: 'publish' | 'share';
   } | null>(null);
   const [closing, setClosing] = useState<Job | null>(null);
+  const [booking, setBooking] = useState<Job | null>(null);
+  const [team, setTeam] = useState<Job | null>(null);
   const [outcome, setOutcome] = useState<{
     title: string;
     outcome: PublishOutcome;
@@ -1741,12 +2210,36 @@ export function JobsPage() {
     session?.user.role ?? '',
   );
   const canApprove = session?.user.role === 'HR_ADMIN';
+  // Hiring managers request jobs; an HR Admin approves; recruiters publish.
+  const isManager = session?.user.role === 'HIRING_MANAGER';
+  // Hiring managers request jobs (HR Admins create them too); recruiters
+  // work on a job once an HR Admin approves it.
+  const canCreate = canApprove || isManager;
+  const canWorkOn = (job: Job) =>
+    job.status !== 'CLOSED' &&
+    (canApprove || (canManage && job.status !== 'DRAFT'));
+  const builderRole: JobRole = canApprove
+    ? 'HR_ADMIN'
+    : isManager
+      ? 'HIRING_MANAGER'
+      : 'RECRUITER';
+  const [sendingBack, setSendingBack] = useState<Job | null>(null);
   const slug = session?.user.organization_slug;
   /** HireAI's public apply page; `source` records where candidates came from. */
   const applyLink = (job: Job, source?: string) =>
     slug
       ? `${window.location.origin}${import.meta.env.BASE_URL}careers/${slug}/jobs/${job.id}${source ? `?source=${source}` : ''}`
       : '';
+  /**
+   * HireAI's apply page for LinkedIn posts: on a public https address, or
+   * while developing on localhost (for test posts).
+   */
+  const linkedinApply = (jobId: string) =>
+    slug &&
+    (window.location.protocol === 'https:' ||
+      localDevLink(new URL(window.location.href)))
+      ? `${window.location.origin}${import.meta.env.BASE_URL}careers/${slug}/jobs/${jobId}?source=linkedin`
+      : undefined;
   async function copyApplyLink(job: Job) {
     const link = applyLink(job);
     setActionError('');
@@ -1765,21 +2258,22 @@ export function JobsPage() {
     direction: 'desc',
   });
   if (search) params.set('q', search);
-  if (status) params.set('status', status);
+  if (status === 'AWAITING') params.set('awaiting', 'approval');
+  else if (status) params.set('status', status);
   const jobs = useQuery({
     queryKey: ['jobs', status, search, offset],
     queryFn: () => api<Page<Job>>(`/jobs?${params.toString()}`),
   });
-  const channelsQuery = useJobChannels(canApprove);
+  const channelsQuery = useJobChannels(canManage);
   const hasChannels =
     Array.isArray(channelsQuery.data) && channelsQuery.data.length > 0;
 
   useEffect(() => {
-    if (searchParams.get('create') === '1') {
+    if (searchParams.get('create') === '1' && canCreate) {
       setBuilderJob(null);
       setBuilderOpen(true);
     }
-  }, [searchParams]);
+  }, [searchParams, canCreate]);
 
   function closeBuilder() {
     setBuilderOpen(false);
@@ -1788,6 +2282,8 @@ export function JobsPage() {
   }
 
   function startCreate() {
+    // Recruiters work on jobs once approved; they don't create them.
+    if (!canCreate) return;
     setBuilderJob(null);
     setBuilderOpen(true);
     setMessage('');
@@ -1813,6 +2309,27 @@ export function JobsPage() {
     setMessage('');
     setOutcome(null);
     setClosing(job);
+  }
+
+  /** Asks an HR Admin to approve a draft. */
+  async function submit(job: Job) {
+    setActionError('');
+    setMessage('');
+    setOutcome(null);
+    setActionBusy(`${job.id}:submit`);
+    try {
+      await api(`/jobs/${job.id}/submit`, { method: 'POST' });
+      await queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      setMessage(
+        `${job.title} was submitted for approval. An HR Admin reviews it next.`,
+      );
+    } catch (reason) {
+      setActionError(
+        reason instanceof Error ? reason.message : 'Unable to submit this job.',
+      );
+    } finally {
+      setActionBusy('');
+    }
   }
 
   async function transition(job: Job, action: 'approve' | 'publish') {
@@ -1852,13 +2369,20 @@ export function JobsPage() {
         <JobBuilder
           key={builderJob?.id ?? 'new'}
           initialJob={builderJob}
-          canPublish={canApprove}
+          role={builderRole}
+          applyPageFor={linkedinApply}
           onCancel={closeBuilder}
           onSaved={(savedJob, published, result) => {
             setMessage(
               published
                 ? `${savedJob.title} was published in HireAI.`
-                : `${savedJob.title} was saved as a draft.`,
+                : savedJob.status === 'DRAFT' && savedJob.requested_at
+                  ? `${savedJob.title} was submitted for approval. An HR Admin reviews it next.`
+                  : savedJob.status === 'PUBLISHED'
+                    ? `${savedJob.title} was updated. The changes are live on your careers page.`
+                    : savedJob.status === 'APPROVED'
+                      ? `${savedJob.title} was updated.`
+                      : `${savedJob.title} was saved as a draft.`,
             );
             setOutcome(
               result ? { title: savedJob.title, outcome: result } : null,
@@ -1880,12 +2404,15 @@ export function JobsPage() {
           <p className="eyebrow">TALENT ACQUISITION</p>
           <h1>Jobs</h1>
           <p className="intro">
-            Create requisitions, manage approvals, and publish openings.
+            {isManager
+              ? 'Request the jobs you need, and follow them from approval to hiring.'
+              : 'Create requisitions, manage approvals, and publish openings.'}
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <button className="button-primary" onClick={startCreate}>
-            <FontAwesomeIcon icon={faPlus} aria-hidden="true" /> Create Job
+            <FontAwesomeIcon icon={faPlus} aria-hidden="true" />{' '}
+            {isManager ? 'Request a Job' : 'Create Job'}
           </button>
         )}
       </header>
@@ -1912,12 +2439,7 @@ export function JobsPage() {
           job={publishing.job}
           mode={publishing.mode}
           query={channelsQuery}
-          applyUrl={
-            // LinkedIn only accepts a public HTTPS application link.
-            window.location.protocol === 'https:'
-              ? applyLink(publishing.job, 'linkedin') || undefined
-              : undefined
-          }
+          applyUrl={linkedinApply(publishing.job.id)}
           onClose={() => setPublishing(null)}
           onDone={(result) => {
             const { job, mode } = publishing;
@@ -1929,6 +2451,37 @@ export function JobsPage() {
             void queryClient.invalidateQueries({
               queryKey: ['job-channels', job.id],
             });
+          }}
+        />
+      )}
+      {sendingBack && (
+        <SendBackDialog
+          job={sendingBack}
+          onClose={() => setSendingBack(null)}
+          onDone={(text) => {
+            setSendingBack(null);
+            setActionError('');
+            setOutcome(null);
+            setMessage(text);
+            void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+          }}
+        />
+      )}
+      {team && (
+        <HiringTeamDialog
+          job={team}
+          canEdit={canApprove}
+          onClose={() => setTeam(null)}
+        />
+      )}
+      {booking && (
+        <InterviewBookingDialog
+          job={booking}
+          onClose={() => setBooking(null)}
+          onSaved={(text) => {
+            setBooking(null);
+            setMessage(text);
+            void queryClient.invalidateQueries({ queryKey: ['jobs'] });
           }}
         />
       )}
@@ -1994,6 +2547,7 @@ export function JobsPage() {
                   }}
                 >
                   <option value="">All statuses</option>
+                  <option value="AWAITING">Awaiting approval</option>
                   {statuses.map((item) => (
                     <option value={item} key={item}>
                       {item[0] + item.slice(1).toLowerCase()}
@@ -2048,11 +2602,11 @@ export function JobsPage() {
                       <td>{job.location}</td>
                       <td>{job.openings}</td>
                       <td>
-                        <span
-                          className={`status-pill status-${job.status.toLowerCase()}`}
-                        >
-                          {job.status[0] + job.status.slice(1).toLowerCase()}
-                        </span>
+                        <JobStatusCell
+                          job={job}
+                          canApprove={canApprove}
+                          canManage={canManage}
+                        />
                       </td>
                       <td>
                         <time dateTime={job.updated_at}>
@@ -2063,17 +2617,37 @@ export function JobsPage() {
                       </td>
                       <td>
                         <div className="row-actions">
-                          {job.status === 'DRAFT' && canManage && (
+                          {(canWorkOn(job) ||
+                            (job.status === 'DRAFT' && isManager)) && (
                             <button
                               type="button"
+                              aria-label={`Edit ${job.title}`}
                               onClick={() => startEdit(job)}
                             >
                               Edit
                             </button>
                           )}
+                          {job.status === 'DRAFT' &&
+                            !job.requested_at &&
+                            isManager && (
+                              <button
+                                type="button"
+                                className="button-primary"
+                                disabled={actionBusy !== ''}
+                                aria-label={`Submit ${job.title} for approval`}
+                                onClick={() => void submit(job)}
+                              >
+                                {actionBusy === `${job.id}:submit`
+                                  ? 'Submitting…'
+                                  : 'Submit for approval'}
+                              </button>
+                            )}
                           {job.status === 'DRAFT' && canApprove && (
                             <button
                               type="button"
+                              className={
+                                job.requested_at ? 'button-primary' : undefined
+                              }
                               disabled={actionBusy !== ''}
                               onClick={() => void transition(job, 'approve')}
                             >
@@ -2082,16 +2656,23 @@ export function JobsPage() {
                                 : 'Approve'}
                             </button>
                           )}
+                          {job.status === 'DRAFT' &&
+                            canApprove &&
+                            job.requested_at && (
+                              <button
+                                type="button"
+                                disabled={actionBusy !== ''}
+                                onClick={() => setSendingBack(job)}
+                              >
+                                Send back
+                              </button>
+                            )}
                           {job.status === 'APPROVED' && canManage && (
                             <button
                               type="button"
                               disabled={actionBusy !== ''}
                               className="button-primary"
-                              onClick={() =>
-                                canApprove
-                                  ? openPublishing(job, 'publish')
-                                  : void transition(job, 'publish')
-                              }
+                              onClick={() => openPublishing(job, 'publish')}
                             >
                               {actionBusy === `${job.id}:publish`
                                 ? 'Publishing…'
@@ -2099,7 +2680,7 @@ export function JobsPage() {
                             </button>
                           )}
                           {job.status === 'PUBLISHED' &&
-                            canApprove &&
+                            canManage &&
                             hasChannels && (
                               <button
                                 type="button"
@@ -2119,6 +2700,25 @@ export function JobsPage() {
                                 Applications
                               </Link>
                             )}
+                          {canWorkOn(job) && (
+                            <button
+                              type="button"
+                              aria-label={`Interview booking for ${job.title}`}
+                              onClick={() => setBooking(job)}
+                            >
+                              Interview booking
+                              {job.interview_setup ? ' · On' : ''}
+                            </button>
+                          )}
+                          {job.status !== 'CLOSED' && canManage && (
+                            <button
+                              type="button"
+                              aria-label={`Hiring team for ${job.title}`}
+                              onClick={() => setTeam(job)}
+                            >
+                              Hiring team
+                            </button>
+                          )}
                           {job.status === 'PUBLISHED' && slug && (
                             <button
                               type="button"
@@ -2174,12 +2774,18 @@ export function JobsPage() {
             <p>
               {search || status
                 ? 'Try another search or status filter.'
-                : 'Create your first job requisition to begin hiring.'}
+                : isManager
+                  ? 'Request the job you need: an HR Admin approves it, then a recruiter publishes it.'
+                  : canCreate
+                    ? 'Create your first job requisition to begin hiring.'
+                    : canManage
+                      ? 'Jobs appear here once a Hiring Manager requests one and an HR Admin approves it. You then add the screening questions and publish it.'
+                      : 'Jobs you’re on appear here.'}
             </p>
-            {canManage && !search && !status && (
+            {canCreate && !search && !status && (
               <button className="button-primary" onClick={startCreate}>
-                <FontAwesomeIcon icon={faPlus} aria-hidden="true" /> Create your
-                first job
+                <FontAwesomeIcon icon={faPlus} aria-hidden="true" />{' '}
+                {isManager ? 'Request your first job' : 'Create your first job'}
               </button>
             )}
           </div>

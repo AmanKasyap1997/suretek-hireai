@@ -1,14 +1,27 @@
 import { z } from 'zod';
+import { readConfig } from '../../platform/config';
 import { POST_TEXT_LIMIT } from './linkedin-client';
 export const companyUrn = z
   .string()
   .regex(/^urn:li:organization:[1-9][0-9]{0,19}$/);
+/**
+ * HireAI's own apply page on a developer's machine, for test posts. Never in
+ * production: candidates can't open a localhost link.
+ */
+const localApplyPage = (u: URL) =>
+  readConfig().NODE_ENV !== 'production' &&
+  u.protocol === 'http:' &&
+  (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
 export const applicationUrl = z
   .url()
   .max(2048)
   .refine((v) => {
     const u = new URL(v);
-    return u.protocol === 'https:' && !u.username && !u.password;
+    return (
+      (u.protocol === 'https:' || localApplyPage(u)) &&
+      !u.username &&
+      !u.password
+    );
   }, 'Use a public HTTPS application URL');
 /** Who can see a post on a member's profile. */
 export const profileVisibility = z.enum(['PUBLIC', 'CONNECTIONS']);

@@ -89,8 +89,8 @@ Content-Type: application/json
   "source": "Candidate consent form reference CONSENT-001"
 }
 
-### Optional plan: enable CALL_PLANNING_ENABLED and use the allowed calling window.
-### This creates a planning record only; no external call is made.
+### AI call: needs CALL_PLANNING_ENABLED=true, AI calling on, Plivo and a voice AI
+### (docs/ai-calling.md). Outside calling hours it waits for the next window.
 POST {{baseUrl}}/call-requests
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -460,12 +460,49 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/organization/ai-settings
 Authorization: Bearer {{token}}
 
-### HR Admin: turn on AI calling (calls aren't placed yet; jobs get call questions)
+### HR Admin: turn on AI calling with Gemini Live (null = automatic)
 PUT {{baseUrl}}/organization/ai-settings/calling
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{"enabled":true}
+{"enabled":true,"provider":"google_ai"}
+
+### The name the AI introduces itself with on calls (null: none)
+PUT {{baseUrl}}/organization/ai-settings/calling
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"enabled":true,"assistantName":"Priya"}
+
+### The Candidates page: shortlisted onward, with each stage's count
+GET {{baseUrl}}/applications?stages=SHORTLISTED,INTERVIEW,OFFER,HIRED&counts=true&limit=10
+Authorization: Bearer {{token}}
+
+### Who can sit on an interview panel
+GET {{baseUrl}}/interviews/panelists
+Authorization: Bearer {{token}}
+
+### An application's calls: whether it can be called, consents, answers
+GET {{baseUrl}}/applications/{{applicationId}}/calls
+Authorization: Bearer {{token}}
+
+### Call every shortlisted candidate of a job who agreed to be called
+POST {{baseUrl}}/jobs/{{jobId}}/calls
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"language":"EN","recording":true,"transcription":true}
+
+### Cancel a waiting call, or hang up one on the line
+POST {{baseUrl}}/call-requests/{{callRequestId}}/cancel
+Authorization: Bearer {{token}}
+
+### A browser test call: returns a one-time ticket for /api/v1/calls/test/:ticket
+POST {{baseUrl}}/calls/test-sessions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"jobId":"{{jobId}}","language":"EN"}
 
 ### Draft a job's AI call questions for review (not saved)
 POST {{baseUrl}}/jobs/call-questions

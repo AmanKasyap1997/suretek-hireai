@@ -54,7 +54,12 @@ export enum CallLanguage {
 }
 
 export enum CallRequestStatus {
+  /** Waiting for its turn: calling hours, a retry, or the next free line. */
   PLANNED = 'PLANNED',
+  /** HireAI is dialing or the AI is on the call. */
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
   CANCELLED = 'CANCELLED',
 }
 

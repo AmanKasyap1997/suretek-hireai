@@ -240,6 +240,12 @@ async function tenantFixture(client: PoolClient): Promise<TenantFixture> {
     "INSERT INTO integration_publications(tenant_id,job_id,connection_id,channel,payload,job_updated_at,created_by) SELECT $1,$2,id,'company_announcement','{}',now(),$3 FROM integration_configs WHERE tenant_id=$1 LIMIT 1",
     [tenantId, jobId, userId],
   );
+  await client.query(
+    `INSERT INTO call_attempts(tenant_id,call_request_id,number,connection_id)
+     SELECT $1,cr.id,1,ic.id FROM call_requests cr,integration_configs ic
+     WHERE cr.tenant_id=$1 AND ic.tenant_id=$1 LIMIT 1`,
+    [tenantId],
+  );
   return { tenantId, organizationId, userId, candidateId, consentId, auditId };
 }
 
@@ -317,6 +323,7 @@ describe('PostgreSQL row-level isolation with the non-owner runtime role', () =>
         ],
       );
       for (const table of [
+        'call_attempts',
         'application_screenings',
         'application_details',
         'application_repeat_notices',

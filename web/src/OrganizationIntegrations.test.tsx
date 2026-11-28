@@ -110,7 +110,12 @@ it('shows the backend failure on the integrations page when the popup closes', a
     .mockReturnValue({ close, opener: null } as unknown as Window);
   setup('HR_ADMIN', true, true, true, true);
   await userEvent.click(
-    await screen.findByRole('button', { name: 'Authorize Google Calendar' }),
+    // The whole app renders first; allow for a slow first render.
+    await screen.findByRole(
+      'button',
+      { name: 'Authorize Google Calendar' },
+      { timeout: 5000 },
+    ),
   );
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Integration encryption key is not configured',
@@ -127,7 +132,12 @@ it('opens Google authorization directly from the provider card when configured',
   } as unknown as Window);
   const fetcher = setup('HR_ADMIN', true, true, true);
   await userEvent.click(
-    await screen.findByRole('button', { name: 'Authorize Google Calendar' }),
+    // The whole app renders first; allow for a slow first render.
+    await screen.findByRole(
+      'button',
+      { name: 'Authorize Google Calendar' },
+      { timeout: 5000 },
+    ),
   );
   await waitFor(() =>
     expect(replace).toHaveBeenCalledWith(

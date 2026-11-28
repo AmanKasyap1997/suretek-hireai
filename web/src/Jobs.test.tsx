@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -116,7 +122,7 @@ function setup(
       <MemoryRouter>
         <JobBuilder
           initialJob={null}
-          canPublish
+          role="HR_ADMIN"
           onCancel={vi.fn()}
           onSaved={options.onSaved ?? vi.fn()}
         />
@@ -170,6 +176,39 @@ async function fillDetails() {
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
+});
+
+it('shows that AI calling is on, and goes to the job’s call questions', async () => {
+  setup([], undefined, { calling: true });
+  const panel = (
+    await screen.findByRole('heading', { name: 'AI Calling' })
+  ).closest('section')!;
+  expect(await within(panel).findByText('On')).toBeVisible();
+  expect(within(panel).getByText('None yet')).toBeVisible();
+  expect(
+    within(panel).getByText(/English or Hindi, chosen when a recruiter/),
+  ).toBeVisible();
+  await fillDetails();
+  await userEvent.click(
+    within(panel).getByRole('button', { name: 'Add questions' }),
+  );
+  expect(
+    await screen.findByRole('heading', { name: 'Screening criteria' }),
+  ).toBeVisible();
+});
+
+it('says when AI calling is off for the organization', async () => {
+  setup([], undefined, { calling: false });
+  const panel = (
+    await screen.findByRole('heading', { name: 'AI Calling' })
+  ).closest('section')!;
+  expect(
+    await within(panel).findByText(/AI calling is off for your organization/),
+  ).toBeVisible();
+  expect(within(panel).getByText('Off')).toBeVisible();
+  expect(
+    within(panel).getByRole('link', { name: /Turn it on/ }),
+  ).toHaveAttribute('href', '/integrations');
 });
 
 it('adds and removes skills inline without advancing the job wizard', async () => {
@@ -540,14 +579,20 @@ it('drafts AI call questions for review when AI calling is on', async () => {
   );
   await userEvent.type(
     screen.getByRole('textbox', { name: 'Question 2' }),
-    'Tell me about a Laravel project you led.',
+    'What does a service provider do in Laravel?',
+  );
+  // New questions are spoken (technical) ones, with key points to assess.
+  await userEvent.type(
+    screen.getByRole('textbox', { name: /What a good answer covers/ }),
+    'Registers bindings{enter}{enter}boot() runs after register',
   );
   const answers = screen.getAllByRole('combobox', { name: 'Answer' });
-  await userEvent.selectOptions(answers[1], 'text');
+  expect(answers[1]).toHaveValue('text');
   await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
   // Listed on the review step before publishing.
   expect(screen.getByText('AI call questions')).toBeVisible();
   expect(screen.getByText(/flagged unless “Yes”/)).toBeVisible();
+  expect(screen.getByText(/2 key points/)).toBeVisible();
   await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
   await waitFor(() =>
     expect(requested('/api/v1/jobs')[0]).toMatchObject({
@@ -561,10 +606,11 @@ it('drafts AI call questions for review when AI calling is on', async () => {
         },
         {
           id: 'question-1',
-          text: 'Tell me about a Laravel project you led.',
+          text: 'What does a service provider do in Laravel?',
           answer_type: 'text',
           expected_answer: null,
           criterion_id: null,
+          key_points: ['Registers bindings', 'boot() runs after register'],
         },
       ],
     }),

@@ -80,6 +80,23 @@ const points = z
       .filter(Boolean)
       .slice(0, 5),
   );
+/** Skills found in the resume: short names, most relevant first. */
+const skills = z
+  .unknown()
+  .optional()
+  .transform((value) => {
+    const seen = new Set<string>();
+    return (Array.isArray(value) ? value : [])
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim().replace(/\s+/g, ' ').slice(0, 60))
+      .filter((item) => {
+        const key = item.toLowerCase();
+        if (!item || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 15);
+  });
 const criterionReply = z.object({
   id: text(100),
   requirement: text(500),
@@ -104,6 +121,7 @@ export const aiScreeningSchema = z.object({
   strengths: points,
   concerns: points,
   interview_questions: points,
+  skills,
 });
 export type AiScreening = z.infer<typeof aiScreeningSchema>;
 
@@ -120,6 +138,7 @@ export const screeningJsonSchema = {
     'strengths',
     'concerns',
     'interview_questions',
+    'skills',
   ],
   properties: {
     readable: { type: 'boolean' },
@@ -151,6 +170,7 @@ export const screeningJsonSchema = {
     strengths: stringList,
     concerns: stringList,
     interview_questions: stringList,
+    skills: stringList,
   },
 };
 
@@ -181,6 +201,7 @@ Write:
 - summary: two or three neutral, factual sentences on how the candidate's background relates to this job.
 - strengths and concerns: up to 5 short points each, tied to the requirements.
 - interview_questions: up to 5 questions a recruiter could ask to check the PARTIAL and UNCLEAR requirements.
+- skills: up to 15 skills the resume shows (languages, frameworks, tools, platforms, methods or domains), each in one to three words, as the resume names them ("Laravel", "REST APIs", "MySQL"). Put those most relevant to this job first. Only skills the resume shows, never ones it lacks.
 Use plain text, without Markdown.`;
 
 export interface ScreeningJob {
@@ -288,6 +309,8 @@ export interface ScreeningResult {
   strengths: string[];
   concerns: string[];
   questions: string[];
+  /** Skills found in the resume; absent in screenings from before skills. */
+  skills?: string[];
   instructions_in_resume: boolean;
 }
 
@@ -382,6 +405,7 @@ export function assess(
       strengths: reply.strengths,
       concerns: reply.concerns,
       questions: reply.interview_questions,
+      skills: reply.skills,
       instructions_in_resume: reply.instructions_in_resume,
     },
   };

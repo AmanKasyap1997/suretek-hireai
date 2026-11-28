@@ -277,6 +277,14 @@ export class CareersService {
               input.referrer ?? null,
             ],
           );
+          // No separate choices: the apply form's notice covers calls,
+          // recording and transcription (the AI says which at the start).
+          const byNotice = !input.consents;
+          const choices = input.consents ?? {
+            CALL: true,
+            RECORDING: true,
+            TRANSCRIPTION: true,
+          };
           const consentIds: string[] = [];
           for (const scope of Object.values(ConsentScope)) {
             const consent = await tx.one<{ id: string }>(
@@ -285,7 +293,7 @@ export class CareersService {
                 tenantId,
                 candidate.id,
                 scope,
-                input.consents[scope],
+                choices[scope],
                 input.noticeVersion,
                 ip,
                 createHmac('sha256', c.JWT_SECRET)
@@ -303,20 +311,23 @@ export class CareersService {
               {
                 candidateId: candidate.id,
                 scope,
-                granted: input.consents[scope],
+                granted: choices[scope],
                 verified: false,
+                byNotice,
               },
             );
           }
-          email = await this.verification.issue(
-            tx,
-            tenantId,
-            candidate.id,
-            application.id,
-            input.email,
-            slug,
-            consentIds,
-          );
+          // Separate choices are confirmed by email; the notice needs none.
+          if (!byNotice)
+            email = await this.verification.issue(
+              tx,
+              tenantId,
+              candidate.id,
+              application.id,
+              input.email,
+              slug,
+              consentIds,
+            );
           await this.documents.write(
             tx,
             actor,

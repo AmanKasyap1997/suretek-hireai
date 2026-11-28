@@ -109,7 +109,7 @@ describe('SMTP EmailPort with a fake TLS SMTP server', () => {
       expect(raw).toContain('text/plain');
       expect(raw).toContain('text/html');
       expect(raw.replace(/=\r\n/g, '').replace(/=3D/g, '=')).toContain(
-        '/contact-verification#tenant=pilot&token=test-secret-token',
+        '/console/contact-verification#tenant=pilot&token=test-secret-token',
       );
       expect(raw).not.toContain('?token=');
     },

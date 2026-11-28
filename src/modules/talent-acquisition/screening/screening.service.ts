@@ -29,6 +29,7 @@ import {
   ReadyAiConnection,
   aiProviderLabels,
 } from '../../organization-integrations/organization-ai';
+import { HiringAutomationService } from '../calling';
 import {
   AssessmentError,
   Fit,
@@ -46,7 +47,8 @@ export type ScreeningStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
 /**
  * A screening left QUEUED or RUNNING by a restart counts as interrupted. A run
- * takes a few minutes at most (two provider attempts of up to two minutes).
+ * takes under ten minutes: no retry round starts after RETRY_WINDOW_MS, and a
+ * round takes at most two minutes per provider.
  */
 const STALE = `((x.status='RUNNING' AND x.started_at < now()-interval '10 minutes') OR (x.status='QUEUED' AND x.created_at < now()-interval '2 hours'))`;
 const EFFECTIVE_STATUS = `CASE WHEN ${STALE} THEN 'FAILED' ELSE x.status END`;
@@ -56,6 +58,21 @@ export const latestScreeningJoin = `LEFT JOIN LATERAL (SELECT x.id,${EFFECTIVE_S
 
 /** Background screenings run at most this many at a time per API process. */
 const CONCURRENCY = 2;
+
+/**
+ * When a background screening (automatic or a job's batch: no one is waiting
+ * for it) finds its providers briefly down or limiting requests, it waits and
+ * tries again, so a short provider outage doesn't need a recruiter to screen
+ * again. A recruiter who clicks Screen gets the outcome straight away.
+ */
+const RETRY_DELAYS_MS = [20_000, 60_000];
+/** No retry round starts later than this after the run began. */
+const RETRY_WINDOW_MS = 4 * 60_000;
+/** Provider failures that usually clear within a minute. */
+const PASSING_PROBLEMS: ReadonlySet<ScreeningFailureReason> = new Set([
+  'unavailable',
+  'rate_limit',
+]);
 /** Applications queued by one "screen all" request. */
 const BATCH_LIMIT = 100;
 
@@ -203,6 +220,8 @@ interface RunContext extends ScreeningJob {
 export class ScreeningService {
   private readonly logger = new Logger('Screening');
   private readonly waiting: { tenantId: string; id: string }[] = [];
+  /** Screenings waiting or running in this process. */
+  private readonly known = new Set<string>();
   private active = 0;
 
   constructor(
@@ -210,6 +229,7 @@ export class ScreeningService {
     private readonly policy: AccessPolicy,
     private readonly storage: ObjectStoragePort,
     private readonly ai: OrganizationAiService,
+    private readonly automation: HiringAutomationService,
   ) {}
 
   /** The newest screening of an application the actor can see. */
@@ -436,8 +456,52 @@ export class ScreeningService {
   }
 
   private enqueue(tenantId: string, id: string) {
+    // Already waiting or running in this process.
+    if (this.known.has(id)) return;
+    this.known.add(id);
     this.waiting.push({ tenantId, id });
     this.drain();
+  }
+
+  /**
+   * Picks up screenings a restart left behind (the queue is in memory):
+   * queued ones this process doesn't know about, and automatic or batch ones
+   * that were running, which are screened again. A recruiter who clicked
+   * Screen sees "interrupted" and can screen again.
+   */
+  async recover(tenantId: string) {
+    const queued = await this.db.query<{ id: string }>(
+      `SELECT id FROM application_screenings
+       WHERE tenant_id=$1 AND status='QUEUED' AND created_at>now()-interval '2 hours'
+       ORDER BY created_at,id`,
+      [tenantId],
+    );
+    for (const { id } of queued) this.enqueue(tenantId, id);
+    const stale = await this.db.query<{
+      id: string;
+      application_id: string;
+      trigger: ScreeningTrigger;
+      requested_by: string | null;
+    }>(
+      `SELECT x.id,x.application_id,x.trigger,x.requested_by FROM application_screenings x
+       WHERE x.tenant_id=$1 AND x.trigger<>'MANUAL' AND ${STALE} AND x.status='RUNNING'
+         AND x.started_at>now()-interval '1 day'`,
+      [tenantId],
+    );
+    for (const screening of stale) {
+      if (this.known.has(screening.id)) continue;
+      // Marks the interrupted one failed, then queues a new one.
+      const id = await this.db.transaction((tx) =>
+        this.request(
+          tx,
+          { tenantId, userId: screening.requested_by },
+          screening.application_id,
+          screening.trigger,
+          true,
+        ),
+      );
+      if (id) this.enqueue(tenantId, id);
+    }
   }
 
   private drain() {
@@ -450,6 +514,7 @@ export class ScreeningService {
         .catch(() => this.logger.warn('Resume screening failed unexpectedly'))
         .finally(() => {
           this.active--;
+          this.known.delete(next.id);
           this.drain();
         });
     }
@@ -512,17 +577,43 @@ export class ScreeningService {
       // The preferred provider first; if its account or service fails (for
       // example, no credits), the organization's next enabled provider.
       let reply: JsonResult | undefined;
-      for (const candidate of await this.ai.screeningConnections(tenantId)) {
-        // Set first, so a failure is recorded against the provider tried.
-        connection = candidate;
-        try {
-          reply = await candidate.json(request);
-          break;
-        } catch (error) {
-          const reason = failureReason(error);
-          attempts.push({ provider: candidate.provider, reason });
-          if (!PROVIDER_PROBLEMS.has(reason)) throw error;
+      const began = Date.now();
+      for (let round = 0; ; round++) {
+        // Only the last round's failures are kept with the outcome.
+        attempts.length = 0;
+        for (const candidate of await this.ai.screeningConnections(tenantId)) {
+          // Set first, so a failure is recorded against the provider tried.
+          connection = candidate;
+          try {
+            reply = await candidate.json(request);
+            break;
+          } catch (error) {
+            const reason = failureReason(error);
+            attempts.push({ provider: candidate.provider, reason });
+            // Codes only, never the provider's text, which can echo content.
+            this.logger.warn(
+              `Screening with ${candidate.provider} failed: ${reason}${
+                error instanceof AiProviderError && error.detail
+                  ? ` (${error.detail})`
+                  : ''
+              }`,
+            );
+            if (!PROVIDER_PROBLEMS.has(reason)) throw error;
+          }
         }
+        if (reply) break;
+        const delay =
+          started.trigger === 'MANUAL' ? undefined : RETRY_DELAYS_MS[round];
+        if (
+          delay === undefined ||
+          !attempts.some((attempt) => PASSING_PROBLEMS.has(attempt.reason)) ||
+          Date.now() - began + delay > RETRY_WINDOW_MS
+        )
+          break;
+        this.logger.log(`Screening again in ${delay / 1000} s`);
+        await this.pause(delay);
+        // Erased or cancelled meanwhile: the resume is never sent again.
+        if (!(await this.stillRunning(tenantId, id))) return;
       }
       if (!reply) throw new ScreeningFailure(attempts.at(-1)!.reason);
       const assessment = assess(started.criteria, reply.value);
@@ -565,6 +656,12 @@ export class ScreeningService {
             },
           );
       });
+      // A high enough score shortlists the applicant (if turned on).
+      await this.automation.screened(tenantId, started.application_id, {
+        id,
+        score: assessment.score,
+        missingMustHave: assessment.missing_must_have,
+      });
     } catch (error) {
       const reason = failureReason(error);
       if (error instanceof AssessmentError && error.detail)
@@ -605,6 +702,22 @@ export class ScreeningService {
           );
       });
     }
+  }
+
+  /** Waits between retry rounds without holding up a shutdown. */
+  private pause(ms: number) {
+    return new Promise<void>((resolve) => setTimeout(resolve, ms).unref());
+  }
+
+  /** Whether a screening is still running and its candidate not erased. */
+  private async stillRunning(tenantId: string, id: string) {
+    return !!(await this.db.one(
+      `SELECT x.id FROM application_screenings x
+       JOIN applications a ON a.tenant_id=x.tenant_id AND a.id=x.application_id
+       JOIN candidates c ON c.tenant_id=a.tenant_id AND c.id=a.candidate_id
+       WHERE x.tenant_id=$1 AND x.id=$2 AND x.status='RUNNING' AND c.erased_at IS NULL`,
+      [tenantId, id],
+    ));
   }
 
   /** The resume as the AI reads it: a PDF as is, a Word file as its text. */

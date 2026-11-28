@@ -8,6 +8,7 @@ import {
 import { DbService } from '../../platform/database/db.service';
 import { audit } from '../../platform/audit/audit';
 import { Actor, Role } from '../../shared/actor';
+import { RECRUITMENT_ROLES } from '../../shared/role-groups';
 import { decryptSecret, encryptSecret } from '../super-admin/secrets';
 import {
   CareersDelivery,
@@ -150,7 +151,7 @@ export class JobPublishingService {
   ) {}
 
   private async organization(actor: Actor) {
-    if (actor.role !== Role.HR_ADMIN) throw new ForbiddenException();
+    if (!RECRUITMENT_ROLES.includes(actor.role)) throw new ForbiddenException();
     const org = await this.db.one(
       'SELECT is_platform,status,deleted_at,enabled_modules,slug FROM tenants WHERE id=$1',
       [actor.tenantId],
@@ -192,7 +193,7 @@ export class JobPublishingService {
     if (connection.environment !== 'production')
       return 'Only the sandbox LinkedIn connection is enabled. Test and enable the production connection in Integrations.';
     if (channel === 'profile_post' && connection.updated_by !== actor.userId)
-      return 'Only the HR admin who connected LinkedIn profile can post to it. To post on your own profile, reconnect it with your LinkedIn account in Integrations.';
+      return 'This posts on the LinkedIn profile of the person who connected it, so only they can use it.';
     if (
       channel === 'job_listing' &&
       process.env.LINKEDIN_JOBS_APPROVED !== 'true'
@@ -284,6 +285,8 @@ export class JobPublishingService {
    * post was already deleted on LinkedIn, so the job can be posted again.
    */
   async remove(actor: Actor, jobId: string, channel: RemovableChannel) {
+    // Deleting a LinkedIn post stays with HR Admins.
+    if (actor.role !== Role.HR_ADMIN) throw new ForbiddenException();
     await this.organization(actor);
     await this.linkedin.removePost(actor, jobId, channel);
     return outcome(channel, {

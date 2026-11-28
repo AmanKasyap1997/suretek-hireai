@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { DbClient, DbService } from '../../../platform/database/db.service';
@@ -9,7 +10,7 @@ import { audit } from '../../../platform/audit/audit';
 import { Actor } from '../../../shared/actor';
 import { ConsentScope } from '../../../shared/enums';
 import { ADMIN_ROLES } from '../../../shared/role-groups';
-import { ObjectStoragePort } from '../../../integrations';
+import { CallRecordingStorage, ObjectStoragePort } from '../../../integrations';
 
 const dormant = `c.updated_at<$3
  AND NOT EXISTS(SELECT 1 FROM applications a WHERE a.tenant_id=c.tenant_id AND a.candidate_id=c.id AND (a.updated_at>=$3 OR a.stage NOT IN ('REJECTED','HIRED')))
@@ -17,9 +18,11 @@ const dormant = `c.updated_at<$3
  AND NOT EXISTS(SELECT 1 FROM consents evidence WHERE evidence.tenant_id=c.tenant_id AND evidence.candidate_id=c.id AND evidence.created_at>=$3)`;
 @Injectable()
 export class PrivacyService {
+  private readonly logger = new Logger(PrivacyService.name);
   constructor(
     private readonly db: DbService,
     private readonly storage: ObjectStoragePort,
+    private readonly recordings: CallRecordingStorage,
   ) {}
   private authorize(actor: Actor) {
     if (!ADMIN_ROLES.includes(actor.role)) throw new ForbiddenException();
@@ -31,12 +34,16 @@ export class PrivacyService {
         [actor.tenantId, id, scope, actor.userId],
       );
     await tx.query(
-      `UPDATE call_requests cr SET status='CANCELLED' FROM applications a WHERE cr.tenant_id=$1 AND a.tenant_id=cr.tenant_id AND a.id=cr.application_id AND a.candidate_id=$2 AND cr.status='PLANNED'`,
+      `UPDATE call_requests cr SET status='CANCELLED',updated_at=now() FROM applications a WHERE cr.tenant_id=$1 AND a.tenant_id=cr.tenant_id AND a.id=cr.application_id AND a.candidate_id=$2 AND cr.status IN ('PLANNED','IN_PROGRESS')`,
       [actor.tenantId, id],
     );
   }
   async erase(actor: Actor, id: string, cutoff?: Date) {
     this.authorize(actor);
+    let recordings: {
+      recording_key: string;
+      recording_version: string | null;
+    }[] = [];
     const eligible = await this.db.transaction(async (tx) => {
       const candidate = await tx.one<{ erased_at: Date | null }>(
         'SELECT erased_at FROM candidates WHERE tenant_id=$1 AND id=$2 FOR NO KEY UPDATE',
@@ -70,6 +77,21 @@ export class PrivacyService {
           'DELETE FROM application_screenings s USING applications a WHERE s.tenant_id=$1 AND a.tenant_id=s.tenant_id AND a.id=s.application_id AND a.candidate_id=$2',
           [actor.tenantId, id],
         );
+        // AI call answers, transcripts and recordings are the candidate's words.
+        recordings = (
+          await tx.query<{
+            recording_key: string | null;
+            recording_version: string | null;
+          }>(
+            'DELETE FROM call_attempts ca USING call_requests cr,applications a WHERE ca.tenant_id=$1 AND cr.tenant_id=ca.tenant_id AND cr.id=ca.call_request_id AND a.tenant_id=cr.tenant_id AND a.id=cr.application_id AND a.candidate_id=$2 RETURNING ca.recording_key,ca.recording_version',
+            [actor.tenantId, id],
+          )
+        ).filter(
+          (
+            r,
+          ): r is { recording_key: string; recording_version: string | null } =>
+            !!r.recording_key,
+        );
         await this.revoke(tx, actor, id);
         await audit(tx, actor, 'candidate.erased', 'candidate', id, {
           reason: cutoff ? 'retention' : 'staff-request',
@@ -78,6 +100,17 @@ export class PrivacyService {
       return true;
     });
     if (!eligible) return { id, erased: false, documentsPending: 0 };
+    for (const recording of recordings)
+      try {
+        await this.recordings.delete(
+          recording.recording_key,
+          recording.recording_version ?? undefined,
+        );
+      } catch {
+        this.logger.warn(
+          'An erased candidate’s call recording couldn’t be deleted; reconcile private storage',
+        );
+      }
     // Commit the tombstone first. Storage failures leave inaccessible documents for retry.
     return this.db.transaction(async (tx) => {
       await tx.query(

@@ -84,8 +84,8 @@ export function useApiFixture() {
       [candidateId, tenantA, `${candidateId}@example.test`],
     );
     await pool.query(
-      `INSERT INTO jobs (id,tenant_id,title,description,department,location,status,created_by)
-       VALUES ($1,$2,'Backend Developer','Build recruitment APIs','Engineering','Remote',$3,$4)`,
+      `INSERT INTO jobs (id,tenant_id,title,description,department,location,status,created_by,call_questions)
+       VALUES ($1,$2,'Backend Developer','Build recruitment APIs','Engineering','Remote',$3,$4,'[{"id":"q-relocate","text":"Are you open to working from our Noida office?","answer_type":"yes_no","expected_answer":"yes","criterion_id":null}]')`,
       [jobId, tenantA, JobStatus.PUBLISHED, adminA.id],
     );
     await pool.query(
@@ -131,6 +131,11 @@ export function useApiFixture() {
     adminB = await user(tenantB, Role.HR_ADMIN);
     employeeA = await user(tenantA, Role.EMPLOYEE);
     disabledUser = await user(tenantA, Role.RECRUITER);
+    // AI calling is on, as an HR Admin would turn it on in Integrations.
+    await pool.query(
+      'INSERT INTO organization_ai_settings(tenant_id,calling_enabled,updated_by) VALUES($1,true,$2),($3,true,$4)',
+      [tenantA, adminA.id, tenantB, adminB.id],
+    );
     app = await NestFactory.create(AppModule, {
       logger: false,
       bodyParser: false,
@@ -166,6 +171,7 @@ export function useApiFixture() {
         [[tenantA, tenantB]],
       );
       for (const table of [
+        'call_attempts',
         'application_screenings',
         'application_details',
         'application_repeat_notices',

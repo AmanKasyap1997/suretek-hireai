@@ -47,12 +47,32 @@ describe('call questions on a job', () => {
     answer_type: 'yes_no',
     expected_answer: 'yes',
     criterion_id: null,
+    key_points: [],
   };
 
   it('saves up to ten questions with the job', () => {
     expect(
       jobSchema.parse({ ...base, callQuestions: [valid] }).callQuestions,
     ).toEqual([valid]);
+  });
+
+  it('keeps key points for an open (technical) question only', () => {
+    const technical = {
+      ...valid,
+      text: 'What does a service provider do in Laravel?',
+      answer_type: 'text',
+      expected_answer: null,
+      key_points: ['registers bindings in the service container'],
+    };
+    expect(
+      jobSchema.parse({ ...base, callQuestions: [technical] }).callQuestions,
+    ).toEqual([technical]);
+    expect(
+      jobSchema.safeParse({
+        ...base,
+        callQuestions: [{ ...valid, key_points: ['yes'] }],
+      }).success,
+    ).toBe(false);
   });
 
   it.each([
@@ -72,9 +92,16 @@ describe('call questions on a job', () => {
 });
 
 describe('drafting call questions', () => {
-  it('asks for job-related questions without repeating the apply form', () => {
+  it('asks for technical questions with key points, not the apply form', () => {
     expect(callQuestionsSystemPrompt).toContain('Ask only about the job');
     expect(callQuestionsSystemPrompt).toContain('notice period');
+    expect(callQuestionsSystemPrompt).toContain(
+      'What does a service provider do in Laravel?',
+    );
+    expect(callQuestionsSystemPrompt).toContain(
+      'Never ask "Do you have experience with X?"',
+    );
+    expect(callQuestionsSystemPrompt).toContain('key_points');
     const prompt = callQuestionsPrompt(draft);
     expect(prompt).toContain('- id: c1 | must have | 4+ years of Laravel');
     expect(prompt).toContain('Night shifts twice a month');
@@ -111,6 +138,7 @@ describe('drafting call questions', () => {
         answer_type: 'number',
         expected_answer: null,
         criterion_id: 'c1',
+        key_points: [],
       },
       {
         id: 'q2',
@@ -118,6 +146,7 @@ describe('drafting call questions', () => {
         answer_type: 'yes_no',
         expected_answer: 'yes',
         criterion_id: null,
+        key_points: [],
       },
       {
         id: 'q3',
@@ -125,6 +154,7 @@ describe('drafting call questions', () => {
         answer_type: 'text',
         expected_answer: null,
         criterion_id: null,
+        key_points: [],
       },
     ]);
   });
@@ -137,6 +167,7 @@ describe('drafting call questions', () => {
           answer_type: 'Yes/No',
           expected_answer: 'Yes',
           criterion_id: null,
+          key_points: [],
         },
         {
           text: 'How many years have you used Laravel?',
@@ -156,6 +187,7 @@ describe('drafting call questions', () => {
         answer_type: 'yes_no',
         expected_answer: 'yes',
         criterion_id: null,
+        key_points: [],
       },
       {
         id: 'q2',
@@ -163,6 +195,7 @@ describe('drafting call questions', () => {
         answer_type: 'number',
         expected_answer: null,
         criterion_id: null,
+        key_points: [],
       },
       {
         id: 'q3',
@@ -170,7 +203,39 @@ describe('drafting call questions', () => {
         answer_type: 'text',
         expected_answer: null,
         criterion_id: null,
+        key_points: [],
       },
+    ]);
+  });
+
+  it('keeps key points on technical questions and drops them elsewhere', () => {
+    const questions = normalizeCallQuestions(
+      [
+        {
+          text: 'What is the service container in Laravel, and why use it?',
+          answer_type: 'text',
+          expected_answer: 'none',
+          key_points: [
+            ' resolves class dependencies ',
+            'dependency injection',
+            7,
+            '',
+          ],
+          criterion_id: 'c1',
+        },
+        {
+          text: 'Can you work night shifts twice a month?',
+          answer_type: 'yes_no',
+          expected_answer: 'yes',
+          key_points: ['yes'],
+          criterion_id: '',
+        },
+      ],
+      draft.screeningCriteria,
+    );
+    expect(questions.map((q) => q.key_points)).toEqual([
+      ['resolves class dependencies', 'dependency injection'],
+      [],
     ]);
   });
 

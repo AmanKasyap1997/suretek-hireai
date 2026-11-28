@@ -8,6 +8,7 @@ import {
   removableChannelSchema,
 } from '../src/modules/organization-integrations/job-publishing.schemas';
 import { JobPublishingService } from '../src/modules/organization-integrations/job-publishing.service';
+import * as config from '../src/platform/config';
 import { LinkedInService } from '../src/modules/organization-integrations/linkedin.service';
 import { encryptSecret } from '../src/modules/super-admin/secrets';
 import { DbService } from '../src/platform/database/db.service';
@@ -333,10 +334,13 @@ describe('job channel publishing', () => {
     ]);
   });
 
-  it('is limited to HR Admins', async () => {
+  it('is for HR Admins and recruiters, who publish approved jobs', async () => {
     const { service } = setup();
     await expect(
       service.channels({ ...actor, role: Role.RECRUITER }),
+    ).resolves.toEqual(expect.any(Array));
+    await expect(
+      service.channels({ ...actor, role: Role.HIRING_MANAGER }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -541,7 +545,9 @@ describe('job channel publishing', () => {
       label: 'LinkedIn profile post',
       ready: false,
     });
-    expect(channel.reason).toContain('who connected LinkedIn profile');
+    expect(channel.reason).toContain(
+      'the person who connected it, so only they can use it',
+    );
     const input = jobChannelsSchema.parse({
       channels: ['profile_post'],
       applicationUrl,
@@ -641,6 +647,28 @@ describe('job channel publishing', () => {
     expect(parse().data?.visibility).toBe('PUBLIC');
     expect(parse('CONNECTIONS').data?.visibility).toBe('CONNECTIONS');
     expect(parse('ONLY_ME').success).toBe(false);
+  });
+
+  it('takes HireAI’s localhost apply page for test posts, never in production', () => {
+    const post = (applicationUrl: string) =>
+      jobChannelsSchema.safeParse({
+        channels: ['profile_post'],
+        applicationUrl,
+        confirmed: true,
+      }).success;
+    const local = 'http://localhost:5173/console/careers/acme/jobs/1';
+    expect(post(local)).toBe(true);
+    expect(post('http://127.0.0.1:5173/console/careers/acme/jobs/1')).toBe(
+      true,
+    );
+    expect(post('http://careers.example.com/jobs/1')).toBe(false);
+    const real = config.readConfig();
+    jest
+      .spyOn(config, 'readConfig')
+      .mockReturnValue({ ...real, NODE_ENV: 'production' });
+    expect(post(local)).toBe(false);
+    expect(post('https://careers.example.com/jobs/1')).toBe(true);
+    jest.restoreAllMocks();
   });
 
   it('requires confirmation and a company page for LinkedIn posts', () => {

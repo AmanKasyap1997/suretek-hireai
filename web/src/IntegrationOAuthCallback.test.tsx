@@ -82,6 +82,13 @@ it.each(['', '?code=fixture', '?state=fixture'])(
     expect(window.location.search).toBe('');
   },
 );
+it('explains permissions the provider hasn’t approved for the app', () => {
+  const fetcher = setup('?error=unauthorized_scope_error&state=fixture');
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'LinkedIn must first approve Community Management API access',
+  );
+  expect(fetcher).not.toHaveBeenCalled();
+});
 it('does not describe a provider error as declined consent or exchange it', () => {
   const fetcher = setup('?error=server_error&state=fixture&code=fixture');
   expect(screen.getByRole('alert')).toHaveTextContent(

@@ -1,9 +1,22 @@
 import { z } from 'zod';
 import { EmploymentType, AssignmentRole } from '../../../shared/enums';
-import { listSchema as paginationSchema } from '../../../shared/ta-list';
+import {
+  listFields,
+  listSchema,
+  validDateRange,
+} from '../../../shared/ta-list';
 import { aiProviders } from '../../organization-integrations/ai-client';
 import { callQuestionsSchema } from './call-questions';
-export { paginationSchema };
+import { interviewSetupSchema } from './interview-setup';
+/** The jobs list: also the requests awaiting an HR Admin's approval. */
+export const paginationSchema = listFields
+  .extend({ awaiting: z.enum(['approval']).optional() })
+  .refine(validDateRange, { message: 'Invalid date range' });
+export { listSchema };
+
+export const sendBackSchema = z
+  .object({ note: z.string().trim().min(1).max(1000) })
+  .strict();
 
 export const jobSchema = z
   .object({
@@ -43,11 +56,18 @@ export const jobSchema = z
     autoScreen: z.boolean().optional(),
     /** What the AI asks on a candidate call, when AI calling is on. */
     callQuestions: callQuestionsSchema.optional(),
+    /** How the AI books interviews (null: a recruiter books them). */
+    interviewSetup: interviewSetupSchema.nullable().optional(),
     title: z.string().trim().min(2).max(200),
     description: z.string().trim().min(10).max(30_000),
     department: z.string().trim().min(1).max(150),
     location: z.string().trim().min(1).max(200),
   })
+  .strict();
+
+/** A job's interview booking, changeable until the job closes. */
+export const interviewSetupUpdateSchema = z
+  .object({ interviewSetup: interviewSetupSchema.nullable() })
   .strict();
 
 export const updateJobSchema = jobSchema

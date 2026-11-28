@@ -153,11 +153,13 @@ it('sends the form and resume to HireAI as one application', async () => {
     'https://www.linkedin.com/in/asha',
   );
   await userEvent.click(screen.getByRole('radio', { name: 'Yes' }));
-  await userEvent.click(
-    screen.getByRole('checkbox', {
-      name: 'Suretek Infosoft may call me about this application.',
-    }),
-  );
+  // No separate call choices: the privacy notice says calls may happen.
+  expect(
+    screen.queryByRole('checkbox', { name: /may call me/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByText(/may call you about this application, including a short/),
+  ).toBeVisible();
   await userEvent.click(
     screen.getByRole('button', { name: 'Submit application' }),
   );
@@ -189,7 +191,6 @@ it('sends the form and resume to HireAI as one application', async () => {
     website: '',
     noticeVersion: '2026-11-v1',
     privacyAccepted: true,
-    consents: { CALL: true, RECORDING: false, TRANSCRIPTION: false },
   });
   expect((body.get('resume') as File).name).toBe('asha-cv.pdf');
   // A repeat keeps the first application; the page says so without knowing.
@@ -360,8 +361,6 @@ it('still shows the job when the server leaves out the page details', async () =
   ).toBeVisible();
   expect(screen.getByText(/PDF or Word \(\.docx\), up to 5 MB/)).toBeVisible();
   expect(
-    screen.getByRole('checkbox', {
-      name: 'The company may call me about this application.',
-    }),
+    screen.getByText(/The company may call you about this application/),
   ).toBeInTheDocument();
 });

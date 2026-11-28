@@ -157,6 +157,7 @@ export class OrganizationIntegrationsService {
     ]);
     const hint = maskSecret(
       input.credentials.apiKey ??
+        input.credentials.authToken ??
         input.credentials.accessToken ??
         input.credentials.password ??
         input.credentials.clientSecret,

@@ -140,6 +140,14 @@ services:
       CALL_TIMEZONE: ${CALL_TIMEZONE:-Asia/Kolkata}
       CALL_WINDOW_START: ${CALL_WINDOW_START:-09:00}
       CALL_WINDOW_END: ${CALL_WINDOW_END:-18:00}
+      # AI calls: Plivo reaches the API at this public HTTPS origin.
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-}
+      CALL_MAX_SECONDS: ${CALL_MAX_SECONDS:-600}
+      CALL_RETRY_MINUTES: ${CALL_RETRY_MINUTES:-120}
+      CALL_MAX_ATTEMPTS: ${CALL_MAX_ATTEMPTS:-3}
+      CALL_MAX_CONCURRENT: ${CALL_MAX_CONCURRENT:-2}
+      GEMINI_LIVE_MODEL: ${GEMINI_LIVE_MODEL:-gemini-2.5-flash-native-audio-preview-12-2025}
+      OPENAI_REALTIME_MODEL: ${OPENAI_REALTIME_MODEL:-gpt-realtime}
       PGSSLMODE: disable
     ports:
       - '127.0.0.1:3000:3000'

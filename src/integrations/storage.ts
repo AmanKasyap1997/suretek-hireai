@@ -1,6 +1,7 @@
 import { createHash, createHmac } from 'node:crypto';
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { readConfig } from '../platform/config';
 
 export interface StoredObject {
   key: string;
@@ -14,6 +15,36 @@ export abstract class ObjectStoragePort {
   ): Promise<string | undefined>;
   abstract get(key: string, versionId?: string): Promise<Buffer>;
   abstract delete(key: string, versionId?: string): Promise<void>;
+}
+
+/** Private storage for AI call recordings (larger objects than resumes). */
+export abstract class CallRecordingStorage extends ObjectStoragePort {}
+
+/** A two-channel 8 kHz WAV of the longest allowed call, plus a minute. */
+export function callRecordingMaxBytes() {
+  return 44 + 8000 * 4 * (readConfig().CALL_MAX_SECONDS + 60);
+}
+
+/** The deployment's private object storage, with a per-object size limit. */
+export function privateStorage(maxBytes: number): ObjectStoragePort {
+  const c = readConfig();
+  if (c.RESUME_STORAGE === 'local') {
+    if (
+      c.NODE_ENV === 'production' &&
+      c.RESUME_STORAGE_ALLOW_LOCAL_IN_PRODUCTION !== 'true'
+    )
+      throw new Error('Production resumes require private S3 storage');
+    return new LocalObjectStorage(c.RESUME_STORAGE_ROOT, maxBytes);
+  }
+  return new S3ObjectStorage({
+    endpoint: c.S3_ENDPOINT!,
+    bucket: c.S3_BUCKET!,
+    region: c.S3_REGION,
+    accessKeyId: c.S3_ACCESS_KEY_ID!,
+    secretAccessKey: c.S3_SECRET_ACCESS_KEY!,
+    sessionToken: c.S3_SESSION_TOKEN,
+    maxBytes,
+  });
 }
 
 function checkedKey(key: string): string {

@@ -186,7 +186,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
       .expect(404);
     await apply(jobId, body()).expect(404);
   });
-  it('accepts separate default-false consents with evidence and the same response for existing candidates', async () => {
+  it('records the apply page notice as consent with evidence, and the same response for existing candidates', async () => {
     const { jobId } = await f.scenario();
     const input = body();
     const fresh = await apply(jobId, input).expect(202);
@@ -225,8 +225,10 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
       'RECORDING',
       'TRANSCRIPTION',
     ]);
+    // No separate choices: the apply page's notice covers calls, recording
+    // and transcription. It's the candidate's own (unconfirmed) agreement.
     for (const row of evidence) {
-      expect(row.granted).toBe(false);
+      expect(row.granted).toBe(true);
       expect(row.verified).toBe(false);
       expect(row.captured_by).toBeNull();
       expect(row.notice_version).toBe(input.noticeVersion);
@@ -691,7 +693,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
       .send({ scope: 'CALL', granted: false, source: 'public-careers' })
       .expect(201);
   });
-  it('never treats public self-reported grants as verified calling permission', async () => {
+  it('lets the candidate’s own agreement on the application permit calls', async () => {
     const { jobId } = await f.scenario();
     const input = body();
     await apply(jobId, {
@@ -717,7 +719,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
         transcription: true,
         idempotencyKey: randomUUID(),
       })
-      .expect(403);
+      .expect(201);
     const scanner = new PendingMalwareScanner();
     expect(await scanner.scan()).toBe(DocumentScanStatus.PENDING);
   });

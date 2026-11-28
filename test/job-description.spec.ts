@@ -337,8 +337,43 @@ describe('AI text client', () => {
       .mockResolvedValueOnce(ok());
     await expect(
       generateText('google_ai', 'key-1234', request),
-    ).rejects.toMatchObject({ reason: 'unavailable' });
+    ).rejects.toMatchObject({ reason: 'unavailable', detail: 'timed out' });
     expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('says what failed for the server log: codes, never the provider’s text', async () => {
+    const mock = jest.spyOn(globalThis, 'fetch');
+    const overloaded = () =>
+      Response.json(
+        {
+          error: {
+            status: 'UNAVAILABLE',
+            message: 'The model is overloaded. Resume text: …',
+          },
+        },
+        { status: 503 },
+      );
+    mock
+      .mockResolvedValueOnce(overloaded())
+      .mockResolvedValueOnce(overloaded());
+    const failure = await generateText('google_ai', 'key-1234', request).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toMatchObject({
+      reason: 'unavailable',
+      detail: 'HTTP 503 UNAVAILABLE',
+    });
+    expect(JSON.stringify(failure)).not.toContain('overloaded');
+    const reset = Object.assign(new TypeError('fetch failed'), {
+      cause: { code: 'ECONNRESET' },
+    });
+    mock.mockRejectedValueOnce(reset).mockRejectedValueOnce(reset);
+    await expect(
+      generateText('openai', 'key-1234', request),
+    ).rejects.toMatchObject({
+      reason: 'unavailable',
+      detail: 'connection failed (ECONNRESET)',
+    });
   });
 
   it('maps Gemini failures, free-tier limits and blocks to safe reasons', async () => {

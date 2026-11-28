@@ -148,7 +148,10 @@ describe('role shell and sessions', () => {
               ? 'Platform dashboard'
               : ['HR_ADMIN', 'RECRUITER'].includes(role)
                 ? /Welcome back, Test/
-                : `${roleLabel(role)} overview`,
+                : // Their own home: jobs, applicants, interviews, feedback.
+                  ['HIRING_MANAGER', 'INTERVIEWER'].includes(role)
+                  ? 'Welcome, Test'
+                  : `${roleLabel(role)} overview`,
         }),
       ).toBeVisible();
       const nav = screen.getByRole('navigation');

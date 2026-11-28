@@ -70,6 +70,8 @@ people.
    - For each criterion: a rating (Meets, Partly meets, Not met or Unclear), a
      quote from the resume and a one-line reason.
    - A short summary, strengths, concerns and questions to ask.
+   - Up to 15 skills the resume shows, most relevant to the job first. They
+     appear as **Skills (Extracted)** on the [Candidates page](candidates-page.md).
 5. **The score is worked out by HireAI, not the AI.**
    - **Credit:** Meets earns the criterion's full weight, Partly meets half,
      and Not met or Unclear nothing.
@@ -126,9 +128,26 @@ The application shows why, in plain words. Common causes:
 | Out of credits / usage limit     | Add credits with the AI provider, or choose another provider in Integrations |
 | Chosen provider isn't enabled    | Enable it, or choose another provider in Integrations                        |
 | Limiting requests                | Screen again in a minute                                                     |
-| Unavailable                      | A brief outage is retried once automatically; screen again shortly           |
+| Unavailable                      | The provider had an outage. Screen again shortly                             |
 | Couldn't read the resume         | The resume may be empty, image-only Word, or not a resume                    |
-| Interrupted                      | The API restarted mid-screening; screen again                                |
+| Interrupted                      | The API restarted mid-screening; screen again if it isn't redone             |
+
+**Brief outages are retried.** AI providers sometimes report an outage or
+limit requests for a few seconds (for example, Gemini's "model is
+overloaded"):
+
+- **Any screening:** a failed request is retried once after a second.
+- **Automatic and whole-job screenings:** when the providers are still
+  unavailable or limiting requests, HireAI waits 20 seconds and tries again,
+  then 60 seconds, before showing the failure. The application shows
+  **Screening…** meanwhile. If the candidate's data is erased while it waits,
+  the resume isn't sent again.
+- **Screen resume / Screen again:** the recruiter sees the outcome straight
+  away, so there's no waiting retry.
+- **Server log:** each failed request is logged with the provider, the reason
+  and the HTTP status or connection error, such as
+  `Screening with google_ai failed: unavailable (HTTP 503 UNAVAILABLE)`. The
+  provider's own message and the resume are never logged.
 
 ## Cost and limits
 
@@ -137,8 +156,13 @@ The application shows why, in plain words. Common causes:
   high-volume jobs to screen only on request.
 - **Speed.** Each API server runs two background screenings at a time. A
   screening usually takes under a minute.
-- **Restarts.** A restart drops queued screenings. They show as interrupted,
-  and **Screen _n_ unscreened applications** picks them up again.
+- **Restarts.** Screenings wait in memory, so a restart stops them. The API
+  checks for them when it starts and every minute after:
+  - **Queued:** screened, if queued in the last two hours.
+  - **Automatic or whole-job, mid-screening:** once 10 minutes have passed,
+    marked interrupted and screened again.
+  - **Screen resume / Screen again, mid-screening:** shows as interrupted, so
+    the recruiter can screen again.
 - **Length limits.** Only the first 60,000 characters of a Word resume and
   the first 12,000 of a job description are sent.
 

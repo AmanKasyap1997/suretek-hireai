@@ -1,12 +1,41 @@
 import {
   littleText,
   POST_TEXT_LIMIT,
+  withApplyLink,
 } from '../src/modules/organization-integrations/linkedin-client';
 import { jobChannelsSchema } from '../src/modules/organization-integrations/job-publishing.schemas';
 import { LinkedInService } from '../src/modules/organization-integrations/linkedin.service';
 import { encryptSecret } from '../src/modules/super-admin/secrets';
 import { DbService } from '../src/platform/database/db.service';
 import { Role } from '../src/shared/enums';
+
+describe('the apply link at the end of a post', () => {
+  const url =
+    'https://hireai.example.com/console/careers/acme/jobs/7?source=linkedin';
+
+  it('ends the post with the link, once', () => {
+    expect(withApplyLink('We are hiring', url)).toBe(
+      `We are hiring\n\nApply here: ${url}`,
+    );
+    // Already in the text: not added again.
+    expect(withApplyLink(`Apply: ${url}`, url)).toBe(`Apply: ${url}`);
+  });
+
+  it('shortens a long post so the link still fits', () => {
+    const post = withApplyLink('word '.repeat(1000), url);
+    expect(post.length).toBeLessThanOrEqual(POST_TEXT_LIMIT);
+    expect(post.endsWith(`…\n\nApply here: ${url}`)).toBe(true);
+  });
+
+  it('escapes the link for company page posts', () => {
+    const post = withApplyLink(
+      'Join us',
+      'https://example.com/apply_now',
+      littleText,
+    );
+    expect(post).toBe('Join us\n\nApply here: https://example.com/apply\\_now');
+  });
+});
 
 describe('LinkedIn post text', () => {
   it('escapes every character the Posts API reserves', () => {
@@ -139,11 +168,12 @@ describe('LinkedIn company page post', () => {
         pageStart: 0,
         commentary,
       });
+    // The text, escaped, then the apply link for candidates.
     expect((await preview()).request.commentary).toBe(
-      'We are hiring: Full Stack Developer — Noida, INDIA \\( Remote \\)',
+      'We are hiring: Full Stack Developer — Noida, INDIA \\( Remote \\)\n\nApply here: https://careers.example.com/jobs/42',
     );
     expect((await preview('Join us (hybrid) #hiring')).request.commentary).toBe(
-      'Join us \\(hybrid\\) {hashtag|\\#|hiring}',
+      'Join us \\(hybrid\\) {hashtag|\\#|hiring}\n\nApply here: https://careers.example.com/jobs/42',
     );
   });
 });

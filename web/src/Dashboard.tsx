@@ -49,6 +49,9 @@ type Interview = {
   status: string;
   created_at?: string;
   panelist_ids?: string[];
+  candidate_name?: string | null;
+  job_title?: string;
+  panel?: { full_name: string }[];
 };
 type FunnelRow = {
   stage: string;
@@ -155,6 +158,17 @@ export function Dashboard() {
       }).toString(),
     [period],
   );
+  const isAdmin = session?.user.role === 'HR_ADMIN';
+  // Job requests to approve (HR Admin), approved jobs to publish.
+  const awaitingApproval = useQuery({
+    queryKey: ['dashboard', 'awaiting-approval'],
+    queryFn: () => api<Page<Job>>('/jobs?awaiting=approval&limit=1'),
+    enabled: isAdmin,
+  });
+  const readyToPublish = useQuery({
+    queryKey: ['dashboard', 'ready-to-publish'],
+    queryFn: () => api<Page<Job>>('/jobs?status=APPROVED&limit=1'),
+  });
   const recentJobs = useQuery({
     queryKey: ['dashboard', 'recent-jobs'],
     queryFn: () =>
@@ -239,9 +253,14 @@ export function Dashboard() {
           id: `interview-${interview.id}`,
           kind: 'interview' as const,
           title: `Interview scheduled — ${
-            application?.candidate_name ?? 'Candidate'
+            interview.candidate_name ??
+            application?.candidate_name ??
+            'Candidate'
           }`,
-          detail: application?.job_title ?? 'Job title unavailable',
+          detail:
+            interview.job_title ??
+            application?.job_title ??
+            'Job title unavailable',
           at: interview.created_at,
         },
       ];
@@ -299,12 +318,35 @@ export function Dashboard() {
               aria-hidden="true"
             />
           </label>
-          <Link className="button-link button-primary" to="/jobs?create=1">
-            <FontAwesomeIcon icon={faPlus} aria-hidden="true" /> Create Job
-          </Link>
+          {isAdmin && (
+            <Link className="button-link button-primary" to="/jobs?create=1">
+              <FontAwesomeIcon icon={faPlus} aria-hidden="true" /> Create Job
+            </Link>
+          )}
         </div>
       </header>
 
+      {((awaitingApproval.data?.total ?? 0) > 0 ||
+        (readyToPublish.data?.total ?? 0) > 0) && (
+        <div className="dashboard-workflow" role="status">
+          {(awaitingApproval.data?.total ?? 0) > 0 && (
+            <Link to="/jobs?awaiting=approval">
+              <strong>{awaitingApproval.data!.total}</strong>{' '}
+              {awaitingApproval.data!.total === 1
+                ? 'job request is'
+                : 'job requests are'}{' '}
+              waiting for your approval
+            </Link>
+          )}
+          {(readyToPublish.data?.total ?? 0) > 0 && (
+            <Link to="/jobs?status=APPROVED">
+              <strong>{readyToPublish.data!.total}</strong> approved{' '}
+              {readyToPublish.data!.total === 1 ? 'job is' : 'jobs are'} ready
+              to publish
+            </Link>
+          )}
+        </div>
+      )}
       {pending ? (
         <p role="status" className="dashboard-notice">
           Loading your recruitment overview…
@@ -546,26 +588,38 @@ export function Dashboard() {
                             const application = applicationById.get(
                               interview.application_id,
                             );
+                            const candidate =
+                              interview.candidate_name ??
+                              application?.candidate_name ??
+                              'Candidate';
                             return (
                               <tr key={interview.id}>
                                 <td>
                                   <span className="dashboard-person">
                                     <span aria-hidden="true">
-                                      {(application?.candidate_name ?? 'C')
+                                      {candidate
                                         .split(' ')
                                         .map((part) => part[0])
                                         .slice(0, 2)
                                         .join('')}
                                     </span>
-                                    {application?.candidate_name ?? 'Candidate'}
+                                    {candidate}
                                   </span>
                                 </td>
-                                <td>{application?.job_title ?? '—'}</td>
+                                <td>
+                                  {interview.job_title ??
+                                    application?.job_title ??
+                                    '—'}
+                                </td>
                                 <td>{dateLabel(interview.starts_at)}</td>
                                 <td>
-                                  {interview.panelist_ids?.length
-                                    ? `${interview.panelist_ids.length} assigned`
-                                    : 'Not assigned'}
+                                  {interview.panel?.length
+                                    ? interview.panel
+                                        .map((person) => person.full_name)
+                                        .join(', ')
+                                    : interview.panelist_ids?.length
+                                      ? `${interview.panelist_ids.length} assigned`
+                                      : 'Not assigned'}
                                 </td>
                                 <td>
                                   <span
@@ -573,10 +627,12 @@ export function Dashboard() {
                                   >
                                     <FontAwesomeIcon
                                       icon={
-                                        interview.mode.toLowerCase() ===
-                                        'online'
+                                        interview.mode === 'VIDEO' ||
+                                        interview.mode === 'ONLINE'
                                           ? faVideo
-                                          : faBuilding
+                                          : interview.mode === 'PHONE'
+                                            ? faPhone
+                                            : faBuilding
                                       }
                                       aria-hidden="true"
                                     />{' '}

@@ -31,6 +31,29 @@ export function littleText(text: string, max = POST_TEXT_LIMIT) {
     if (encoded.length <= max) return encoded;
   }
 }
+/** Plain text shortened at a word to fit, ending in "…". */
+function shorten(text: string, max: number) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, Math.max(0, max - 1));
+  const space = cut.search(/\s\S*$/);
+  return (space > 0 ? cut.slice(0, space) : cut).trimEnd() + '…';
+}
+
+/**
+ * A post's text ending with its apply link, so candidates can apply from the
+ * post. `encode` is applied to the text (e.g. littleText for the Posts API);
+ * the text is shortened to leave room for the link.
+ */
+export function withApplyLink(
+  text: string,
+  url: string,
+  encode: (text: string, max: number) => string = shorten,
+) {
+  if (text.includes(url)) return encode(text, POST_TEXT_LIMIT);
+  const line = encode(`\n\nApply here: ${url}`, POST_TEXT_LIMIT);
+  return encode(text, POST_TEXT_LIMIT - line.length) + line;
+}
+
 export function linkedinHeaders(token: string, jobs = false) {
   const version =
     process.env[

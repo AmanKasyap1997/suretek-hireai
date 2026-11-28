@@ -10,6 +10,7 @@ import {
   OrganizationAiService,
 } from '../src/modules/organization-integrations/organization-ai';
 import {
+  HiringAutomationService,
   ScreeningService,
   assess,
   screeningJsonSchema,
@@ -172,6 +173,33 @@ describe('screening assessment', () => {
     );
     expect(long.result.summary).toHaveLength(1200);
     expect(long.result.strengths).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it('keeps the skills the resume shows, once each and in order', () => {
+    const { result } = assess(
+      criteria,
+      reply({
+        skills: [
+          ' React ',
+          'TypeScript',
+          'react',
+          '',
+          42,
+          'REST   APIs',
+          ...Array.from({ length: 20 }, (_, i) => `Skill ${i}`),
+        ],
+      }),
+    );
+    expect(result.skills?.slice(0, 3)).toEqual([
+      'React',
+      'TypeScript',
+      'REST APIs',
+    ]);
+    expect(result.skills).toHaveLength(15);
+    // An older model's reply without skills still screens.
+    expect(assess(criteria, reply()).result.skills).toEqual([]);
+    expect(screeningJsonSchema.required).toContain('skills');
+    expect(screeningSystemPrompt).toContain('skills: up to 15 skills');
   });
 
   it('describes a reply schema every provider’s strict mode accepts', () => {
@@ -477,6 +505,18 @@ describe('screening service', () => {
     }[];
     viewRow?: Record<string, unknown>;
     unavailable?: Error;
+    /** What started the screening; MANUAL by default. */
+    trigger?: string;
+    /** false: erased or cancelled while a background run waited to retry. */
+    stillRunning?: boolean;
+    /** What a restart left behind, for recovery. */
+    leftQueued?: { id: string }[];
+    leftRunning?: {
+      id: string;
+      application_id: string;
+      trigger: string;
+      requested_by: string | null;
+    }[];
   }
 
   const setup = (options: Options = {}) => {
@@ -508,7 +548,7 @@ describe('screening service', () => {
             application_id: 'app-1',
             document_id: 'doc-1',
             criteria,
-            trigger: 'MANUAL',
+            trigger: options.trigger ?? 'MANUAL',
             requested_by: 'user-1',
           };
         if (sql.includes('JOIN candidate_documents d'))
@@ -545,6 +585,8 @@ describe('screening service', () => {
     };
     const db = {
       one: jest.fn(async (sql: string) => {
+        if (sql.includes("x.status='RUNNING' AND c.erased_at IS NULL"))
+          return options.stillRunning === false ? undefined : { id: 'scr-1' };
         if (sql.startsWith('SELECT job_id FROM applications'))
           return { job_id: 'job-1' };
         if (sql.includes('FROM application_screenings x'))
@@ -571,6 +613,10 @@ describe('screening service', () => {
         if (sql.startsWith('INSERT INTO audit_events')) audits.push(params);
         if (sql.startsWith('SELECT a.id FROM applications a'))
           return [{ id: 'app-1' }, { id: 'app-2' }];
+        if (sql.includes("status='QUEUED' AND created_at>now()"))
+          return options.leftQueued ?? [];
+        if (sql.includes("x.trigger<>'MANUAL'"))
+          return options.leftRunning ?? [];
         return [];
       }),
       transaction: jest.fn(async (fn: (client: typeof tx) => unknown) =>
@@ -604,8 +650,18 @@ describe('screening service', () => {
         );
       }),
     } as unknown as OrganizationAiService;
-    const service = new ScreeningService(db, policy, storage, ai);
-    return { service, json, updates, audits, inserts, storage };
+    const automation = {
+      screened: jest.fn(async () => undefined),
+    } as unknown as HiringAutomationService;
+    const service = new ScreeningService(db, policy, storage, ai, automation);
+    // Retry rounds don't wait in tests; the delays asked for are recorded.
+    const pause = jest
+      .spyOn(
+        service as unknown as { pause: (ms: number) => Promise<void> },
+        'pause',
+      )
+      .mockResolvedValue(undefined);
+    return { service, json, updates, audits, inserts, storage, pause };
   };
 
   it('screens a PDF now and stores HireAI’s score, auditing without content', async () => {
@@ -758,6 +814,141 @@ describe('screening service', () => {
       ],
     });
     expect(audits[0][2]).toBe('application.screening_failed');
+  });
+
+  describe('after a restart', () => {
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+    it('runs screenings left queued, once each', async () => {
+      const { service, json, updates } = setup({
+        trigger: 'AUTOMATIC',
+        leftQueued: [{ id: 'scr-1' }],
+      });
+      await service.recover(tenantId);
+      // Twice, as the next minute's sweep would: still one run.
+      await service.recover(tenantId);
+      await settle();
+      expect(json).toHaveBeenCalledTimes(1);
+      expect(updates.map((u) => u.params[1])).toEqual(['scr-1']);
+    });
+
+    it('screens an interrupted automatic screening again', async () => {
+      const { service, json, inserts } = setup({
+        trigger: 'AUTOMATIC',
+        leftRunning: [
+          {
+            id: 'scr-old',
+            application_id: 'app-1',
+            trigger: 'AUTOMATIC',
+            requested_by: null,
+          },
+        ],
+      });
+      await service.recover(tenantId);
+      await settle();
+      expect(inserts).toEqual([
+        [
+          tenantId,
+          'app-1',
+          'doc-1',
+          'AUTOMATIC',
+          null,
+          JSON.stringify(criteria),
+        ],
+      ]);
+      expect(json).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('a provider outage during a background screening', () => {
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+    const failing = (...reasons: string[]) => {
+      const json = jest.fn();
+      for (const reason of reasons)
+        json.mockRejectedValueOnce(
+          new AiProviderError(reason as 'unavailable', 'HTTP 503 UNAVAILABLE'),
+        );
+      return json.mockResolvedValue({
+        value: reply(),
+        model: 'gemini-3.5-flash-lite',
+      });
+    };
+
+    it('screens again after a pause, without reading the resume again', async () => {
+      const google = failing('unavailable');
+      const { service, updates, pause, storage } = setup({
+        trigger: 'AUTOMATIC',
+        connections: [connection('google_ai', google)],
+      });
+      service.automatic(tenantId, 'app-1');
+      await settle();
+      expect(google).toHaveBeenCalledTimes(2);
+      expect(pause).toHaveBeenCalledWith(20_000);
+      expect(storage.get).toHaveBeenCalledTimes(1);
+      const completed = updates.find((u) => u.sql.includes("'COMPLETED'"))!;
+      expect(completed.params.slice(2, 4)).toEqual(['google_ai', 'sandbox']);
+      // The outage that cleared isn't reported as a skipped provider.
+      expect(
+        JSON.parse(String(completed.params[8])).skipped_providers,
+      ).toBeUndefined();
+    });
+
+    it('gives up after two more tries, keeping the last round’s failures', async () => {
+      const google = failing('rate_limit', 'unavailable', 'unavailable');
+      const { service, updates, pause } = setup({
+        trigger: 'BATCH',
+        connections: [connection('google_ai', google)],
+      });
+      await (
+        service as unknown as { run: (t: string, id: string) => Promise<void> }
+      ).run(tenantId, 'scr-1');
+      expect(google).toHaveBeenCalledTimes(3);
+      expect(pause.mock.calls).toEqual([[20_000], [60_000]]);
+      const failed = updates.find((u) => u.sql.includes("'FAILED'"))!;
+      expect(failed.params.slice(2, 6)).toEqual([
+        'unavailable',
+        'google_ai',
+        'sandbox',
+        null,
+      ]);
+    });
+
+    it('never sends the resume again once the candidate is erased', async () => {
+      const google = failing('unavailable');
+      const { service, updates } = setup({
+        trigger: 'AUTOMATIC',
+        stillRunning: false,
+        connections: [connection('google_ai', google)],
+      });
+      service.automatic(tenantId, 'app-1');
+      await settle();
+      expect(google).toHaveBeenCalledTimes(1);
+      expect(updates).toEqual([]);
+    });
+
+    it('doesn’t wait when the failure won’t clear by itself', async () => {
+      const google = failing('quota');
+      const { service, updates, pause } = setup({
+        trigger: 'AUTOMATIC',
+        connections: [connection('google_ai', google)],
+      });
+      service.automatic(tenantId, 'app-1');
+      await settle();
+      expect(google).toHaveBeenCalledTimes(1);
+      expect(pause).not.toHaveBeenCalled();
+      expect(updates[0].params[2]).toBe('quota');
+    });
+
+    it('tells a recruiter who clicked Screen straight away', async () => {
+      const google = failing('unavailable');
+      const { service, updates, pause } = setup({
+        connections: [connection('google_ai', google)],
+      });
+      await service.screenNow(actor, 'app-1');
+      expect(google).toHaveBeenCalledTimes(1);
+      expect(pause).not.toHaveBeenCalled();
+      expect(updates[0].params[2]).toBe('unavailable');
+    });
   });
 
   it('doesn’t try another provider when the resume itself was refused', async () => {

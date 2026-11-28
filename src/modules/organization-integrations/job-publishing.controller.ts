@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Actor, CurrentUser, Role } from '../../shared/actor';
 import { Roles } from '../../shared/roles.decorator';
+import { RECRUITMENT_ROLES } from '../../shared/role-groups';
 import { BodySchema, parse } from '../../platform/http/validation';
 import {
   jobChannelsSchema,
@@ -24,7 +25,7 @@ import { JobPublishingService } from './job-publishing.service';
 @ApiTags('Jobs')
 @ApiBearerAuth()
 @Controller('jobs')
-@Roles(Role.HR_ADMIN)
+@Roles(...RECRUITMENT_ROLES)
 export class JobPublishingController {
   constructor(private readonly service: JobPublishingService) {}
 
@@ -58,6 +59,7 @@ export class JobPublishingController {
   }
 
   @Delete(':id/channels/:channel')
+  @Roles(Role.HR_ADMIN)
   @HttpCode(200)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({

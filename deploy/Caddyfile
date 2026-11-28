@@ -38,6 +38,9 @@
 		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
 		-Server
 	}
+	# Verification emails sent before the console page existed linked here.
+	# Browsers keep the #token fragment across the redirect.
+	redir /contact-verification /console/contact-verification 308
 	@docs path /docs* /api/v1/docs*
 	respond @docs 404
 	@console path /console /console/*

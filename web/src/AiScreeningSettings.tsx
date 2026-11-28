@@ -4,10 +4,16 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faChevronDown,
   faCircleCheck,
+  faMicrophone,
   faPhoneVolume,
   faWandMagicSparkles,
 } from '@fortawesome/free-solid-svg-icons';
 import { api } from './api';
+import { TestCallDialog } from './TestCall';
+import {
+  AutoInterviewSettings,
+  AutoShortlistSettings,
+} from './HiringAutomation';
 
 type Provider = 'openai' | 'anthropic' | 'google_ai';
 type Settings = {
@@ -20,6 +26,27 @@ type Settings = {
   }[];
   problem: string | null;
   calling_enabled?: boolean;
+  calling_provider?: 'openai' | 'google_ai' | null;
+  calling_voice?: string | null;
+  /** The name the AI introduces itself with on calls. */
+  calling_assistant_name?: string | null;
+  calling?: {
+    voice_providers: { provider: 'openai' | 'google_ai'; label: string }[];
+    voice: {
+      provider: 'openai' | 'google_ai';
+      label: string;
+      /** The chosen voice; null: the server's default. */
+      name?: string | null;
+      voices?: { id: string; label: string }[];
+    } | null;
+    phone: {
+      provider: 'plivo';
+      environment: 'production' | 'sandbox';
+      number: string | null;
+    } | null;
+    voice_problem: string | null;
+    problems: string[];
+  };
 };
 const labels: Record<Provider, string> = {
   openai: 'OpenAI',
@@ -254,13 +281,20 @@ export function AiScreeningSettings() {
           )}
         </form>
       )}
+      {!!data && enabled.length > 0 && <AutoShortlistSettings />}
     </section>
   );
 }
 
+type CallingProvider = 'openai' | 'google_ai';
+const callingLabels: Record<CallingProvider, string> = {
+  openai: 'OpenAI Realtime',
+  google_ai: 'Gemini Live',
+};
+
 /**
- * The HR Admin's AI calling switch. Calls aren't placed yet; while it's on,
- * recruiters prepare the questions each job's AI call will ask.
+ * The HR Admin's AI calling switch and voice AI. Shows what calls still need
+ * (Plivo, a voice AI, server setup) and lets them try a call from the browser.
  */
 export function AiCallingSettings() {
   const id = useId();
@@ -273,25 +307,57 @@ export function AiCallingSettings() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const enabled = !!query.data?.calling_enabled;
+  const [testing, setTesting] = useState(false);
+  /** The name being typed; null: the saved one. */
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const data = query.data;
+  const enabled = !!data?.calling_enabled;
+  const calling = data?.calling;
+  const savedName = data?.calling_assistant_name ?? '';
+  const name = nameDraft ?? savedName;
 
-  async function change(next: boolean) {
+  async function save(
+    next: boolean,
+    change: {
+      provider?: CallingProvider | null;
+      voice?: string | null;
+      assistantName?: string | null;
+    } = {},
+  ) {
+    const { provider, voice, assistantName } = change;
     setBusy(true);
     setMessage('');
     setError('');
     try {
       const result = await api<Settings>('/organization/ai-settings/calling', {
         method: 'PUT',
-        body: JSON.stringify({ enabled: next }),
+        // Only what changed; the rest stays as saved.
+        body: JSON.stringify({ enabled: next, ...change }),
       });
       queryClient.setQueryData(key, result);
+      if (assistantName !== undefined) setNameDraft(null);
       await queryClient.invalidateQueries({
         queryKey: ['call-questions-settings'],
       });
       setMessage(
-        next
-          ? 'AI calling is on. Recruiters now see call questions on each job.'
-          : 'AI calling is off. Jobs keep their questions for later.',
+        assistantName !== undefined
+          ? assistantName
+            ? `Saved. The AI introduces itself as ${assistantName}. Try a test call to hear it.`
+            : 'Saved. The AI introduces itself by your organization’s name.'
+          : voice !== undefined
+            ? `Saved. Calls use ${
+                voice
+                  ? (result.calling?.voice?.voices?.find((v) => v.id === voice)
+                      ?.label ?? voice)
+                  : 'the default voice'
+              }. Try a test call to hear it.`
+            : provider !== undefined
+              ? provider
+                ? `Saved. ${callingLabels[provider]} talks to candidates.`
+                : 'Saved. Calls use the enabled voice AIs in order.'
+              : next
+                ? 'AI calling is on. Recruiters can call shortlisted candidates and prepare each job’s questions.'
+                : 'AI calling is off. Calls waiting to be placed won’t be dialed; jobs keep their questions.',
       );
     } catch (reason) {
       setError(
@@ -304,6 +370,14 @@ export function AiCallingSettings() {
     }
   }
 
+  const ready = enabled && !!calling && !calling.problems.length;
+  const pill = !data
+    ? null
+    : !enabled
+      ? { text: 'Off', tone: 'neutral' }
+      : ready
+        ? { text: 'Ready to call', tone: 'success' }
+        : { text: 'Setup needed', tone: 'warning' };
   return (
     <section className="int-card ai-setting-card" aria-labelledby={id}>
       <header className="int-card-header">
@@ -313,13 +387,18 @@ export function AiCallingSettings() {
         <div>
           <div className="int-card-title">
             <h4 id={id}>AI calling</h4>
-            {query.data && (
+            {pill && (
+              <span className={`int-pill int-pill-${pill.tone}`}>
+                {pill.text}
+              </span>
+            )}
+            {data && (
               <label className="int-switch">
                 <input
                   type="checkbox"
                   checked={enabled}
                   disabled={busy}
-                  onChange={(event) => void change(event.target.checked)}
+                  onChange={(event) => void save(event.target.checked)}
                 />
                 <span className="int-switch-track" aria-hidden="true" />
                 <span className="sr-only">
@@ -329,8 +408,8 @@ export function AiCallingSettings() {
             )}
           </div>
           <p>
-            An AI voice assistant calls candidates who agreed to be called and
-            asks each job’s questions.
+            An AI voice assistant phones shortlisted candidates who agreed to be
+            called and asks each job’s questions.
           </p>
         </div>
       </header>
@@ -344,23 +423,170 @@ export function AiCallingSettings() {
           </button>
         </p>
       ) : (
-        <ul className="ai-checklist">
-          {[
-            'Calls only candidates whose call consent was verified by email',
-            'Asks each job’s questions, prepared in the job form',
-            'Recruiters get the answers; nobody is rejected automatically',
-          ].map((point) => (
-            <li key={point}>
-              <FontAwesomeIcon icon={faCircleCheck} aria-hidden="true" />
-              {point}
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="ai-checklist">
+            {[
+              'Calls shortlisted candidates who haven’t opted out, during calling hours',
+              'Confirms it’s talking to the candidate, says it’s an AI, and records or transcribes only with consent',
+              'Recruiters get the answers; nobody is rejected automatically',
+            ].map((point) => (
+              <li key={point}>
+                <FontAwesomeIcon icon={faCircleCheck} aria-hidden="true" />
+                {point}
+              </li>
+            ))}
+          </ul>
+          {enabled && calling && (
+            <>
+              {calling.voice_providers.length > 0 && (
+                <label className="form-field">
+                  Voice AI
+                  <span className="select-control">
+                    <select
+                      value={data?.calling_provider ?? ''}
+                      disabled={busy}
+                      onChange={(event) =>
+                        void save(true, {
+                          provider: (event.target.value ||
+                            null) as CallingProvider | null,
+                        })
+                      }
+                    >
+                      <option value="">
+                        Automatic:{' '}
+                        {calling.voice_providers
+                          .map((p) => p.label)
+                          .join(', then ')}
+                      </option>
+                      {calling.voice_providers.map((p) => (
+                        <option key={p.provider} value={p.provider}>
+                          {p.label}
+                        </option>
+                      ))}
+                      {data?.calling_provider &&
+                        !calling.voice_providers.some(
+                          (p) => p.provider === data.calling_provider,
+                        ) && (
+                          <option value={data.calling_provider}>
+                            {callingLabels[data.calling_provider]} (not enabled)
+                          </option>
+                        )}
+                    </select>
+                    <FontAwesomeIcon
+                      className="select-chevron"
+                      icon={faChevronDown}
+                      aria-hidden="true"
+                    />
+                  </span>
+                </label>
+              )}
+              {(calling.voice?.voices?.length ?? 0) > 0 && (
+                <label className="form-field">
+                  Voice
+                  <span className="select-control">
+                    <select
+                      value={calling.voice?.name ?? ''}
+                      disabled={busy}
+                      onChange={(event) =>
+                        void save(true, {
+                          voice: event.target.value || null,
+                        })
+                      }
+                    >
+                      <option value="">Default</option>
+                      {calling.voice!.voices!.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                    <FontAwesomeIcon
+                      className="select-chevron"
+                      icon={faChevronDown}
+                      aria-hidden="true"
+                    />
+                  </span>
+                </label>
+              )}
+              <form
+                className="assistant-name-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void save(true, { assistantName: name.trim() || null });
+                }}
+              >
+                <label className="form-field">
+                  Assistant name
+                  <input
+                    value={name}
+                    maxLength={40}
+                    placeholder="For example, Priya"
+                    autoComplete="off"
+                    disabled={busy}
+                    onChange={(event) => setNameDraft(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={busy || name.trim() === savedName}
+                >
+                  Save name
+                </button>
+                <p className="ai-screening-hint">
+                  The AI greets candidates with it (“Hi, this is{' '}
+                  {name.trim() || 'Priya'} from … Am I speaking with Asha?”). It
+                  talks about the application only once they confirm, and still
+                  says it’s an AI assistant.
+                </p>
+              </form>
+              <dl className="call-setup">
+                <div>
+                  <dt>Phone</dt>
+                  <dd>
+                    {calling.phone
+                      ? `Plivo · ${calling.phone.number ?? 'reconnect needed'}${
+                          calling.phone.environment === 'sandbox'
+                            ? ' (sandbox)'
+                            : ''
+                        }`
+                      : 'Not connected'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Voice</dt>
+                  <dd>{calling.voice?.label ?? 'Not available'}</dd>
+                </div>
+              </dl>
+              {calling.problems.length > 0 && (
+                <ul
+                  className="call-problems"
+                  aria-label="Before calls can be placed"
+                >
+                  {calling.problems.map((problem) => (
+                    <li key={problem}>{problem}</li>
+                  ))}
+                </ul>
+              )}
+              <p className="ai-screening-hint">
+                Recruiters start calls from a shortlisted application or a job’s
+                applications. HireAI calls during calling hours and tries up to
+                three times.
+              </p>
+              <div className="int-card-actions">
+                <button
+                  type="button"
+                  disabled={!calling.voice}
+                  onClick={() => setTesting(true)}
+                >
+                  <FontAwesomeIcon icon={faMicrophone} aria-hidden="true" /> Try
+                  a test call
+                </button>
+              </div>
+              <AutoInterviewSettings />
+            </>
+          )}
+        </>
       )}
-      <p className="ai-screening-hint">
-        Calls aren’t placed yet. While this is on, recruiters prepare the call
-        questions on each job.
-      </p>
       {message && (
         <p role="status" className="form-success ai-screening-message">
           {message}
@@ -371,6 +597,7 @@ export function AiCallingSettings() {
           {error}
         </p>
       )}
+      {testing && <TestCallDialog onClose={() => setTesting(false)} />}
     </section>
   );
 }

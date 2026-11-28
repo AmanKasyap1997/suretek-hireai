@@ -388,9 +388,6 @@ type Form = {
   source: '' | Source;
   referrer: string;
   privacyAccepted: boolean;
-  call: boolean;
-  recording: boolean;
-  transcription: boolean;
   website: string;
 };
 const blank = (source: '' | Source): Form => ({
@@ -414,9 +411,6 @@ const blank = (source: '' | Source): Form => ({
   source,
   referrer: '',
   privacyAccepted: false,
-  call: false,
-  recording: false,
-  transcription: false,
   website: '',
 });
 /** Field order for the error summary; matches the form. */
@@ -524,12 +518,8 @@ export function applicationPayload(form: Form, page: PageInfo, token: string) {
     website: form.website,
     ...(token ? { captchaToken: token } : {}),
     noticeVersion: page.noticeVersion,
+    // No separate contact choices: the privacy notice covers screening calls.
     privacyAccepted: true,
-    consents: {
-      CALL: form.call,
-      RECORDING: form.call && form.recording,
-      TRANSCRIPTION: form.call && form.transcription,
-    },
   };
 }
 
@@ -1298,47 +1288,6 @@ function ApplyForm() {
               </Field>
             )}
           </div>
-          <fieldset className="careers-choice">
-            <legend>
-              Phone screening
-              <span className="careers-optional"> (optional)</span>
-            </legend>
-            <label className="careers-check">
-              <input
-                type="checkbox"
-                checked={form.call}
-                onChange={(event) => {
-                  const call = event.target.checked;
-                  setForm((value) => ({
-                    ...value,
-                    call,
-                    ...(call ? {} : { recording: false, transcription: false }),
-                  }));
-                }}
-              />
-              {Company} may call me about this application.
-            </label>
-            <label className="careers-check careers-check-nested">
-              <input
-                type="checkbox"
-                disabled={!form.call}
-                checked={form.recording}
-                onChange={(event) => update('recording', event.target.checked)}
-              />
-              The call may be recorded.
-            </label>
-            <label className="careers-check careers-check-nested">
-              <input
-                type="checkbox"
-                disabled={!form.call}
-                checked={form.transcription}
-                onChange={(event) =>
-                  update('transcription', event.target.checked)
-                }
-              />
-              The call may be transcribed.
-            </label>
-          </fieldset>
         </fieldset>
 
         <section
@@ -1355,6 +1304,13 @@ function ApplyForm() {
             job’s requirements. People on the hiring team review the results and
             make every decision.
           </p>
+          <p>
+            {Company} may call you about this application, including a short
+            screening call with an AI assistant. The assistant says it’s an AI
+            at the start, and the call may be recorded and transcribed so the
+            hiring team can review your answers. You can decline the call, or
+            ask {company} not to call you, at any time.
+          </p>
           <label
             className={`careers-check${errors.privacyAccepted ? ' has-error' : ''}`}
           >
@@ -1370,7 +1326,7 @@ function ApplyForm() {
             />
             <span>
               I agree to {company} storing and using my details for this
-              application.
+              application, including contacting me about it as described above.
               <span className="careers-required" aria-hidden="true">
                 {' '}
                 *

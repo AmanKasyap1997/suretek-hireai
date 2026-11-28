@@ -46,8 +46,9 @@ describe('apply form fields', () => {
       email: 'asha@example.test',
       ctcCurrency: 'INR',
       source: 'REFERRAL',
-      consents: { CALL: false, RECORDING: false, TRANSCRIPTION: false },
     });
+    // No separate contact choices: the apply form's notice covers calls.
+    expect(parsed.consents).toBeUndefined();
     expect(parsed.portfolioUrl).toBeUndefined();
     expect(parsed.coverLetter).toBeUndefined();
   });
@@ -153,18 +154,24 @@ describe('public careers service', () => {
   let resumeFor: unknown;
   let email: { sendRepeatApplication: jest.Mock };
   let screening: { automatic: jest.Mock };
+  let verification: { issue: jest.Mock; dispatch: jest.Mock };
+  /** [scope, granted] for each consent recorded with the application. */
+  let consents: [unknown, unknown][];
   const appliedAt = new Date('2026-11-20T10:00:00Z');
 
   /** `repeat`: this email already applied; `due`: no notice in the last day. */
   const setup = ({ repeat = false, due = true } = {}) => {
     details = null;
     written = 0;
+    consents = [];
     const tx = {
       query: jest.fn(async (sql: string, params: unknown[] = []) => {
         if (sql.startsWith('INSERT INTO application_details')) details = params;
         return [];
       }),
-      one: jest.fn(async (sql: string) => {
+      one: jest.fn(async (sql: string, params: unknown[] = []) => {
+        if (sql.startsWith('INSERT INTO consents'))
+          consents.push([params[2], params[3]]);
         if (sql.includes('FROM applications a'))
           return {
             id: 'app-1',
@@ -208,17 +215,17 @@ describe('public careers service', () => {
       }),
       cleanup: jest.fn(async () => undefined),
     } as unknown as DocumentsService;
-    const verification = {
+    verification = {
       issue: jest.fn(async () => undefined),
       dispatch: jest.fn(async () => undefined),
-    } as unknown as ContactVerificationService;
+    };
     email = { sendRepeatApplication: jest.fn(async () => true) };
     screening = { automatic: jest.fn() };
     return new CareersService(
       db,
       captcha,
       documents,
-      verification,
+      verification as unknown as ContactVerificationService,
       email as unknown as EmailPort,
       screening as unknown as ScreeningService,
     );
@@ -264,6 +271,34 @@ describe('public careers service', () => {
     expect(resumeFor).toBe('app-1');
     // Queued after the application is saved, without delaying the reply.
     expect(screening.automatic).toHaveBeenCalledWith(tenantId, 'app-1');
+    // The notice covers calls, recording and transcription: no email to confirm.
+    expect(consents).toEqual([
+      ['CALL', true],
+      ['RECORDING', true],
+      ['TRANSCRIPTION', true],
+    ]);
+    expect(verification.issue).not.toHaveBeenCalled();
+  });
+
+  it('records separate choices from an API client and emails to confirm them', async () => {
+    const careers = setup();
+    await careers.apply(
+      'suretek',
+      jobId,
+      applicationFieldsSchema.parse({
+        ...form,
+        consents: { CALL: true, RECORDING: false, TRANSCRIPTION: false },
+      }),
+      { originalname: 'cv.pdf', buffer: pdf },
+      '192.0.2.1',
+      'test',
+    );
+    expect(consents).toEqual([
+      ['CALL', true],
+      ['RECORDING', false],
+      ['TRANSCRIPTION', false],
+    ]);
+    expect(verification.issue).toHaveBeenCalled();
   });
 
   it('answers a repeat like a new application, saves nothing and tells the address on file', async () => {

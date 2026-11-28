@@ -1,6 +1,7 @@
 export { IntegrationsModule } from './integrations.module';
 export {
   ObjectStoragePort,
+  CallRecordingStorage,
   LocalObjectStorage,
   S3ObjectStorage,
 } from './storage';

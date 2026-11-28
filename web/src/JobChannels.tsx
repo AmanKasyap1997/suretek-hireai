@@ -59,11 +59,14 @@ type PostJob = { title: string; location: string; description?: string };
 /** The most text LinkedIn accepts in a post. */
 export const POST_TEXT_LIMIT = 3000;
 
+/** Room HireAI keeps at the end of a post for "Apply here: <link>". */
+const APPLY_LINE_ROOM = 250;
+
 /**
- * LinkedIn-ready post text built from the job: a "We are hiring" line, the
- * description with tidy bullets, and a pointer to the application link. A
- * description too long for one post is cut at a line, with a note that the
- * full text is behind the link.
+ * LinkedIn-ready post text built from the job: a "We are hiring" line and the
+ * description with tidy bullets. HireAI adds the apply link after it when
+ * posting. A description too long for one post is cut at a line, with a note
+ * that the full text is behind the link.
  */
 export function postTextFromJob(job: PostJob) {
   const head = `We are hiring: ${job.title.trim() || 'Job title'} — ${job.location.trim() || 'Location'}`;
@@ -74,12 +77,11 @@ export function postTextFromJob(job: PostJob) {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  const full = [head, body, 'Apply using the link below.']
-    .filter(Boolean)
-    .join('\n\n');
-  if (full.length <= POST_TEXT_LIMIT) return full;
-  const more = '…\n\nRead the full description and apply using the link below.';
-  const room = POST_TEXT_LIMIT - head.length - 2 - more.length;
+  const limit = POST_TEXT_LIMIT - APPLY_LINE_ROOM;
+  const full = [head, body].filter(Boolean).join('\n\n');
+  if (full.length <= limit) return full;
+  const more = '…\n\nRead the full description at the link below.';
+  const room = limit - head.length - 2 - more.length;
   let kept = '';
   for (const line of body.split('\n')) {
     const next = kept ? `${kept}\n${line}` : line;
@@ -162,9 +164,17 @@ function alreadySent(entry: ChannelResult | undefined) {
  * Why the selection can't be sent yet, or ''. Publishing needs an explicit
  * choice; posting an already published job needs at least one channel.
  */
+/** A localhost link while developing: HireAI's own apply page, for tests. */
+export const localDevLink = (url: URL) =>
+  import.meta.env.DEV &&
+  url.protocol === 'http:' &&
+  (url.hostname === 'localhost' || url.hostname === '127.0.0.1');
+
 export function selectionError(
   selection: ChannelSelection,
   mode: 'publish' | 'share',
+  /** HireAI's apply page is used when no application link is entered. */
+  applyPage = false,
 ) {
   const chosen = selection.channels;
   if (!chosen.length)
@@ -183,9 +193,18 @@ export function selectionError(
     } catch {
       /* Reported below. */
     }
-    if (!url || url.protocol !== 'https:' || url.username || url.password)
+    if (
+      !url ||
+      !(url.protocol === 'https:' || localDevLink(url)) ||
+      url.username ||
+      url.password
+    )
       return 'Enter the application page as a public https:// link.';
-  } else if (chosen.some(isLinkedIn) && !chosen.includes('careers_website'))
+  } else if (
+    chosen.some(isLinkedIn) &&
+    !chosen.includes('careers_website') &&
+    !applyPage
+  )
     return 'Add the application page URL. LinkedIn sends candidates there to apply.';
   if (!selection.confirmed)
     return 'Confirm that you’ve reviewed the job before posting it publicly.';
@@ -220,10 +239,17 @@ export function postToChannels(jobId: string, selection: ChannelSelection) {
 export async function sendToChannels(
   jobId: string,
   selection: ChannelSelection,
+  /** HireAI's apply page, used when no application link was entered. */
+  applyUrl?: string,
 ): Promise<PublishOutcome | undefined> {
   if (!selection.channels.length) return undefined;
   try {
-    return await postToChannels(jobId, selection);
+    return await postToChannels(
+      jobId,
+      applyUrl && !selection.applicationUrl.trim()
+        ? { ...selection, applicationUrl: applyUrl }
+        : selection,
+    );
   } catch (reason) {
     return {
       error:
@@ -445,6 +471,7 @@ export function ChannelPicker({
   disabled = false,
   onRemove,
   applyUrl,
+  applyPageLater = false,
 }: {
   query: ReturnType<typeof useJobChannels>;
   selection: ChannelSelection;
@@ -456,8 +483,10 @@ export function ChannelPicker({
   disabled?: boolean;
   /** Deletes a channel's live LinkedIn post; offered when provided. */
   onRemove?: (channel: ChannelId) => Promise<void>;
-  /** HireAI's own apply page for this job, offered as the application URL. */
+  /** HireAI's own apply page for this job: candidates apply there. */
   applyUrl?: string;
+  /** The job isn't saved yet: its HireAI apply page is used once it is. */
+  applyPageLater?: boolean;
 }) {
   const id = useId();
   const update = (patch: Partial<ChannelSelection>) =>
@@ -685,7 +714,7 @@ export function ChannelPicker({
               <p id={`${id}-text-hint`} className="channel-hint">
                 Starts from the job description; edit it as you like. LinkedIn
                 shows the first few lines, then “…see more”. Leave it empty for
-                a one-line post.
+                a one-line post. The apply link is added at the end.
               </p>
               <span className="channel-count">
                 {selection.commentary.length.toLocaleString('en-US')} /{' '}
@@ -704,16 +733,46 @@ export function ChannelPicker({
           </div>
         </div>
       )}
+      {linkedin &&
+        (applyUrl || applyPageLater) &&
+        !selection.applicationUrl.trim() &&
+        !chosen.includes('careers_website') && (
+          <p className="channel-apply-page" role="note">
+            <strong>Candidates apply on HireAI.</strong>{' '}
+            {applyUrl ? (
+              <>
+                The post links to this job’s apply page:{' '}
+                <a href={applyUrl} target="_blank" rel="noopener noreferrer">
+                  {applyUrl}
+                </a>
+              </>
+            ) : (
+              'The post links to this job’s apply page, created when it’s published.'
+            )}
+            {(applyUrl?.startsWith('http://') ||
+              (!applyUrl && window.location.protocol === 'http:')) && (
+              <small className="channel-local-link">
+                Testing on this computer: it’s a local address, so candidates on
+                LinkedIn can’t open it. Once HireAI runs on a public https://
+                address, that link is used instead.
+              </small>
+            )}
+          </p>
+        )}
       {linkedin && (
         <div className="form-field channel-settings-field">
           <label htmlFor={`${id}-apply`}>
-            Application page URL
-            {!chosen.includes('careers_website') && (
-              <span className="channel-required" aria-hidden="true">
-                {' '}
-                *
-              </span>
-            )}
+            {applyUrl || applyPageLater
+              ? 'Another application page (optional)'
+              : 'Application page URL'}
+            {!chosen.includes('careers_website') &&
+              !applyUrl &&
+              !applyPageLater && (
+                <span className="channel-required" aria-hidden="true">
+                  {' '}
+                  *
+                </span>
+              )}
           </label>
           <input
             id={`${id}-apply`}
@@ -726,20 +785,12 @@ export function ChannelPicker({
             aria-describedby={`${id}-apply-hint`}
           />
           <p id={`${id}-apply-hint`} className="channel-hint">
-            LinkedIn sends candidates here to apply.
+            {applyUrl || applyPageLater
+              ? 'Only if candidates should apply somewhere else.'
+              : 'LinkedIn sends candidates here to apply. HireAI’s own apply page is used automatically once HireAI runs on a public https:// address.'}
             {chosen.includes('careers_website') &&
               ' Leave blank to use the job’s page on your careers website.'}
           </p>
-          {applyUrl && selection.applicationUrl !== applyUrl && (
-            <button
-              type="button"
-              className="channel-quiet-button channel-use-apply-page"
-              disabled={disabled}
-              onClick={() => update({ applicationUrl: applyUrl })}
-            >
-              Use the HireAI apply page
-            </button>
-          )}
         </div>
       )}
       {chosen.length > 0 && (
@@ -864,7 +915,7 @@ export function PublishDialog({
     await history.refetch();
   }
   async function submit() {
-    const problem = selectionError(selection, mode);
+    const problem = selectionError(selection, mode, !!applyUrl);
     if (problem) {
       setError(problem);
       return;
@@ -883,7 +934,7 @@ export function PublishDialog({
       setBusy(false);
       return;
     }
-    const outcome = await sendToChannels(job.id, selection);
+    const outcome = await sendToChannels(job.id, selection, applyUrl);
     setBusy(false);
     onDone(outcome);
   }

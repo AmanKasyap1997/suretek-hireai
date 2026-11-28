@@ -421,12 +421,14 @@ export function Team() {
     }
   }
   return (
-    <section>
+    <section style={{ padding: '2rem' }}>
       <p className="eyebrow">ORGANIZATION ADMINISTRATION</p>
       <h1>Team &amp; invitations</h1>
       <p className="intro">
         Invite staff and manage access within your organization. Invitations
-        assign the selected role after acceptance.
+        assign the selected role after acceptance. Hiring managers and
+        interviewers then see a job once you add them to its hiring team (Jobs →
+        Hiring team).
       </p>
       {message && (
         <p role="status" className="notice">

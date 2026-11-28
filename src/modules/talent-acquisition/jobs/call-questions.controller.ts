@@ -4,13 +4,14 @@ import { Throttle } from '@nestjs/throttler';
 import { Actor, CurrentUser } from '../../../shared/actor';
 import { Roles } from '../../../shared/roles.decorator';
 import { RECRUITMENT_ROLES } from '../../../shared/role-groups';
+import { Role } from '../../../shared/enums';
 import { BodySchema, parse } from '../../../platform/http/validation';
 import { callQuestionDraftSchema } from './call-questions';
 import { CallQuestionsService } from './call-questions.service';
 
 @ApiTags('Jobs')
 @ApiBearerAuth()
-@Roles(...RECRUITMENT_ROLES)
+@Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER)
 @Controller('jobs/call-questions')
 export class CallQuestionsController {
   constructor(private readonly service: CallQuestionsService) {}

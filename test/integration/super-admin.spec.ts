@@ -132,6 +132,52 @@ describe('Super Admin governance APIs', () => {
         ),
       ).toBe(true);
     });
+    it('reports this month’s AI calls and organizations’ failing connections', async () => {
+      const org = await create();
+      const admin = (
+        await f.pool.query('SELECT id FROM users WHERE tenant_id=$1 LIMIT 1', [
+          org.id,
+        ])
+      ).rows[0];
+      const { rows } = await f.pool.query(
+        `INSERT INTO integration_providers(provider,tenant_id,enabled,updated_by) VALUES('google_calendar',$1,true,$2)
+         ON CONFLICT(provider) DO UPDATE SET enabled=true RETURNING revision`,
+        [f.tenantA, f.adminA.id],
+      );
+      const config = await f.pool.query(
+        `INSERT INTO integration_configs(tenant_id,organization_id,scope,provider,environment,method,status,encrypted_credentials,credential_hint,provider_revision,updated_by,error_count)
+         VALUES($1,$1,'organization','google_calendar','production','bearer','failing','','****oken',$2,$3,3) RETURNING id`,
+        [org.id, rows[0].revision, admin.id],
+      );
+      try {
+        const report = await req('get', '/reports').expect(200);
+        const mine = report.body.organizations.find(
+          (o: { id: string }) => o.id === org.id,
+        );
+        // Calls and minutes come from this month's AI call attempts.
+        expect(mine.usage).toMatchObject({
+          calls: 0,
+          call_minutes: 0,
+          storage_mb: 0,
+          integrations_failing: 1,
+          integration_errors: 3,
+        });
+        expect(mine.usage).not.toHaveProperty('unmetered_calls');
+        expect(report.body.integrations).toContainEqual(
+          expect.objectContaining({
+            organization: 'Governance fixture',
+            provider: 'google_calendar',
+            status: 'failing',
+            error_count: 3,
+          }),
+        );
+      } finally {
+        await f.pool.query('DELETE FROM integration_configs WHERE id=$1', [
+          config.rows[0].id,
+        ]);
+      }
+    });
+
     it('enforces module disabling and protects the last Super Admin', async () => {
       const id = organizations[organizations.length - 1];
       const detail = (await req('get', '/organizations/' + id).expect(200))

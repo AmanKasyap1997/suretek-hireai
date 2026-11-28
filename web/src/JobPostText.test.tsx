@@ -46,12 +46,11 @@ it('turns the job description into LinkedIn post text', () => {
       '• Ship React features',
       '',
       'We look forward to your application.',
-      '',
-      'Apply using the link below.',
     ].join('\n'),
   );
+  // HireAI adds the apply link when posting.
   expect(postTextFromJob({ title: 'QA Engineer', location: 'Delhi' })).toBe(
-    'We are hiring: QA Engineer — Delhi\n\nApply using the link below.',
+    'We are hiring: QA Engineer — Delhi',
   );
 });
 
@@ -67,7 +66,7 @@ it('cuts a long description at a whole line to fit one post', () => {
   });
   expect(text.length).toBeLessThanOrEqual(POST_TEXT_LIMIT);
   expect(text).toMatch(
-    /own a part of the hiring platform\.…\n\nRead the full description and apply using the link below\.$/,
+    /own a part of the hiring platform\.…\n\nRead the full description at the link below\.$/,
   );
 
   const oneLine = postTextFromJob({

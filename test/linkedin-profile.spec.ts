@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { LinkedInService } from '../src/modules/organization-integrations/linkedin.service';
+import * as linkedinClient from '../src/modules/organization-integrations/linkedin-client';
 import { encryptSecret } from '../src/modules/super-admin/secrets';
 import { DbService } from '../src/platform/database/db.service';
 import { Role } from '../src/shared/enums';
@@ -58,7 +59,8 @@ describe('LinkedIn profile posts', () => {
               [
                 'organization',
                 actor.tenantId,
-                'linkedin_profile',
+                // The provider asked for: the profile, or the company page.
+                String(params[1] ?? 'linkedin_profile'),
                 'production',
               ].join(':'),
             ),
@@ -125,7 +127,7 @@ describe('LinkedIn profile posts', () => {
       specificContent: {
         'com.linkedin.ugc.ShareContent': {
           shareCommentary: {
-            text: 'We are hiring: Senior PHP Developer — Noida',
+            text: 'We are hiring: Senior PHP Developer — Noida\n\nApply here: https://careers.example.com/jobs/42',
           },
           shareMediaCategory: 'ARTICLE',
           media: [
@@ -162,11 +164,58 @@ describe('LinkedIn profile posts', () => {
       author: 'urn:li:person:member-2',
       specificContent: {
         'com.linkedin.ugc.ShareContent': {
-          shareCommentary: { text: 'Join our team' },
+          shareCommentary: {
+            text: 'Join our team\n\nApply here: https://careers.example.com/jobs/42',
+          },
         },
       },
       visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
     });
+  });
+
+  it('lets a recruiter post on the company page, not on someone’s profile', async () => {
+    const recruiter = {
+      ...actor,
+      userId: '55555555-5555-4555-8555-555555555555',
+      role: Role.RECRUITER,
+    };
+    const owns = jest.spyOn(linkedinClient, 'ownsPage').mockResolvedValue(true);
+    const service = setup();
+    await service.preview(recruiter, {
+      jobId,
+      channel: 'company_announcement',
+      pageUrn: 'urn:li:organization:42',
+      applicationUrl,
+      pageStart: 0,
+    });
+    expect(owns).toHaveBeenCalled();
+    expect(inserted).not.toBeNull();
+    await expect(
+      setup().preview(recruiter, {
+        jobId,
+        channel: 'profile_post',
+        applicationUrl,
+        pageStart: 0,
+      }),
+    ).rejects.toThrow(
+      'This posts on the LinkedIn profile of the person who connected it, so only they can use it.',
+    );
+    // Deleting posts stays with HR Admins.
+    await expect(
+      setup().removePost(recruiter, jobId, 'company_announcement'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      setup().preview(
+        { ...recruiter, role: Role.HIRING_MANAGER },
+        {
+          jobId,
+          channel: 'company_announcement',
+          pageUrn: 'urn:li:organization:42',
+          applicationUrl,
+          pageStart: 0,
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('never posts on another admin’s profile', async () => {

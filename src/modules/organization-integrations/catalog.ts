@@ -9,6 +9,7 @@ export const providerIds = [
   'google_calendar',
   'microsoft_calendar',
   'telephony',
+  'plivo',
   'email',
   'careers_cms',
   'e_signature',
@@ -22,6 +23,7 @@ export const methods = [
   'oauth_client_credentials',
   'oauth_refresh_token',
   'smtp',
+  'account_token',
 ] as const;
 export type Provider = (typeof providerIds)[number];
 export type Method = (typeof methods)[number];
@@ -67,6 +69,11 @@ export const catalog: {
     label: 'Telephony',
     methods: ['api_key', 'bearer', 'basic', 'oauth_client_credentials'],
   },
+  {
+    provider: 'plivo',
+    label: 'Plivo',
+    methods: ['account_token'],
+  },
   { provider: 'email', label: 'Email', methods: ['smtp', 'api_key', 'bearer'] },
   {
     provider: 'careers_cms',
@@ -92,6 +99,7 @@ export const credentialFields: Record<Method, string[]> = {
   oauth_client_credentials: ['clientId', 'clientSecret', 'scope'],
   oauth_refresh_token: ['clientId', 'clientSecret', 'refreshToken'],
   smtp: ['username', 'password'],
+  account_token: ['authId', 'authToken', 'phoneNumber'],
 };
 export const providerToggle = z.object({ enabled: z.boolean() }).strict();
 const value = z
@@ -116,8 +124,17 @@ export const connectionSchema = z
         message: 'Unsupported method for this provider',
       });
     const fields = credentialFields[input.method];
+    if (
+      input.credentials.phoneNumber &&
+      !/^\+[1-9][0-9]{7,14}$/.test(input.credentials.phoneNumber)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['credentials', 'phoneNumber'],
+        message: 'Use the international format, e.g. +919876543210',
+      });
     for (const field of fields.filter(
-      (f) => !['username', 'clientId', 'scope'].includes(f),
+      (f) => !['username', 'clientId', 'scope', 'phoneNumber'].includes(f),
     )) {
       if (input.credentials[field] && input.credentials[field].length < 8)
         ctx.addIssue({

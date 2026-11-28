@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { DbService, DbClient } from '../../platform/database/db.service';
 import { audit } from '../../platform/audit/audit';
 import { Actor, Role } from '../../shared/actor';
+import { RECRUITMENT_ROLES } from '../../shared/role-groups';
 import { requirePlatform } from '../super-admin/super-admin.service';
 import {
   encryptSecret,
@@ -24,6 +25,7 @@ import {
   deleteLinkedInPost,
   linkedinMember,
   littleText,
+  withApplyLink,
   ownsPage,
   sendLinkedIn,
   jobTask,
@@ -41,8 +43,17 @@ const notConnector = (row: { updated_by: string }, actor: Actor) =>
 @Injectable()
 export class LinkedInService {
   constructor(private readonly db: DbService) {}
-  private async organization(actor: Actor) {
-    if (actor.role !== Role.HR_ADMIN) throw new ForbiddenException();
+  /**
+   * The organization's hiring, for HR Admins; posting a job (`team`) is for
+   * recruiters too, who publish approved jobs.
+   */
+  private async organization(actor: Actor, team = false) {
+    if (
+      team
+        ? !RECRUITMENT_ROLES.includes(actor.role)
+        : actor.role !== Role.HR_ADMIN
+    )
+      throw new ForbiddenException();
     const org = await this.db.one(
       'SELECT is_platform,status,deleted_at,enabled_modules FROM tenants WHERE id=$1',
       [actor.tenantId],
@@ -79,8 +90,12 @@ export class LinkedInService {
   private context(tenant: string, provider: string, environment: string) {
     return ['organization', tenant, provider, environment].join(':');
   }
-  private async connection(actor: Actor, provider: LinkedInProvider) {
-    await this.organization(actor);
+  private async connection(
+    actor: Actor,
+    provider: LinkedInProvider,
+    team = false,
+  ) {
+    await this.organization(actor, team);
     return this.db.transaction(async (tx) => {
       const revision = await this.availability(tx, provider);
       await tx.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE', [
@@ -215,7 +230,7 @@ export class LinkedInService {
     );
   }
   async pages(actor: Actor, start: number) {
-    const c = await this.connection(actor, 'linkedin');
+    const c = await this.connection(actor, 'linkedin', true);
     try {
       return await companyPages(c.token, start);
     } catch {
@@ -232,7 +247,7 @@ export class LinkedInService {
     );
   }
   async preview(actor: Actor, input: z.infer<typeof linkedinPreviewSchema>) {
-    const c = await this.connection(actor, providerFor(input.channel));
+    const c = await this.connection(actor, providerFor(input.channel), true);
     const job = await this.db.one(
       "SELECT id,title,description,location,created_at,updated_at,updated_at::text AS version FROM jobs WHERE tenant_id=$1 AND id=$2 AND status='PUBLISHED'",
       [actor.tenantId, input.jobId],
@@ -249,8 +264,10 @@ export class LinkedInService {
         );
       request = {
         author: input.pageUrn,
-        commentary: littleText(
+        commentary: withApplyLink(
           input.commentary || `We are hiring: ${job.title} — ${job.location}`,
+          input.applicationUrl,
+          littleText,
         ),
         visibility: 'PUBLIC',
         distribution: {
@@ -271,7 +288,7 @@ export class LinkedInService {
     } else if (input.channel === 'profile_post') {
       if (notConnector(c.row, actor))
         throw new ForbiddenException(
-          'Only the HR admin who connected this LinkedIn profile can post to it. Reconnect LinkedIn profile with your own account in Integrations.',
+          'This posts on the LinkedIn profile of the person who connected it, so only they can use it.',
         );
       const memberId =
         c.credentials.memberId || (await linkedinMember(c.token)).id;
@@ -281,9 +298,11 @@ export class LinkedInService {
         specificContent: {
           'com.linkedin.ugc.ShareContent': {
             shareCommentary: {
-              text:
+              text: withApplyLink(
                 input.commentary ||
-                `We are hiring: ${job.title} — ${job.location}`,
+                  `We are hiring: ${job.title} — ${job.location}`,
+                input.applicationUrl,
+              ),
             },
             shareMediaCategory: 'ARTICLE',
             media: [
@@ -365,7 +384,7 @@ export class LinkedInService {
     });
   }
   async publish(actor: Actor, id: string) {
-    await this.organization(actor);
+    await this.organization(actor, true);
     const preview = await this.db.one(
       'SELECT *,job_updated_at::text AS job_version FROM integration_publications WHERE tenant_id=$1 AND id=$2',
       [actor.tenantId, id],
@@ -373,7 +392,7 @@ export class LinkedInService {
     if (!preview) throw new NotFoundException();
     if (preview.status !== 'DRAFT') return { id, status: preview.status };
     const provider = providerFor(preview.channel),
-      c = await this.connection(actor, provider);
+      c = await this.connection(actor, provider, true);
     if (
       preview.channel === 'company_announcement' &&
       !(await ownsPage(
@@ -385,7 +404,7 @@ export class LinkedInService {
       throw new ForbiddenException('Company-page access was revoked');
     if (preview.channel === 'profile_post' && notConnector(c.row, actor))
       throw new ForbiddenException(
-        'Only the HR admin who connected this LinkedIn profile can post to it.',
+        'This posts on the LinkedIn profile of the person who connected it, so only they can use it.',
       );
     const claimed = await this.db.transaction(async (tx) => {
       const revision = await this.availability(tx, provider);

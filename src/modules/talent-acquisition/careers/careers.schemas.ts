@@ -106,6 +106,11 @@ const fields = {
   privacyAccepted: z.literal(true, {
     error: 'Agree to the privacy notice to apply',
   }),
+  /**
+   * Separate contact choices (API clients). Omitted: the candidate accepted
+   * the apply form's notice that they may be called about the application,
+   * and that calls may be recorded and transcribed.
+   */
   consents: z
     .object({
       CALL: z.boolean().default(false),
@@ -113,7 +118,7 @@ const fields = {
       TRANSCRIPTION: z.boolean().default(false),
     })
     .strict()
-    .default({ CALL: false, RECORDING: false, TRANSCRIPTION: false }),
+    .optional(),
 };
 type Fields = {
   noticePeriod: (typeof noticePeriods)[number];

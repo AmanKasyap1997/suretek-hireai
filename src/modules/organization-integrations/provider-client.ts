@@ -8,6 +8,7 @@ import nodemailer from 'nodemailer';
 import { Method, Provider } from './catalog';
 import { effectiveCredentials } from './hosted-oauth';
 import { linkedinMember } from './linkedin-client';
+import { verifyPlivo } from './plivo';
 export const oauthEndpoints = {
   linkedin: {
     authorize: 'https://www.linkedin.com/oauth/v2/authorization',
@@ -27,8 +28,9 @@ export const oauthEndpoints = {
     pkce: true,
     authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
     token: 'https://oauth2.googleapis.com/token',
+    // Events to book interviews, free/busy to find times the panel is free.
     scope:
-      'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+      'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/calendar.freebusy',
   },
   microsoft_calendar: {
     pkce: true,
@@ -120,6 +122,15 @@ export async function verify(
   credentials: Record<string, string>,
 ) {
   credentials = effectiveCredentials(provider, credentials);
+  if (provider === 'plivo')
+    return {
+      ok: await verifyPlivo({
+        authId: credentials.authId,
+        authToken: credentials.authToken,
+        phoneNumber: credentials.phoneNumber,
+      }),
+      credentials,
+    };
   if (method === 'smtp') {
     // Host/port are deployment-owned, never browser supplied (prevents SMTP SSRF).
     const host = process.env.INTEGRATION_EMAIL_SMTP_HOST;

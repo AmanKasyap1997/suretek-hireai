@@ -17,9 +17,33 @@ export type AiFailure =
   | 'unavailable';
 
 export class AiProviderError extends Error {
-  constructor(readonly reason: AiFailure) {
+  constructor(
+    readonly reason: AiFailure,
+    /**
+     * What went wrong, for the server log: an HTTP status and the provider's
+     * error code, or the connection error. Never response text.
+     */
+    readonly detail?: string,
+  ) {
     super(`AI provider request failed: ${reason}`);
   }
+}
+
+/** Why a request got no response: a timeout or a connection error code. */
+function connectionDetail(error: unknown) {
+  const name = (error as { name?: unknown } | null)?.name;
+  if (name === 'TimeoutError' || name === 'AbortError') return 'timed out';
+  const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,40}$/.test(code)
+    ? `connection failed (${code})`
+    : 'connection failed';
+}
+
+/** An HTTP status with the provider's error code, such as "503 UNAVAILABLE". */
+function httpDetail(status: number, code?: unknown) {
+  return typeof code === 'string' && /^[A-Za-z0-9_]{1,60}$/.test(code)
+    ? `HTTP ${status} ${code}`
+    : `HTTP ${status}`;
 }
 
 export interface TextRequest {
@@ -158,7 +182,12 @@ async function anthropicMessage(
       error instanceof Anthropic.NotFoundError
     )
       throw new AiProviderError('configuration');
-    throw new AiProviderError('unavailable');
+    throw new AiProviderError(
+      'unavailable',
+      error instanceof Anthropic.APIError && error.status
+        ? httpDetail(error.status)
+        : connectionDetail(error),
+    );
   }
   if (response.stop_reason === 'refusal') throw new AiProviderError('refused');
   if (response.stop_reason === 'max_tokens')
@@ -200,8 +229,8 @@ async function openaiCompletion(
         signal: AbortSignal.timeout(TIMEOUT_MS),
       }),
     );
-  } catch {
-    throw new AiProviderError('unavailable');
+  } catch (error) {
+    throw new AiProviderError('unavailable', connectionDetail(error));
   }
   // Responses are never logged: they can hold candidate or prompt content.
   if (!response.ok) {
@@ -224,7 +253,10 @@ async function openaiCompletion(
     if (response.status === 429) throw new AiProviderError('rate_limit');
     if (response.status === 400 || response.status === 404)
       throw new AiProviderError('configuration');
-    throw new AiProviderError('unavailable');
+    throw new AiProviderError(
+      'unavailable',
+      httpDetail(response.status, failure?.error?.code ?? failure?.error?.type),
+    );
   }
   let data: {
     model?: unknown;
@@ -235,8 +267,11 @@ async function openaiCompletion(
   };
   try {
     data = await response.json();
-  } catch {
-    throw new AiProviderError('unavailable');
+  } catch (error) {
+    throw new AiProviderError(
+      'unavailable',
+      `unreadable reply: ${connectionDetail(error)}`,
+    );
   }
   const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
   if (typeof choice?.message?.refusal === 'string' && choice.message.refusal)
@@ -312,8 +347,8 @@ async function googleContent(
         signal: AbortSignal.timeout(TIMEOUT_MS),
       }),
     );
-  } catch {
-    throw new AiProviderError('unavailable');
+  } catch (error) {
+    throw new AiProviderError('unavailable', connectionDetail(error));
   }
   if (!response.ok) {
     // Only the status/reason codes are read; the message is never surfaced.
@@ -338,7 +373,10 @@ async function googleContent(
     }
     if (response.status === 400 || response.status === 404)
       throw new AiProviderError('configuration');
-    throw new AiProviderError('unavailable');
+    throw new AiProviderError(
+      'unavailable',
+      httpDetail(response.status, failure?.error?.status),
+    );
   }
   let data: {
     modelVersion?: unknown;
@@ -350,8 +388,11 @@ async function googleContent(
   };
   try {
     data = await response.json();
-  } catch {
-    throw new AiProviderError('unavailable');
+  } catch (error) {
+    throw new AiProviderError(
+      'unavailable',
+      `unreadable reply: ${connectionDetail(error)}`,
+    );
   }
   if (data?.promptFeedback?.blockReason) throw new AiProviderError('refused');
   const candidate = Array.isArray(data?.candidates)

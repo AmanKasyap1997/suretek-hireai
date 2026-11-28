@@ -7,16 +7,19 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../shared/roles.decorator';
-import { RECRUITMENT_ROLES } from '../../../shared/role-groups';
+import { ADMIN_ROLES, RECRUITMENT_ROLES } from '../../../shared/role-groups';
 import { Actor, CurrentUser } from '../../../shared/actor';
 import { INTERVIEW_ROLES } from '../../../shared/ta-policy';
 import { BodySchema, parse } from '../../../platform/http/validation';
 import {
+  addToCalendarSchema,
   cancelInterviewSchema,
+  interviewCalendarSchema,
   createInterviewSchema,
   interviewListSchema,
   rescheduleInterviewSchema,
@@ -33,6 +36,31 @@ export class InterviewsController {
   @Get()
   list(@CurrentUser() actor: Actor, @Query() query: unknown) {
     return this.interviews.list(actor, parse(interviewListSchema, query));
+  }
+
+  /** The calendar invitations go out from; before ':id' too. */
+  @Get('calendar')
+  @Roles(...RECRUITMENT_ROLES)
+  calendar(@CurrentUser() actor: Actor) {
+    return this.interviews.calendarStatus(actor);
+  }
+
+  /** An HR Admin chooses the calendar interviews go in. */
+  @Put('calendar')
+  @Roles(...ADMIN_ROLES)
+  @BodySchema(interviewCalendarSchema)
+  chooseCalendar(@CurrentUser() actor: Actor, @Body() body: unknown) {
+    return this.interviews.chooseCalendar(
+      actor,
+      parse(interviewCalendarSchema, body).provider,
+    );
+  }
+
+  /** Who can be on a panel; before ':id', which it would otherwise match. */
+  @Get('panelists')
+  @Roles(...RECRUITMENT_ROLES)
+  panelists(@CurrentUser() actor: Actor) {
+    return this.interviews.panelists(actor);
   }
 
   @Get(':id')
@@ -59,6 +87,23 @@ export class InterviewsController {
       actor,
       id,
       parse(rescheduleInterviewSchema, body),
+    );
+  }
+
+  /** Adds it to the connected calendar, or sends its event again. */
+  @Post(':id/calendar')
+  @Roles(...RECRUITMENT_ROLES)
+  @HttpCode(200)
+  @BodySchema(addToCalendarSchema)
+  addToCalendar(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.interviews.addToCalendar(
+      actor,
+      id,
+      parse(addToCalendarSchema, body ?? {}).calendarProvider,
     );
   }
 

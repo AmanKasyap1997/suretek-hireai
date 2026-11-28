@@ -31,8 +31,9 @@ export class SmtpEmail extends EmailPort {
     super();
   }
   async sendContactVerification(message: ContactEmail): Promise<boolean> {
+    // The console's public confirmation page.
     const link = new URL(
-      '/contact-verification',
+      '/console/contact-verification',
       this.options.publicWebBaseUrl,
     );
     link.hash = new URLSearchParams({

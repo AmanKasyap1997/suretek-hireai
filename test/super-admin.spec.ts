@@ -91,7 +91,9 @@ describe('Super Admin security policy', () => {
     expect(csvCell('normal, "quoted"')).toBe('"normal, ""quoted"""');
   });
   it('warns on actual usage and active trials without zero-quota false alarms', async () => {
-    const service = new SuperAdminService({} as DbService);
+    const service = new SuperAdminService({
+      query: jest.fn(async () => []),
+    } as unknown as DbService);
     const base = {
       status: 'active',
       created_at: new Date(0),

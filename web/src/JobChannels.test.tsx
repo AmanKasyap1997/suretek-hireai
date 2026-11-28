@@ -26,6 +26,7 @@ const posted = {
 function Harness(props: {
   mode: 'publish' | 'share';
   onDone: (outcome: unknown) => void;
+  applyUrl?: string;
 }) {
   const query = useJobChannels(true);
   return (
@@ -35,11 +36,12 @@ function Harness(props: {
       query={query}
       onClose={vi.fn()}
       onDone={props.onDone}
+      applyUrl={props.applyUrl}
     />
   );
 }
 
-function setup(mode: 'publish' | 'share') {
+function setup(mode: 'publish' | 'share', applyUrl?: string) {
   const fetcher = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -81,7 +83,7 @@ function setup(mode: 'publish' | 'share') {
       }
     >
       <MemoryRouter>
-        <Harness mode={mode} onDone={onDone} />
+        <Harness mode={mode} onDone={onDone} applyUrl={applyUrl} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -119,9 +121,7 @@ it('posts a published job to a LinkedIn company page it has not used yet', async
   );
   const text = within(dialog).getByRole('textbox', { name: 'Post text' });
   // The post starts from the job, and can be replaced.
-  expect(text).toHaveValue(
-    'We are hiring: Senior PHP Developer — Noida\n\nApply using the link below.',
-  );
+  expect(text).toHaveValue('We are hiring: Senior PHP Developer — Noida');
   await userEvent.clear(text);
   await userEvent.type(text, 'Join our platform team!');
   await userEvent.type(
@@ -146,6 +146,65 @@ it('posts a published job to a LinkedIn company page it has not used yet', async
     },
   ]);
   expect(calls('/jobs/job-1/publish')).toEqual([]);
+});
+
+it('links a LinkedIn post to HireAI’s apply page without typing a link', async () => {
+  const applyPage =
+    'https://hireai.example.com/console/careers/acme/jobs/job-1?source=linkedin';
+  const { onDone, calls } = setup('share', applyPage);
+  const dialog = screen.getByRole('dialog', { name: 'Post to channels' });
+  await userEvent.click(
+    await within(dialog).findByRole('checkbox', {
+      name: 'LinkedIn profile post',
+    }),
+  );
+  expect(within(dialog).getByRole('note')).toHaveTextContent(
+    'Candidates apply on HireAI.',
+  );
+  expect(within(dialog).getByRole('link', { name: applyPage })).toBeVisible();
+  // Only needed if candidates should apply elsewhere.
+  expect(
+    within(dialog).getByRole('textbox', {
+      name: 'Another application page (optional)',
+    }),
+  ).toHaveValue('');
+  await userEvent.click(
+    within(dialog).getByRole('checkbox', { name: /authorize posting/ }),
+  );
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: /Post to selected channels/ }),
+  );
+  await waitFor(() => expect(onDone).toHaveBeenCalled());
+  expect(calls('/jobs/job-1/channels')[0]).toMatchObject({
+    channels: ['profile_post'],
+    applicationUrl: applyPage,
+  });
+});
+
+it('passes HireAI’s localhost apply page while testing, and says so', async () => {
+  const local =
+    'http://localhost:5173/console/careers/acme/jobs/job-1?source=linkedin';
+  const { onDone, calls } = setup('share', local);
+  const dialog = screen.getByRole('dialog', { name: 'Post to channels' });
+  await userEvent.click(
+    await within(dialog).findByRole('checkbox', {
+      name: 'LinkedIn profile post',
+    }),
+  );
+  expect(within(dialog).getByRole('link', { name: local })).toBeVisible();
+  expect(within(dialog).getByRole('note')).toHaveTextContent(
+    'candidates on LinkedIn can’t open it',
+  );
+  await userEvent.click(
+    within(dialog).getByRole('checkbox', { name: /authorize posting/ }),
+  );
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: /Post to selected channels/ }),
+  );
+  await waitFor(() => expect(onDone).toHaveBeenCalled());
+  expect(calls('/jobs/job-1/channels')[0]).toMatchObject({
+    applicationUrl: local,
+  });
 });
 
 it('posts on the connected LinkedIn profile, visible to connections only', async () => {

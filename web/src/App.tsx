@@ -28,8 +28,12 @@ import { Brand, WorkspaceIcon } from './Brand';
 import { Dashboard } from './Dashboard';
 import { JobsPage } from './Jobs';
 import { ApplicationsPage } from './Applications';
+import { CandidatesPage } from './Candidates';
+import { InterviewsPage } from './Interviews';
+import { ManagerHome } from './ManagerHome';
 import { ApplyPage, CareersJobsPage } from './Careers';
 import { Team, AcceptInvitation } from './SaasPages';
+import { ContactVerificationPage } from './ContactVerification';
 import {
   allowedDestination,
   homePath,
@@ -444,6 +448,13 @@ function Home() {
       session.user.enabled_modules.includes('hiring'))
   )
     return <Dashboard />;
+  // Hiring managers and interviewers: their jobs, applicants and interviews.
+  if (
+    ['HIRING_MANAGER', 'INTERVIEWER'].includes(session.user.role) &&
+    (!session.user.enabled_modules ||
+      session.user.enabled_modules.includes('hiring'))
+  )
+    return <ManagerHome />;
   const items = visibleNavigation(
     session.user.role,
     session.user.enabled_modules,
@@ -511,6 +522,8 @@ function Home() {
 const builtDescriptions: Record<string, string> = {
   jobs: 'Create, approve and publish job openings.',
   applications: 'Review applications and what candidates told you.',
+  candidates: 'Manage shortlisted candidates through interviews to hiring.',
+  interviews: 'See every interview in a calendar, and give feedback.',
 };
 function Future({ id, children }: { id: string; children?: ReactNode }) {
   const { session } = useAuth();
@@ -550,6 +563,11 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
+      {/* Candidates confirm the contact choices they made when applying. */}
+      <Route
+        path="/contact-verification"
+        element={<ContactVerificationPage />}
+      />
       {/* Public careers pages: candidates apply without an account. */}
       <Route path="/careers/:slug" element={<CareersJobsPage />} />
       <Route path="/careers/:slug/jobs/:id" element={<ApplyPage />} />
@@ -582,10 +600,33 @@ export default function App() {
               </Future>
             }
           />
+          <Route
+            path="candidates"
+            element={
+              <Future id="candidates">
+                <CandidatesPage />
+              </Future>
+            }
+          />
+          <Route
+            path="interviews"
+            element={
+              <Future id="interviews">
+                <InterviewsPage />
+              </Future>
+            }
+          />
           <Route path="home/:role" element={<Home />} />
           {navigation
             .filter(
-              (n) => !['integrations', 'jobs', 'applications'].includes(n.id),
+              (n) =>
+                ![
+                  'integrations',
+                  'jobs',
+                  'applications',
+                  'candidates',
+                  'interviews',
+                ].includes(n.id),
             )
             .map((n) => (
               <Route key={n.id} path={n.id} element={<Future id={n.id} />} />

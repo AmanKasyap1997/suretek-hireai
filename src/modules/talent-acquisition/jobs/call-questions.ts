@@ -13,11 +13,20 @@ export const callQuestionSchema = z
     expected_answer: z.enum(['yes', 'no']).nullable().default(null),
     /** The screening criterion the question checks, if any. */
     criterion_id: z.string().trim().min(1).max(100).nullable().default(null),
+    /**
+     * Open questions: what a good answer covers. Used to assess the answer
+     * after the call; never read to the candidate.
+     */
+    key_points: z.array(z.string().trim().min(2).max(200)).max(5).default([]),
   })
   .strict()
   .refine((q) => q.answer_type === 'yes_no' || q.expected_answer === null, {
     message: 'Only a yes/no question can have an expected answer',
     path: ['expected_answer'],
+  })
+  .refine((q) => q.answer_type === 'text' || q.key_points.length === 0, {
+    message: 'Only an open question can have key points',
+    path: ['key_points'],
   });
 export type CallQuestion = z.infer<typeof callQuestionSchema>;
 
@@ -59,16 +68,29 @@ export type CallQuestionDraftInput = z.infer<typeof callQuestionDraftSchema>;
 
 export const callQuestionsSystemPrompt = `You write the questions an AI voice assistant will ask job candidates on a short phone call, for a hiring team in India. A recruiter reviews and edits your questions before the job is published, and people make every hiring decision.
 
-Write 5 to 8 questions:
-- Each asks one thing, in plain spoken English, and can be answered in under a minute.
-- Focus on what a resume shows poorly: hands-on depth with the job's key requirements, willingness for conditions the job details state (such as shifts, travel or working on site), and availability to interview.
+Write 6 to 8 questions. Most of them (at least 4) are technical questions that check real knowledge of the job's key skills; the rest are practical checks.
+
+Technical questions:
+- Ask about concepts and how things work, the way an interviewer would on a phone screen. For example, for a Laravel job: "What does a service provider do in Laravel?" or "What is the service container, and why is it useful?"; for React: "What is the difference between state and props?".
+- Cover different key skills from the job, from fundamentals to practical use ("How would you find out why a page loads slowly?").
+- Each can be answered out loud in about a minute, without writing code. Don't ask for code, exact syntax or long lists.
+- Never ask "Do you have experience with X?" or "How many years of X?": those reveal little and the resume already says it.
+- answer_type "text", with 2 to 4 key_points: short phrases a good answer covers (e.g. "registers bindings in the service container", "boot() runs after all providers are registered"). They are used to assess the answer and are never read to the candidate.
+
+Practical checks (at most 2):
+- Only for conditions the job details state (such as shifts, travel or working on site) or availability to interview.
+- answer_type "yes_no", with expected_answer set when a different answer would be a deal-breaker.
+
+For every question:
+- One thing at a time, in plain spoken English.
 - Don't ask what the application form already collects: name, contact details, current city, willingness to relocate, total experience, current company and job title, notice period, and current or expected pay.
 - Ask only about the job. Never ask about age or date of birth, marital status, family or children, pregnancy, religion, caste, health or disability, nationality (other than the right to work in the job's country when the job details require it), or anything else personal.
 - Never ask for passwords, ID numbers or bank details.
 
-For each question:
-- answer_type: "yes_no" for a yes or no answer, "number" for a count such as years, or "text" for an open answer.
+Fields:
+- answer_type: "text" for technical and open questions, "yes_no" for a yes or no answer, or "number" for a count.
 - expected_answer: "yes" or "no" only when a yes/no question checks an essential requirement stated in the job details, so a different answer is flagged for the recruiter. Otherwise "none".
+- key_points: for "text" questions, 2 to 4 short phrases a good answer covers; otherwise [].
 - criterion_id: the id of the requirement in <requirements> that the question checks, or "" if none.`;
 
 const employment: Record<string, string> = {
@@ -106,11 +128,18 @@ export const callQuestionsJsonSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['text', 'answer_type', 'expected_answer', 'criterion_id'],
+        required: [
+          'text',
+          'answer_type',
+          'expected_answer',
+          'key_points',
+          'criterion_id',
+        ],
         properties: {
           text: { type: 'string' },
           answer_type: { type: 'string', enum: [...answerTypes] },
           expected_answer: { type: 'string', enum: ['yes', 'no', 'none'] },
+          key_points: { type: 'array', items: { type: 'string' } },
           criterion_id: { type: 'string' },
         },
       },
@@ -183,6 +212,9 @@ export function normalizeCallQuestions(
       typeof raw.criterion_id === 'number'
         ? String(raw.criterion_id)
         : '';
+    const points = Array.isArray(raw.key_points ?? raw.keyPoints)
+      ? ((raw.key_points ?? raw.keyPoints) as unknown[])
+      : [];
     questions.push({
       id: `q${questions.length + 1}`,
       text,
@@ -192,6 +224,14 @@ export function normalizeCallQuestions(
           ? expected
           : null,
       criterion_id: known.has(criterion) ? criterion : null,
+      key_points:
+        type === 'text'
+          ? points
+              .filter((v): v is string => typeof v === 'string')
+              .map((v) => v.trim().replace(/\s+/g, ' '))
+              .filter((v) => v.length >= 2 && v.length <= 200)
+              .slice(0, 5)
+          : [],
     });
     if (questions.length === 10) break;
   }

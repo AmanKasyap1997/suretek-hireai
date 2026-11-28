@@ -18,6 +18,8 @@ import {
   faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from './api';
+import { CallPanel, JobCallsBar } from './Calls';
+import { ApplicationInterviews } from './Interviews';
 import { useAuth } from './auth';
 import {
   formatExperience,
@@ -27,8 +29,8 @@ import {
 } from './Careers';
 
 type Page<T> = { data: T[]; total: number };
-type ScreeningStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-type Fit = 'STRONG' | 'GOOD' | 'PARTIAL' | 'WEAK';
+export type ScreeningStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type Fit = 'STRONG' | 'GOOD' | 'PARTIAL' | 'WEAK';
 type Rating = 'MEETS' | 'PARTIAL' | 'NOT_MET' | 'UNCLEAR';
 type Row = {
   id: string;
@@ -47,7 +49,7 @@ type Row = {
   screening_fit: Fit | null;
   screening_missing_must_have: boolean | null;
 };
-type Document = {
+export type Document = {
   id: string;
   original_name: string;
   byte_size: number;
@@ -55,7 +57,7 @@ type Document = {
   created_at: string;
   sent_with?: 'this_application' | 'another_application' | 'uploaded_by_staff';
 };
-type Details = {
+export type Details = {
   id: string;
   stage: string;
   created_at: string;
@@ -113,6 +115,8 @@ export type Screening = {
     strengths: string[];
     concerns: string[];
     questions: string[];
+    /** Skills found in the resume (screenings from before: none). */
+    skills?: string[];
     instructions_in_resume: boolean;
   } | null;
   provider_label: string | null;
@@ -145,6 +149,12 @@ const stages = [
   'HIRED',
   'REJECTED',
 ];
+export const rejectionReasonLabels = {
+  QUALIFICATIONS: 'Qualifications',
+  EXPERIENCE: 'Experience',
+  COMPENSATION: 'Pay expectations',
+  OTHER: 'Other',
+};
 export const fitLabels: Record<Fit, string> = {
   STRONG: 'Strong match',
   GOOD: 'Good match',
@@ -157,12 +167,7 @@ const ratingLabels: Record<Rating, string> = {
   NOT_MET: 'Not met',
   UNCLEAR: 'Unclear',
 };
-const rejectionReasons = {
-  QUALIFICATIONS: 'Qualifications',
-  EXPERIENCE: 'Experience',
-  COMPENSATION: 'Pay expectations',
-  OTHER: 'Other',
-};
+const rejectionReasons = rejectionReasonLabels;
 const inProgress = (status: ScreeningStatus | null | undefined) =>
   status === 'QUEUED' || status === 'RUNNING';
 const sentence = (value: string) => value[0] + value.slice(1).toLowerCase();
@@ -225,7 +230,18 @@ export function ApplicationsPage() {
   const [stage, setStage] = useState('');
   const [sort, setSort] = useState<'created_at' | 'score'>('created_at');
   const [offset, setOffset] = useState(0);
-  const [open, setOpen] = useState<string | null>(null);
+  // ?application=… opens one, e.g. from a hiring manager's home.
+  const [open, setOpenState] = useState<string | null>(
+    searchParams.get('application'),
+  );
+  const setOpen = (id: string | null) => {
+    setOpenState(id);
+    if (!id && searchParams.has('application')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('application');
+      setSearchParams(next, { replace: true });
+    }
+  };
   const [screenBusy, setScreenBusy] = useState(false);
   const [screenMessage, setScreenMessage] = useState('');
   const [screenError, setScreenError] = useState('');
@@ -455,6 +471,7 @@ export function ApplicationsPage() {
             {screenError}
           </p>
         )}
+        {canScreen && jobId && <JobCallsBar jobId={jobId} />}
         {list.isPending ? (
           <p role="status" className="empty-state">
             Loading applications…
@@ -573,7 +590,8 @@ export function ApplicationsPage() {
   );
 }
 
-async function download(candidateId: string, document: Document) {
+/** Downloads a candidate's resume through the browser. */
+export async function downloadResume(candidateId: string, document: Document) {
   const response = await fetch(
     `/api/v1/candidates/${candidateId}/documents/${document.id}/download`,
     { credentials: 'same-origin', cache: 'no-store' },
@@ -616,7 +634,7 @@ function Points({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function ScreeningPanel({
+export function ScreeningPanel({
   applicationId,
   hasResume,
 }: {
@@ -1097,6 +1115,12 @@ function ApplicationDialog({
                 </dl>
               </section>
             )}
+            {!value.candidate.erased && (
+              <section className="application-section">
+                <h3>Interviews</h3>
+                <ApplicationInterviews applicationId={value.id} />
+              </section>
+            )}
             {details ? (
               <>
                 <section className="application-section">
@@ -1221,7 +1245,7 @@ function ApplicationDialog({
                         disabled={document.scan_status !== 'CLEAN'}
                         onClick={() => {
                           setDownloadError('');
-                          download(value.candidate.id, document).catch(
+                          downloadResume(value.candidate.id, document).catch(
                             (reason: Error) => setDownloadError(reason.message),
                           );
                         }}
@@ -1251,6 +1275,9 @@ function ApplicationDialog({
                   </p>
                 )}
               </section>
+            )}
+            {canScreen && !value.candidate.erased && (
+              <CallPanel applicationId={value.id} />
             )}
             <DecisionPanel value={value} />
           </>

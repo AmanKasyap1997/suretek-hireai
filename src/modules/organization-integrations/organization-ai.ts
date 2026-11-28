@@ -4,6 +4,7 @@ import { DbClient, DbService } from '../../platform/database/db.service';
 import { audit } from '../../platform/audit/audit';
 import { Actor } from '../../shared/actor';
 import { decryptSecret } from '../super-admin/secrets';
+import { plivoConnection } from './plivo';
 import {
   AiProvider,
   JsonRequest,
@@ -70,8 +71,77 @@ export interface AiSettings {
   screeningProvider: AiProvider | null;
   /** With a chosen provider: may another enabled provider screen instead? */
   screeningFallback: boolean;
-  /** AI calling is on: recruiters prepare each job's call questions. */
+  /** AI calling is on: recruiters prepare call questions and call candidates. */
   callingEnabled: boolean;
+  /** The voice AI that talks to candidates; null: automatic. */
+  callingProvider: CallingProvider | null;
+  /** The voice for calls; null: the server's default. */
+  callingVoice: string | null;
+  /** The name the AI introduces itself with on calls; null: none. */
+  callingAssistantName: string | null;
+  /** Shortlist at this resume score or more (null: off). */
+  autoShortlistScore: number | null;
+  /** Call candidates as soon as they're shortlisted automatically. */
+  autoCallShortlisted: boolean;
+  /** Move to interviews, and book one, at this call score or more (null: off). */
+  autoInterviewScore: number | null;
+}
+
+/** AI providers with a realtime voice model. */
+export const callingProviders = ['openai', 'google_ai'] as const;
+export type CallingProvider = (typeof callingProviders)[number];
+export const callingProviderLabels: Record<CallingProvider, string> = {
+  openai: 'OpenAI Realtime',
+  google_ai: 'Gemini Live',
+};
+
+/** Voices each voice AI offers, with how they sound. */
+export const callingVoices: Record<
+  CallingProvider,
+  { id: string; label: string }[]
+> = {
+  google_ai: [
+    { id: 'Sulafat', label: 'Sulafat · warm' },
+    { id: 'Achird', label: 'Achird · friendly' },
+    { id: 'Aoede', label: 'Aoede · breezy' },
+    { id: 'Vindemiatrix', label: 'Vindemiatrix · gentle' },
+    { id: 'Umbriel', label: 'Umbriel · easy-going' },
+    { id: 'Callirrhoe', label: 'Callirrhoe · easy-going' },
+    { id: 'Despina', label: 'Despina · smooth' },
+    { id: 'Algieba', label: 'Algieba · smooth' },
+    { id: 'Achernar', label: 'Achernar · soft' },
+    { id: 'Zubenelgenubi', label: 'Zubenelgenubi · casual' },
+    { id: 'Puck', label: 'Puck · upbeat' },
+    { id: 'Leda', label: 'Leda · youthful' },
+    { id: 'Charon', label: 'Charon · informative' },
+    { id: 'Schedar', label: 'Schedar · even' },
+    { id: 'Gacrux', label: 'Gacrux · mature' },
+    { id: 'Kore', label: 'Kore · firm' },
+    { id: 'Orus', label: 'Orus · firm' },
+    { id: 'Zephyr', label: 'Zephyr · bright' },
+  ],
+  openai: [
+    { id: 'marin', label: 'Marin · most natural' },
+    { id: 'cedar', label: 'Cedar · most natural' },
+    { id: 'coral', label: 'Coral' },
+    { id: 'sage', label: 'Sage' },
+    { id: 'shimmer', label: 'Shimmer' },
+    { id: 'ash', label: 'Ash' },
+    { id: 'ballad', label: 'Ballad' },
+    { id: 'verse', label: 'Verse' },
+    { id: 'alloy', label: 'Alloy' },
+    { id: 'echo', label: 'Echo' },
+  ],
+};
+
+/** The chosen voice if the voice AI offers it; otherwise null (its default). */
+export function callingVoice(
+  provider: CallingProvider,
+  voice: string | null | undefined,
+) {
+  return voice && callingVoices[provider].some((v) => v.id === voice)
+    ? voice
+    : null;
 }
 
 export const aiSettingsSchema = z
@@ -82,7 +152,62 @@ export const aiSettingsSchema = z
   .strict();
 export type ScreeningSettingsInput = z.infer<typeof aiSettingsSchema>;
 
-export const aiCallingSchema = z.object({ enabled: z.boolean() }).strict();
+export const aiCallingSchema = z
+  .object({
+    enabled: z.boolean(),
+    /** Omitted: unchanged. null: automatic. */
+    provider: z.enum(callingProviders).nullable().optional(),
+    /** Omitted: unchanged. null: the server's default voice. */
+    voice: z
+      .string()
+      .regex(/^[A-Za-z]{2,40}$/)
+      .nullable()
+      .optional(),
+    /**
+     * The name the AI introduces itself with, such as "Priya". Omitted:
+     * unchanged. null: none (it introduces itself by the organization).
+     */
+    assistantName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(40)
+      // A name of up to three words, never instructions: the voice AI says it.
+      .regex(
+        /^\p{L}[\p{L}\p{M}.'’-]*(?: [\p{L}\p{M}.'’-]+){0,2}$/u,
+        'Use a name of up to three words, made of letters, such as “Priya”.',
+      )
+      .nullable()
+      .optional(),
+  })
+  .strict();
+export type AiCallingInput = z.infer<typeof aiCallingSchema>;
+
+const score = z.number().int().min(1).max(100).nullable();
+/** The automatic hiring steps (null scores: off). */
+export const aiAutomationSchema = z
+  .object({
+    shortlistScore: score,
+    callShortlisted: z.boolean(),
+    interviewScore: score,
+  })
+  .strict();
+export type AiAutomationInput = z.infer<typeof aiAutomationSchema>;
+
+/**
+ * The voice AIs that may take a call, in order: the chosen one only, or
+ * (automatic) every enabled one.
+ */
+export function callingOrder<T extends { provider: AiProvider }>(
+  connections: T[],
+  chosen: CallingProvider | null,
+): (T & { provider: CallingProvider })[] {
+  const voice = connections.filter(
+    (c): c is T & { provider: CallingProvider } =>
+      (callingProviders as readonly string[]).includes(c.provider),
+  );
+  return chosen ? voice.filter((c) => c.provider === chosen) : voice;
+}
 
 export async function aiSettings(
   db: DbClient,
@@ -92,14 +217,28 @@ export async function aiSettings(
     screening_provider: AiProvider | null;
     screening_fallback: boolean;
     calling_enabled: boolean;
+    calling_provider: CallingProvider | null;
+    calling_voice: string | null;
+    calling_assistant_name: string | null;
+    auto_shortlist_score: number | null;
+    auto_call_shortlisted: boolean;
+    auto_interview_score: number | null;
   }>(
-    'SELECT screening_provider,screening_fallback,calling_enabled FROM organization_ai_settings WHERE tenant_id=$1',
+    `SELECT screening_provider,screening_fallback,calling_enabled,calling_provider,calling_voice,calling_assistant_name,
+       auto_shortlist_score,auto_call_shortlisted,auto_interview_score
+     FROM organization_ai_settings WHERE tenant_id=$1`,
     [tenantId],
   );
   return {
     screeningProvider: row?.screening_provider ?? null,
     screeningFallback: row?.screening_fallback ?? true,
     callingEnabled: row?.calling_enabled ?? false,
+    callingProvider: row?.calling_provider ?? null,
+    callingVoice: row?.calling_voice ?? null,
+    callingAssistantName: row?.calling_assistant_name ?? null,
+    autoShortlistScore: row?.auto_shortlist_score ?? null,
+    autoCallShortlisted: row?.auto_call_shortlisted ?? false,
+    autoInterviewScore: row?.auto_interview_score ?? null,
   };
 }
 
@@ -155,6 +294,63 @@ function ready(tenantId: string, connection: AiConnection): ReadyAiConnection {
   };
 }
 
+/**
+ * What AI calling needs and what's missing. Phone calls need everything; a
+ * browser test call needs only a voice AI.
+ */
+export async function callingStatus(
+  db: DbClient,
+  tenantId: string,
+  connections: AiConnection[],
+  chosen: CallingProvider | null,
+  voiceChoice: string | null = null,
+) {
+  const phone = await plivoConnection(db, tenantId);
+  const voices = callingOrder(connections, chosen);
+  const voiceProblem = voices.length
+    ? null
+    : chosen
+      ? `${callingProviderLabels[chosen]} is chosen for calls, but ${aiProviderLabels[chosen]} isn’t enabled in AI providers.`
+      : 'Enable OpenAI or Google AI Studio in AI providers so an AI voice can talk to candidates.';
+  return {
+    voice_providers: callingOrder(connections, null).map((c) => ({
+      provider: c.provider,
+      label: callingProviderLabels[c.provider],
+    })),
+    voice: voices[0]
+      ? {
+          provider: voices[0].provider,
+          label: callingProviderLabels[voices[0].provider],
+          // The voice it speaks with, and the others it offers.
+          name: callingVoice(voices[0].provider, voiceChoice),
+          voices: callingVoices[voices[0].provider],
+        }
+      : null,
+    phone: phone
+      ? {
+          provider: 'plivo' as const,
+          environment: phone.environment,
+          number: phone.credentials?.phoneNumber ?? null,
+        }
+      : null,
+    voice_problem: voiceProblem,
+    problems: [
+      process.env.CALL_PLANNING_ENABLED !== 'true'
+        ? 'Calls are turned off on this server. The deployment operator must set CALL_PLANNING_ENABLED=true.'
+        : null,
+      !phone
+        ? 'Connect, test and enable Plivo (Communication) so HireAI can phone candidates.'
+        : !phone.credentials
+          ? 'Reconnect Plivo: its saved credentials can’t be read.'
+          : null,
+      voiceProblem,
+      !process.env.PUBLIC_API_BASE_URL
+        ? 'HireAI’s public address for phone calls isn’t set. The deployment operator must set PUBLIC_API_BASE_URL.'
+        : null,
+    ].filter((p): p is string => !!p),
+  };
+}
+
 /** The organization's AI providers and its choice of which one screens resumes. */
 @Injectable()
 export class OrganizationAiService {
@@ -201,6 +397,21 @@ export class OrganizationAiService {
       screening_provider: chosen,
       screening_fallback: settings.screeningFallback,
       calling_enabled: settings.callingEnabled,
+      calling_provider: settings.callingProvider,
+      calling_voice: settings.callingVoice,
+      calling_assistant_name: settings.callingAssistantName,
+      automation: {
+        shortlist_score: settings.autoShortlistScore,
+        call_shortlisted: settings.autoCallShortlisted,
+        interview_score: settings.autoInterviewScore,
+      },
+      calling: await callingStatus(
+        this.db,
+        tenantId,
+        rows,
+        settings.callingProvider,
+        settings.callingVoice,
+      ),
       providers: rows.map((c) => ({
         provider: c.provider,
         label: aiProviderLabels[c.provider],
@@ -217,16 +428,52 @@ export class OrganizationAiService {
     };
   }
 
-  /** Turns AI calling on or off; the screening choice is unchanged. */
-  async updateCalling(actor: Actor, enabled: boolean) {
+  /** Turns AI calling on or off and picks its voice AI. */
+  async updateCalling(actor: Actor, input: AiCallingInput) {
     await this.db.transaction(async (tx) => {
-      const previous = (await aiSettings(tx, actor.tenantId)).callingEnabled;
+      const previous = await aiSettings(tx, actor.tenantId);
+      const provider =
+        input.provider === undefined
+          ? previous.callingProvider
+          : input.provider;
+      const voice =
+        input.voice === undefined ? previous.callingVoice : input.voice;
+      const assistantName =
+        input.assistantName === undefined
+          ? previous.callingAssistantName
+          : input.assistantName;
+      if (
+        voice &&
+        !callingProviders.some((p) =>
+          callingVoices[p].some((v) => v.id === voice),
+        )
+      )
+        throw new ConflictException('Choose one of the listed voices.');
+      if (
+        provider &&
+        provider !== previous.callingProvider &&
+        !(await enabledAiConnections(tx, actor.tenantId)).some(
+          (c) => c.provider === provider,
+        )
+      )
+        throw new ConflictException(
+          `${aiProviderLabels[provider]} isn’t enabled. Connect, test and enable it before choosing it for calls.`,
+        );
       await tx.query(
-        `INSERT INTO organization_ai_settings(tenant_id,calling_enabled,updated_by)
-         VALUES($1,$2,$3)
+        `INSERT INTO organization_ai_settings(tenant_id,calling_enabled,calling_provider,calling_voice,calling_assistant_name,updated_by)
+         VALUES($1,$2,$3,$4,$5,$6)
          ON CONFLICT (tenant_id) DO UPDATE SET calling_enabled=EXCLUDED.calling_enabled,
+           calling_provider=EXCLUDED.calling_provider,calling_voice=EXCLUDED.calling_voice,
+           calling_assistant_name=EXCLUDED.calling_assistant_name,
            updated_by=EXCLUDED.updated_by,updated_at=now()`,
-        [actor.tenantId, enabled, actor.userId],
+        [
+          actor.tenantId,
+          input.enabled,
+          provider,
+          voice,
+          assistantName,
+          actor.userId,
+        ],
       );
       await audit(
         tx,
@@ -234,7 +481,53 @@ export class OrganizationAiService {
         'organization.ai_calling_updated',
         'organization',
         actor.tenantId,
-        { enabled, previous },
+        {
+          enabled: input.enabled,
+          previous: previous.callingEnabled,
+          provider,
+          previousProvider: previous.callingProvider,
+          voice,
+          assistantName,
+        },
+      );
+    });
+    return this.settingsView(actor.tenantId);
+  }
+
+  /** Turns the automatic hiring steps on or off, with their scores. */
+  async updateAutomation(actor: Actor, input: AiAutomationInput) {
+    await this.db.transaction(async (tx) => {
+      const previous = await aiSettings(tx, actor.tenantId);
+      await tx.query(
+        `INSERT INTO organization_ai_settings(tenant_id,auto_shortlist_score,auto_call_shortlisted,auto_interview_score,updated_by)
+         VALUES($1,$2,$3,$4,$5)
+         ON CONFLICT (tenant_id) DO UPDATE SET auto_shortlist_score=EXCLUDED.auto_shortlist_score,
+           auto_call_shortlisted=EXCLUDED.auto_call_shortlisted,auto_interview_score=EXCLUDED.auto_interview_score,
+           updated_by=EXCLUDED.updated_by,updated_at=now()`,
+        [
+          actor.tenantId,
+          input.shortlistScore,
+          input.callShortlisted,
+          input.interviewScore,
+          actor.userId,
+        ],
+      );
+      await audit(
+        tx,
+        actor,
+        'organization.ai_automation_updated',
+        'organization',
+        actor.tenantId,
+        {
+          shortlistScore: input.shortlistScore,
+          callShortlisted: input.callShortlisted,
+          interviewScore: input.interviewScore,
+          previous: {
+            shortlistScore: previous.autoShortlistScore,
+            callShortlisted: previous.autoCallShortlisted,
+            interviewScore: previous.autoInterviewScore,
+          },
+        },
       );
     });
     return this.settingsView(actor.tenantId);

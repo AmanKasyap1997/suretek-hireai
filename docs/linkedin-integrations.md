@@ -22,6 +22,20 @@ The LinkedIn application needs approved Community Management access and `rw_orga
 
 Connect and test sandbox and production, then enable production. Sandbox verification only reads metadata; it does not create a test post. These environment labels do not create a separate LinkedIn sandbox. Under **Publish jobs to LinkedIn**, choose a published HireAI job, Company-page announcement, an authorized page, the public HTTPS application URL and optional announcement text. Preview, review, and explicitly confirm. Page permissions are checked again before dispatch. A successful post receipt produces a link to the public post.
 
+**Who posts:** once an HR Admin has connected and enabled the company page,
+HR Admins and recruiters both post published jobs to it (Jobs → **Publish** or
+**Post to channels**), choosing among the pages the connection may post for.
+The profile connection is different: it posts on the LinkedIn profile of the
+person who connected it, so only they can post with it. Deleting a LinkedIn
+post stays with HR Admins.
+
+**The apply link:** LinkedIn posts (company page and profile) link to the
+job's HireAI apply page, and the post text ends with "Apply here: <link>". It's
+filled in automatically when HireAI runs on a public https:// address; enter
+another application page only if candidates should apply elsewhere. On a local
+http:// address, enter a public https:// link yourself, since LinkedIn and
+candidates can't reach localhost.
+
 ## Actual LinkedIn Jobs listings
 
 Jobs listings use a separate partner-approved API and client-credentials authorization, not the member consent window. Do not set `LINKEDIN_JOBS_APPROVED=true` until LinkedIn has granted the applicable access and customer onboarding is complete. [LinkedIn Job Posting API overview](https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/overview) describes restricted partner access; [job synchronization](https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/sync-job-postings) describes customer migration requirements. Application approval cannot be implemented or bypassed in this repository.

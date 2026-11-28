@@ -4,13 +4,14 @@ import { Throttle } from '@nestjs/throttler';
 import { Actor, CurrentUser } from '../../../shared/actor';
 import { Roles } from '../../../shared/roles.decorator';
 import { RECRUITMENT_ROLES } from '../../../shared/role-groups';
+import { Role } from '../../../shared/enums';
 import { BodySchema, parse } from '../../../platform/http/validation';
 import { jobDescriptionSchema } from './jobs.schemas';
 import { JobDescriptionService } from './job-description.service';
 
 @ApiTags('Jobs')
 @ApiBearerAuth()
-@Roles(...RECRUITMENT_ROLES)
+@Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER)
 @Controller('jobs/ai-description')
 export class JobDescriptionController {
   constructor(private readonly service: JobDescriptionService) {}

@@ -1,4 +1,5 @@
 export { ScreeningModule } from './screening.module';
+export { WorkRecoveryService } from './work-recovery.service';
 export {
   ScreeningService,
   latestScreeningJoin,

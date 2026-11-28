@@ -5,6 +5,7 @@ import { Roles } from '../../shared/roles.decorator';
 import { BodySchema, parse } from '../../platform/http/validation';
 import {
   OrganizationAiService,
+  aiAutomationSchema,
   aiCallingSchema,
   aiSettingsSchema,
 } from './organization-ai';
@@ -39,9 +40,19 @@ export class AiSettingsController {
   @BodySchema(aiCallingSchema)
   @ApiOperation({
     summary:
-      'Turn AI calling on or off. Calls aren’t placed yet; when on, recruiters prepare each job’s call questions.',
+      'Turn AI calling on or off and choose its voice AI (provider: openai, google_ai, or null for automatic).',
   })
   calling(@CurrentUser() actor: Actor, @Body() body: unknown) {
-    return this.ai.updateCalling(actor, parse(aiCallingSchema, body).enabled);
+    return this.ai.updateCalling(actor, parse(aiCallingSchema, body));
+  }
+
+  @Put('automation')
+  @BodySchema(aiAutomationSchema)
+  @ApiOperation({
+    summary:
+      'Automatic hiring steps: shortlist at a resume score, call those shortlisted, and move to interviews (and book one) at a call score. Null scores turn a step off; nobody is rejected automatically.',
+  })
+  automation(@CurrentUser() actor: Actor, @Body() body: unknown) {
+    return this.ai.updateAutomation(actor, parse(aiAutomationSchema, body));
   }
 }

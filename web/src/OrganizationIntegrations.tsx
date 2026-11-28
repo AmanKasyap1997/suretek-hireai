@@ -32,6 +32,8 @@ import logo from './assets/suretek-logo.png';
 import { api } from './api';
 import { useAuth } from './auth';
 import { AIProviderSetup } from './AIProviderSetup';
+import { InterviewCalendarSetting } from './Interviews';
+import { GoogleLogo, heroLogos, providerLogos } from './ProviderLogos';
 type Provider = {
   hostedOAuth?: boolean;
   oauthReady?: boolean;
@@ -72,6 +74,10 @@ const labels: Record<string, string> = {
   oauth_refresh_token: 'OAuth refresh token',
   smtp: 'SMTP',
   basic: 'Username and password',
+  account_token: 'Auth ID and Auth Token',
+  authId: 'Auth ID',
+  authToken: 'Auth Token',
+  phoneNumber: 'Caller number',
 };
 const label = (s: string) =>
   labels[s] ?? s[0].toUpperCase() + s.slice(1).replace(/_/g, ' ');
@@ -157,7 +163,7 @@ const categories: Category[] = [
     description:
       'Email candidates and interviewers, and place screening calls.',
     icon: faEnvelope,
-    providers: ['email', 'telephony'],
+    providers: ['email', 'plivo', 'telephony'],
   },
   {
     id: 'publishing',
@@ -233,6 +239,13 @@ const providerInfo: Record<
     name: 'Telephony',
     description: 'Places consent-based AI screening calls.',
   },
+  plivo: {
+    name: 'Plivo',
+    description:
+      'Phones candidates for AI calls from your organization’s Plivo number.',
+    keyUrl: 'https://console.plivo.com/dashboard/',
+    keyLabel: 'Find your Auth ID and Auth Token in the Plivo console',
+  },
   careers_cms: {
     name: 'Careers CMS / API',
     description: 'Publishes approved jobs to your careers website.',
@@ -263,20 +276,16 @@ const providerInfo: Record<
 const providerName = (id: string) => providerInfo[id]?.name ?? label(id);
 
 /**
- * A provider's tile: its initial or a matching icon in colours that hint at
- * the brand. HireAI doesn't ship the providers' own logos.
+ * A provider's tile: its logo (see ProviderLogos), or else its initial or a
+ * matching icon in colours that hint at the brand.
  */
 const marks: Record<
   string,
   { text?: string; icon?: IconDefinition; tone: string }
 > = {
-  openai: { text: 'O', tone: 'dark' },
-  anthropic: { text: 'A', tone: 'clay' },
-  google_ai: { text: 'G', tone: 'blue' },
-  google_calendar: { icon: faCalendarDays, tone: 'blue' },
-  microsoft_calendar: { icon: faCalendarDays, tone: 'sky' },
   email: { icon: faEnvelope, tone: 'brand' },
   telephony: { icon: faPhone, tone: 'brand' },
+  plivo: { text: 'P', tone: 'green' },
   careers_cms: { icon: faCode, tone: 'brand' },
   linkedin: { text: 'in', tone: 'linkedin' },
   linkedin_profile: { text: 'in', tone: 'linkedin' },
@@ -284,7 +293,24 @@ const marks: Record<
   e_signature: { icon: faFileSignature, tone: 'brand' },
   hris: { icon: faUsers, tone: 'brand' },
 };
-function ProviderMark({ provider }: { provider: string }) {
+function ProviderMark({
+  provider,
+  hero = false,
+}: {
+  provider: string;
+  /** In the page's header art, which shows company logos. */
+  hero?: boolean;
+}) {
+  const logo = (hero ? heroLogos : providerLogos)[provider];
+  if (logo)
+    return (
+      <span
+        className={`int-mark int-mark-logo${logo.fill ? ' int-mark-logo-fill' : ''}`}
+        aria-hidden="true"
+      >
+        <logo.Svg />
+      </span>
+    );
   const mark = marks[provider] ?? {
     icon: categoryOf(provider).icon,
     tone: 'brand',
@@ -296,40 +322,57 @@ function ProviderMark({ provider }: { provider: string }) {
   );
 }
 
-/** Decorative: HireAI in the middle, connected to the organization's services. */
+/**
+ * Decorative: HireAI in the middle, connected to the organization's
+ * services. The first six fill the spots in order: left, top left, bottom
+ * left, top right, right, bottom right.
+ */
 const artOrder = [
   'google_ai',
   'openai',
   'google_calendar',
   'linkedin',
   'microsoft_calendar',
+  'plivo',
+  'telephony',
   'email',
   'anthropic',
-  'telephony',
 ];
+const artCenter = [50, 54];
 const artSpots = [
-  [10, 45],
-  [32, 14],
-  [32, 80],
-  [68, 14],
-  [90, 45],
-  [68, 80],
+  [7, 45],
+  [26, 21],
+  [25, 79],
+  [73, 21],
+  [93, 45],
+  [74, 79],
 ];
+/** One tile per company: LinkedIn's three integrations share a logo. */
+const artFamily = (provider: string) =>
+  provider.startsWith('linkedin') ? 'linkedin' : provider;
 function HeroArt({ providers }: { providers: string[] }) {
   const shown = [
     ...artOrder.filter((p) => providers.includes(p)),
     ...providers.filter((p) => !artOrder.includes(p)),
-  ].slice(0, 6);
+  ]
+    .filter(
+      (p, index, all) =>
+        all.findIndex((other) => artFamily(other) === artFamily(p)) === index,
+    )
+    .slice(0, 6);
   if (!shown.length) return null;
+  const [cx, cy] = artCenter;
   return (
     <div className="int-hero-art" aria-hidden="true">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none">
         {shown.map((p, index) => {
           const [x, y] = artSpots[index];
+          const mid = (x + cx) / 2;
+          // Leaves the centre and reaches the tile level: a soft S-curve.
           return (
             <path
               key={p}
-              d={`M50 47 Q ${(x + 50) / 2} ${y < 47 ? y - 4 : y + 4} ${x} ${y}`}
+              d={`M${cx} ${cy} C ${mid} ${cy} ${mid} ${y} ${x} ${y}`}
               vectorEffect="non-scaling-stroke"
             />
           );
@@ -347,7 +390,7 @@ function HeroArt({ providers }: { providers: string[] }) {
             top: `${artSpots[index][1]}%`,
           }}
         >
-          <ProviderMark provider={p} />
+          <ProviderMark provider={p} hero />
         </span>
       ))}
     </div>
@@ -610,7 +653,7 @@ const steps: [string, string, IconDefinition][] = [
   ['Go live', 'Repeat with production credentials when ready.', faRocket],
 ];
 const isSecret = (field: string) =>
-  !['username', 'clientId', 'scope'].includes(field);
+  !['username', 'clientId', 'scope', 'authId', 'phoneNumber'].includes(field);
 function ConnectionForm({
   provider,
   initialMethod,
@@ -743,15 +786,34 @@ function ConnectionForm({
                 <input
                   id={id + field}
                   name={field}
-                  type={isSecret(field) ? 'password' : 'text'}
+                  type={
+                    isSecret(field)
+                      ? 'password'
+                      : field === 'phoneNumber'
+                        ? 'tel'
+                        : 'text'
+                  }
                   autoComplete="off"
                   spellCheck={false}
                   required={field !== 'scope'}
                   minLength={isSecret(field) ? 8 : 1}
                   maxLength={8192}
+                  {...(field === 'phoneNumber'
+                    ? {
+                        pattern: '\\+[1-9][0-9]{7,14}',
+                        placeholder: '+918045671234',
+                        'aria-describedby': id + field + '-hint',
+                      }
+                    : {})}
                   onInput={() => setSaved(false)}
                 />
-                {field === 'apiKey' && info?.keyUrl && (
+                {field === 'phoneNumber' && (
+                  <small id={id + field + '-hint'}>
+                    A number you rent in Plivo, in international format.
+                    Candidates see it when HireAI calls.
+                  </small>
+                )}
+                {(field === 'apiKey' || field === 'authId') && info?.keyUrl && (
                   <small>
                     <a
                       href={info.keyUrl}
@@ -802,6 +864,13 @@ function ConnectionForm({
               (method === 'oauth2' && provider.oauthReady === false)
             }
           >
+            {method === 'oauth2' &&
+              !action.busy &&
+              provider.provider === 'google_calendar' && (
+                <span className="int-button-logo" aria-hidden="true">
+                  <GoogleLogo />
+                </span>
+              )}
             {action.busy
               ? 'Saving…'
               : method === 'oauth2'
@@ -1078,6 +1147,11 @@ function ProviderCard({
                   disabled={action.busy}
                   onClick={() => void authorize('sandbox')}
                 >
+                  {p.provider === 'google_calendar' && (
+                    <span className="int-button-logo" aria-hidden="true">
+                      <GoogleLogo />
+                    </span>
+                  )}
                   Authorize {p.label}
                 </button>
               )}
@@ -1199,7 +1273,6 @@ function OrganizationConnections() {
   const summaries = providerList.map((p) =>
     providerStatus(forProvider(p.provider)),
   );
-  const inUse = summaries.filter((s) => s.tone === 'success').length;
   const attention = summaries.filter((s) => s.tone === 'danger').length;
   const groups = [...categories, otherCategory]
     .map((category) => ({
@@ -1272,19 +1345,14 @@ function OrganizationConnections() {
           <h1>Integrations</h1>
           <p className="intro">
             Connect your organization’s accounts to the services enabled by
-            Suretek. Credentials are encrypted and used only for your
-            organization.
+            Suretek HireAI. Create a seamless hiring experience, powered by
+            leading AI and business tools.
           </p>
-          {ready && providerList.length > 0 && (
+          {/* Only a warning: what's connected shows on each card. */}
+          {ready && attention > 0 && (
             <div className="int-summary" role="group" aria-label="Summary">
-              <span className="int-pill int-pill-success">{inUse} in use</span>
-              {attention > 0 && (
-                <span className="int-pill int-pill-danger">
-                  {attention} {attention === 1 ? 'needs' : 'need'} attention
-                </span>
-              )}
-              <span className="int-pill int-pill-neutral">
-                {providerList.length} available
+              <span className="int-pill int-pill-danger">
+                {attention} {attention === 1 ? 'needs' : 'need'} attention
               </span>
             </div>
           )}
@@ -1363,6 +1431,17 @@ function OrganizationConnections() {
                         category.icon,
                         category.title,
                         category.description,
+                      )}
+                      {category.id === 'calendar' && hiring && (
+                        <InterviewCalendarSetting
+                          version={JSON.stringify(
+                            connectionList
+                              .filter(
+                                (c) => categoryOf(c.provider).id === 'calendar',
+                              )
+                              .map((c) => [c.id, c.status]),
+                          )}
+                        />
                       )}
                       <div className="int-grid">
                         {items.map((p) => (
@@ -1565,9 +1644,12 @@ export function IntegrationOAuthCallback() {
         <p role="alert">
           {params.get('error') === 'access_denied'
             ? 'Authorization was declined. Start again from Integrations if you want to connect.'
-            : params.has('error')
-              ? 'The provider could not complete authorization. Start again from Integrations.'
-              : 'Authorization details are missing or this callback has already been opened. Start a new connection from Integrations.'}
+            : params.get('error') === 'unauthorized_scope_error'
+              ? // LinkedIn: the app lacks an approved product (its own text isn't shown).
+                'The provider hasn’t approved the permissions HireAI asks for. For LinkedIn company pages, LinkedIn must first approve Community Management API access for HireAI’s LinkedIn app. Ask your Suretek administrator, then try again.'
+              : params.has('error')
+                ? 'The provider could not complete authorization. Start again from Integrations.'
+                : 'Authorization details are missing or this callback has already been opened. Start a new connection from Integrations.'}
         </p>
       ) : error ? (
         <p role="alert">{error}</p>
