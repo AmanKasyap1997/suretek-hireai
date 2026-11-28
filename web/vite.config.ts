@@ -8,6 +8,8 @@ export default defineConfig({
       '/api': {
         target: process.env.API_TARGET ?? 'http://localhost:3000',
         changeOrigin: false,
+        // AI test calls stream audio over a WebSocket.
+        ws: true,
       },
     },
   },

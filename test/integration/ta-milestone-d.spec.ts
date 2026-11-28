@@ -28,7 +28,14 @@ describe('Milestone D readiness', () => {
     delete process.env.MALWARE_SCANNER;
   });
   const slug = () => `tenant-${f.tenantA}`;
-  async function intake() {
+  /** `consents`: separate choices (API); null: only the apply form's notice. */
+  async function intake(
+    consents: Record<string, boolean> | null = {
+      CALL: true,
+      RECORDING: false,
+      TRANSCRIPTION: false,
+    },
+  ) {
     const { jobId } = await f.scenario();
     const send = jest
       .spyOn(f.app!.get(EmailPort), 'sendContactVerification')
@@ -36,14 +43,33 @@ describe('Milestone D readiness', () => {
     const body = {
       fullName: 'Verified Applicant',
       email: `${randomUUID()}@example.test`,
+      phone: '+919876543210',
+      currentLocation: 'Noida',
+      totalExperienceMonths: 24,
+      noticePeriod: 'IMMEDIATE',
+      expectedCtc: 900000,
+      privacyAccepted: true,
       noticeVersion: '2026-11-v1',
-      consents: { CALL: true, RECORDING: false, TRANSCRIPTION: false },
+      ...(consents ? { consents } : {}),
+      resume: {
+        filename: 'resume.pdf',
+        base64: Buffer.from('%PDF-1.7\nSample resume\n%%EOF').toString(
+          'base64',
+        ),
+      },
     };
     const response = await request(f.app!.getHttpServer())
       .post(`${api}/public/${slug()}/jobs/${jobId}/applications`)
       .send(body)
       .expect(202);
-    return { jobId, body, response, mail: send.mock.calls.at(-1)![0] };
+    return {
+      jobId,
+      body,
+      response, // Undefined when no confirmation email was sent (the notice).
+      mail: send.mock.calls.at(-1)?.[0] as Parameters<
+        EmailPort['sendContactVerification']
+      >[0],
+    };
   }
   const verify = (token: string, tenant = slug()) =>
     request(f.app!.getHttpServer())
@@ -84,26 +110,40 @@ describe('Milestone D readiness', () => {
       ),
     ).toEqual([]);
   });
-  it('permits planning only after verified CALL evidence and blocks erased candidates', async () => {
-    const first = await intake();
-    const row = (
-      await f.pool.query('SELECT * FROM contact_verifications WHERE id=$1', [
-        first.mail.token.split('.')[0],
-      ])
-    ).rows[0];
-    await f
-      .authorized('patch', `/applications/${row.application_id}/stage`)
-      .send({ stage: 'SHORTLISTED' })
-      .expect(200);
-    const call = () =>
+  it('lets the candidate’s choice on the application decide calls, and blocks erased candidates', async () => {
+    const shortlisted = async (email: string) => {
+      const { id } = (
+        await f.pool.query(
+          'SELECT a.id FROM applications a JOIN candidates c ON c.tenant_id=a.tenant_id AND c.id=a.candidate_id WHERE a.tenant_id=$1 AND c.email=$2',
+          [f.tenantA, email],
+        )
+      ).rows[0];
+      await f
+        .authorized('patch', `/applications/${id}/stage`)
+        .send({ stage: 'SHORTLISTED' })
+        .expect(200);
+      return id;
+    };
+    const call = (applicationId: string) =>
       f.authorized('post', '/call-requests').send({
-        applicationId: row.application_id,
+        applicationId,
         language: 'EN',
         idempotencyKey: randomUUID(),
       });
-    await call().expect(403);
-    await verify(first.mail.token).expect(202);
-    await call().expect(201);
+    // The apply form's notice: callable straight away, no email to confirm.
+    const noticed = await intake(null);
+    expect(noticed.mail).toBeUndefined();
+    await call(await shortlisted(noticed.body.email)).expect(201);
+    // A separate "yes" from an API client counts without the email, too.
+    const yes = await intake();
+    await call(await shortlisted(yes.body.email)).expect(201);
+    // A separate "no" is respected.
+    const no = await intake({
+      CALL: false,
+      RECORDING: false,
+      TRANSCRIPTION: false,
+    });
+    await call(await shortlisted(no.body.email)).expect(403);
     const second = await intake();
     const erased = (
       await f.pool.query('SELECT * FROM contact_verifications WHERE id=$1', [
@@ -193,6 +233,12 @@ describe('Milestone D readiness', () => {
     const scanner = jest
       .spyOn(f.app!.get(MalwareScanPort), 'scan')
       .mockResolvedValue(S.PENDING);
+    // Earlier tests' applications uploaded resumes; mark those scanned so the
+    // sweep sees only this test's two uploads.
+    await f.pool.query(
+      "UPDATE candidate_documents SET scan_status='CLEAN',scanned_at=now() WHERE tenant_id=$1 AND scan_status IN ('PENDING','FAILED','ERROR')",
+      [f.tenantA],
+    );
     const upload = () =>
       f
         .authorized('post', `/candidates/${f.candidateA}/documents`)

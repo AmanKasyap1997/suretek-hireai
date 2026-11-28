@@ -42,18 +42,47 @@ export function callPolicyFromEnv(
   return { enabled: enabled === 'true', timezone, startMinute, endMinute };
 }
 
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function localMinute(timezone: string, now: Date) {
+  let format = formatters.get(timezone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      hourCycle: 'h23',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    formatters.set(timezone, format);
+  }
+  const parts = format.formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === 'hour')!.value);
+  const minute = Number(parts.find((part) => part.type === 'minute')!.value);
+  return hour * 60 + minute;
+}
+
 export function isWithinCallingWindow(
   policy: CallingPolicy,
   now = new Date(),
 ): boolean {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: policy.timezone,
-    hourCycle: 'h23',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).formatToParts(now);
-  const hour = Number(parts.find((part) => part.type === 'hour')!.value);
-  const minute = Number(parts.find((part) => part.type === 'minute')!.value);
-  const localMinute = hour * 60 + minute;
-  return localMinute >= policy.startMinute && localMinute < policy.endMinute;
+  const minute = localMinute(policy.timezone, now);
+  return minute >= policy.startMinute && minute < policy.endMinute;
+}
+
+/**
+ * The earliest time from `from` that is inside every calling window: `from`
+ * itself, or the start of the next window. Null if the windows never overlap.
+ */
+export function nextCallingTime(
+  policies: CallingPolicy[],
+  from: Date,
+): Date | null {
+  const inside = (time: Date) =>
+    policies.every((policy) => isWithinCallingWindow(policy, time));
+  if (inside(from)) return from;
+  let time = new Date(Math.ceil(from.getTime() / 60_000) * 60_000);
+  for (let i = 0; i < 8 * 24 * 60; i++) {
+    if (inside(time)) return time;
+    time = new Date(time.getTime() + 60_000);
+  }
+  return null;
 }

@@ -14,8 +14,11 @@ operator must configure the application credentials once:
 1. Create/select a Google Cloud project and enable **Google Calendar API**.
 2. Configure Google Auth Platform branding and audience. Add the Google accounts
    that will connect as test users while the application is in testing. Configure
-   `https://www.googleapis.com/auth/calendar.events` and
-   `https://www.googleapis.com/auth/calendar.calendarlist.readonly` scopes.
+   the `https://www.googleapis.com/auth/calendar.events`,
+   `https://www.googleapis.com/auth/calendar.calendarlist.readonly` and
+   `https://www.googleapis.com/auth/calendar.freebusy` scopes. Free/busy lets
+   the AI find times the interview panel is free. An organization that
+   connected Google Calendar before it was added must authorize it again.
 3. Create an OAuth client of type **Web application**. Register the exact redirect
    URI shown under Super Admin → Integrations → Google authorization setup.
    Locally, with `PUBLIC_WEB_BASE_URL=http://localhost:5173`, it is

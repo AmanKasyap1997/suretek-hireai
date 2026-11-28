@@ -1,7 +1,35 @@
 import { z } from 'zod';
 import { RejectionReason, ApplicationStage } from '../../../shared/enums';
-import { listSchema as paginationSchema } from '../../../shared/ta-list';
-export { paginationSchema };
+import { listFields, validDateRange } from '../../../shared/ta-list';
+
+export const screeningFilters = [
+  'screened',
+  'not_screened',
+  'in_progress',
+  'failed',
+] as const;
+
+/** The screening fits an AI result filter can ask for. */
+export const fitFilters = ['STRONG', 'GOOD', 'PARTIAL', 'WEAK'] as const;
+
+/** The shared list filters, plus AI screening sort and filter. */
+export const paginationSchema = listFields
+  .extend({
+    sort: z.enum(['created_at', 'updated_at', 'score']).default('created_at'),
+    screening: z.enum(screeningFilters).optional(),
+    /** Any of these stages, comma-separated (e.g. the Candidates page's). */
+    stages: z
+      .string()
+      .max(200)
+      .transform((value) => value.split(',').map((stage) => stage.trim()))
+      .pipe(z.array(z.enum(ApplicationStage)).min(1).max(6))
+      .optional(),
+    /** Completed screenings with this fit. */
+    fit: z.enum(fitFilters).optional(),
+    /** "true": also count the matches per stage, ignoring the stage filters. */
+    counts: z.enum(['true']).optional(),
+  })
+  .refine(validDateRange, { message: 'Invalid date range' });
 
 export const applicationSchema = z
   .object({

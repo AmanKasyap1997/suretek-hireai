@@ -8,7 +8,8 @@ import { AccessPolicy, isScoped } from '../../../shared/ta-policy';
 import { stageEvent } from '../../../shared/ta-history';
 import { Actor } from '../../../shared/actor';
 import { audit } from '../../../platform/audit/audit';
-import { ApplicationStage, JobStatus } from '../../../shared/enums';
+import { ApplicationStage, JobStatus, Role } from '../../../shared/enums';
+import { RECRUITMENT_ROLES } from '../../../shared/role-groups';
 import {
   ApplicationInput,
   StageInput,
@@ -16,6 +17,8 @@ import {
 } from './applications.schemas';
 import type { Job } from '../jobs';
 import type { Candidate } from '../candidates';
+import { latestScreeningJoin } from '../screening';
+import { applicationResumeOrder } from '../../../shared/ta-resume';
 
 export interface Application {
   id: string;
@@ -23,6 +26,37 @@ export interface Application {
   candidate_id: string;
   stage: ApplicationStage;
 }
+
+/** Roles that see an applicant's pay and contact details. */
+const PAY_AND_CONTACT_ROLES: readonly Role[] = [
+  ...RECRUITMENT_ROLES,
+  Role.HIRING_MANAGER,
+];
+const money = (value: string | null) => (value === null ? null : Number(value));
+
+/**
+ * Each application's AI calls, for the list: `lc` is the latest call request
+ * (its status and outcome), and `cc` the latest call that got through the
+ * questions (outcome COMPLETED), with the AI's assessment score.
+ */
+const callJoin = `LEFT JOIN LATERAL (
+    SELECT cr.status,cr.outcome,cr.next_attempt_at,
+      (SELECT ca.outcome FROM call_attempts ca
+       WHERE ca.tenant_id=cr.tenant_id AND ca.call_request_id=cr.id
+       ORDER BY ca.number DESC LIMIT 1) AS last_attempt_outcome
+    FROM call_requests cr
+    WHERE cr.tenant_id=a.tenant_id AND cr.application_id=a.id AND cr.purpose='SCREENING'
+    ORDER BY cr.created_at DESC,cr.id DESC LIMIT 1
+  ) lc ON true
+  LEFT JOIN LATERAL (
+    SELECT ca.id,ca.assessment_status,
+      round((ca.assessment->>'score')::numeric)::int AS score,ca.assessment->>'fit' AS fit
+    FROM call_requests cr
+    JOIN call_attempts ca ON ca.tenant_id=cr.tenant_id AND ca.call_request_id=cr.id
+    WHERE cr.tenant_id=a.tenant_id AND cr.application_id=a.id AND cr.purpose='SCREENING'
+      AND cr.status='COMPLETED' AND cr.outcome='COMPLETED' AND ca.outcome='COMPLETED'
+    ORDER BY cr.completed_at DESC NULLS LAST,ca.number DESC LIMIT 1
+  ) cc ON true`;
 
 @Injectable()
 export class ApplicationsService {
@@ -67,46 +101,115 @@ export class ApplicationsService {
     });
   }
 
+  /**
+   * The list's WHERE clause and its parameters. `withStage: false` leaves out
+   * the stage filters, to count every stage.
+   */
+  private listFilters(actor: Actor, page: Pagination, withStage = true) {
+    const params: unknown[] = [actor.tenantId];
+    const filters = ['a.tenant_id=$1'];
+    const add = (sql: string, value: unknown) => {
+      params.push(value);
+      filters.push(sql.replaceAll('?', `$${params.length}`));
+    };
+    if (page.createdFrom) add('a.created_at>=?', page.createdFrom);
+    if (page.createdTo) add('a.created_at<=?', page.createdTo);
+    if (page.jobId) add('a.job_id=?', page.jobId);
+    if (withStage && page.stage) add('a.stage=?', page.stage);
+    if (page.stages) {
+      // The stages always bound the counts: they're the page's scope.
+      add('a.stage=ANY(?::text[])', page.stages);
+    }
+    if (page.status) add('j.status=?', page.status);
+    if (page.q) add('(c.full_name ILIKE ? OR c.email ILIKE ?)', `%${page.q}%`);
+    if (page.screening)
+      filters.push(
+        {
+          screened: "s.status='COMPLETED'",
+          not_screened: 's.id IS NULL',
+          in_progress: "s.status IN ('QUEUED','RUNNING')",
+          failed: "s.status='FAILED'",
+        }[page.screening],
+      );
+    if (page.fit) add("s.status='COMPLETED' AND s.fit=?", page.fit);
+    if (isScoped(actor)) {
+      params.push(actor.userId);
+      filters.push(
+        this.policy
+          .predicate(actor, 'a.job_id', params.length)
+          .replace(/^ AND /, ''),
+      );
+    }
+    return { where: filters.join(' AND '), params };
+  }
+
   async listApplications(actor: Actor, page: Pagination) {
     return this.db.transaction(async (tx) => {
-      const params: unknown[] = [actor.tenantId];
-      const filters = ['a.tenant_id=$1'];
-      const add = (sql: string, value: unknown) => {
-        params.push(value);
-        filters.push(sql.replaceAll('?', `$${params.length}`));
-      };
-      if (page.createdFrom) add('a.created_at>=?', page.createdFrom);
-      if (page.createdTo) add('a.created_at<=?', page.createdTo);
-      if (page.jobId) add('a.job_id=?', page.jobId);
-      if (page.stage) add('a.stage=?', page.stage);
-      if (page.status) add('j.status=?', page.status);
-      if (page.q)
-        add('(c.full_name ILIKE ? OR c.email ILIKE ?)', `%${page.q}%`);
-      if (isScoped(actor)) {
-        params.push(actor.userId);
-        filters.push(
-          this.policy
-            .predicate(actor, 'a.job_id', params.length)
-            .replace(/^ AND /, ''),
-        );
-      }
-      const where = filters.join(' AND ');
-      const from =
-        'applications a JOIN jobs j ON j.tenant_id=a.tenant_id AND j.id=a.job_id JOIN candidates c ON c.tenant_id=a.tenant_id AND c.id=a.candidate_id';
+      const { where, params } = this.listFilters(actor, page);
+      const from = `applications a JOIN jobs j ON j.tenant_id=a.tenant_id AND j.id=a.job_id JOIN candidates c ON c.tenant_id=a.tenant_id AND c.id=a.candidate_id LEFT JOIN application_details d ON d.tenant_id=a.tenant_id AND d.application_id=a.id ${latestScreeningJoin}`;
       const count = await tx.one<{ total: string }>(
         `SELECT count(*) AS total FROM ${from} WHERE ${where}`,
         params,
       );
+      // Matches per stage, whatever stage is being shown (for tabs).
+      let stageCounts: Record<string, number> | undefined;
+      if (page.counts) {
+        const all = this.listFilters(actor, page, false);
+        const rows = await tx.query<{ stage: string; total: string }>(
+          `SELECT a.stage,count(*) AS total FROM ${from} WHERE ${all.where} GROUP BY a.stage`,
+          all.params,
+        );
+        stageCounts = Object.fromEntries(
+          rows.map((row) => [row.stage, Number(row.total)]),
+        );
+      }
       const direction = page.direction === 'asc' ? 'ASC' : 'DESC';
-      const sort = page.sort === 'updated_at' ? 'updated_at' : 'created_at';
-      const data = await tx.query<Application>(
-        `SELECT a.*,j.title AS job_title,c.full_name AS candidate_name FROM ${from} WHERE ${where} ORDER BY a.${sort} ${direction},a.id ${direction} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      // Best match first: unscreened applications last, then newest.
+      const order =
+        page.sort === 'score'
+          ? `s.score ${direction} NULLS LAST,a.created_at DESC,a.id DESC`
+          : `a.${page.sort === 'updated_at' ? 'updated_at' : 'created_at'} ${direction},a.id ${direction}`;
+      const data = await tx.query<Application & { candidate_email: string }>(
+        `SELECT a.*,j.title AS job_title,c.full_name AS candidate_name,c.email AS candidate_email,
+           d.current_location,d.current_title,d.total_experience_months,d.notice_period,d.source,
+           s.status AS screening_status,s.score AS screening_score,s.fit AS screening_fit,s.missing_must_have AS screening_missing_must_have,
+           lc.status AS call_status,lc.outcome AS call_outcome,cc.id IS NOT NULL AS call_completed,
+           CASE WHEN lc.status='PLANNED' THEN lc.next_attempt_at END AS call_next_at,
+           lc.status='PLANNED' AND lc.last_attempt_outcome='CALL_BACK' AS call_back,
+           cc.assessment_status AS call_assessment_status,cc.score AS call_score,cc.fit AS call_fit
+         FROM ${from} ${callJoin} WHERE ${where} ORDER BY ${order} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         [...params, page.limit, page.offset],
       );
+      // Contact details only for the roles that see them (as in details).
+      if (!PAY_AND_CONTACT_ROLES.includes(actor.role))
+        for (const row of data) Object.assign(row, { candidate_email: null });
+      // AI calls are for recruiters, as on the application's calls.
+      if (!RECRUITMENT_ROLES.includes(actor.role))
+        for (const row of data)
+          Object.assign(row, {
+            call_status: null,
+            call_outcome: null,
+            call_completed: null,
+            call_next_at: null,
+            call_back: null,
+            call_assessment_status: null,
+            call_score: null,
+            call_fit: null,
+          });
+      // Screenings quote the resume, which interviewers don't see.
+      if (actor.role === Role.INTERVIEWER)
+        for (const row of data)
+          Object.assign(row, {
+            screening_status: null,
+            screening_score: null,
+            screening_fit: null,
+            screening_missing_must_have: null,
+          });
       return {
         data,
         pagination: { limit: page.limit, offset: page.offset },
         total: Number(count!.total),
+        ...(stageCounts ? { stage_counts: stageCounts } : {}),
       };
     });
   }
@@ -119,6 +222,109 @@ export class ApplicationsService {
     if (!row) throw new NotFoundException('Application not found.');
     await this.policy.assertJob(this.db, actor, row.job_id);
     return row;
+  }
+
+  /** What the candidate submitted with this application, for the review panel. */
+  async details(actor: Actor, id: string) {
+    await this.getApplication(actor, id);
+    const open = PAY_AND_CONTACT_ROLES.includes(actor.role);
+    return this.db.transaction(async (tx) => {
+      const row = await tx.one<{
+        id: string;
+        stage: ApplicationStage;
+        created_at: Date;
+        job_id: string;
+        job_title: string;
+        candidate_id: string;
+        full_name: string;
+        email: string;
+        candidate_phone: string | null;
+        erased_at: Date | null;
+        has_details: boolean;
+        phone: string | null;
+        current_location: string | null;
+        willing_to_relocate: boolean | null;
+        total_experience_months: number | null;
+        current_company: string | null;
+        current_title: string | null;
+        notice_period: string | null;
+        last_working_day: string | null;
+        current_ctc: string | null;
+        expected_ctc: string | null;
+        ctc_currency: string | null;
+        linkedin_url: string | null;
+        portfolio_url: string | null;
+        cover_letter: string | null;
+        source: string | null;
+        referrer: string | null;
+      }>(
+        `SELECT a.id,a.stage,a.created_at,a.job_id,j.title AS job_title,c.id AS candidate_id,c.full_name,c.email,c.phone AS candidate_phone,c.erased_at,
+          d.application_id IS NOT NULL AS has_details,d.phone,d.current_location,d.willing_to_relocate,d.total_experience_months,d.current_company,d.current_title,
+          d.notice_period,to_char(d.last_working_day,'YYYY-MM-DD') AS last_working_day,d.current_ctc,d.expected_ctc,d.ctc_currency,d.linkedin_url,d.portfolio_url,
+          d.cover_letter,d.source,d.referrer
+         FROM applications a JOIN jobs j ON j.tenant_id=a.tenant_id AND j.id=a.job_id JOIN candidates c ON c.tenant_id=a.tenant_id AND c.id=a.candidate_id
+         LEFT JOIN application_details d ON d.tenant_id=a.tenant_id AND d.application_id=a.id
+         WHERE a.tenant_id=$1 AND a.id=$2`,
+        [actor.tenantId, id],
+      );
+      if (!row) throw new NotFoundException('Application not found.');
+      // One resume: the one sent with this application (see the ordering).
+      const resumes = RECRUITMENT_ROLES.includes(actor.role)
+        ? await tx.query<{ application_id: string | null }>(
+            `SELECT d.id,d.original_name,d.content_type,d.byte_size,d.scan_status,d.created_at,d.application_id
+             FROM candidate_documents d WHERE d.tenant_id=$1 AND d.candidate_id=$2
+             ORDER BY ${applicationResumeOrder('d', '$3::uuid')}`,
+            [actor.tenantId, row.candidate_id, id],
+          )
+        : [];
+      const documents = resumes.slice(0, 1).map((document) => ({
+        ...document,
+        sent_with:
+          document.application_id === id
+            ? 'this_application'
+            : document.application_id
+              ? 'another_application'
+              : 'uploaded_by_staff',
+      }));
+      await audit(tx, actor, 'application.details_viewed', 'application', id, {
+        payAndContact: open,
+      });
+      return {
+        id: row.id,
+        stage: row.stage,
+        created_at: row.created_at,
+        job: { id: row.job_id, title: row.job_title },
+        candidate: {
+          id: row.candidate_id,
+          full_name: row.full_name,
+          erased: row.erased_at !== null,
+          email: open ? row.email : null,
+          phone: open ? (row.phone ?? row.candidate_phone) : null,
+        },
+        details: row.has_details
+          ? {
+              current_location: row.current_location,
+              willing_to_relocate: row.willing_to_relocate,
+              total_experience_months: row.total_experience_months,
+              current_company: row.current_company,
+              current_title: row.current_title,
+              notice_period: row.notice_period,
+              last_working_day: row.last_working_day,
+              current_ctc: open ? money(row.current_ctc) : null,
+              expected_ctc: open ? money(row.expected_ctc) : null,
+              ctc_currency: open ? row.ctc_currency : null,
+              linkedin_url: row.linkedin_url,
+              portfolio_url: row.portfolio_url,
+              cover_letter: row.cover_letter,
+              source: row.source,
+              referrer: row.referrer,
+            }
+          : null,
+        documents,
+        other_resumes: Math.max(0, resumes.length - 1),
+        pay_and_contact_hidden: !open,
+      };
+    });
   }
 
   async changeStage(actor: Actor, id: string, input: StageInput) {

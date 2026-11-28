@@ -10,7 +10,7 @@ import { DbClient, DbService } from '../../../platform/database/db.service';
 import { readConfig } from '../../../platform/config';
 import { audit } from '../../../platform/audit/audit';
 import { Actor, EvidenceActor } from '../../../shared/actor';
-import { DocumentScanStatus } from '../../../shared/enums';
+import { DocumentScanStatus, Role } from '../../../shared/enums';
 import {
   StoredObject,
   ObjectStoragePort,
@@ -45,6 +45,8 @@ export class DocumentsService {
     candidateId: string,
     file: ResumeUpload,
     stored: (object: StoredObject) => void,
+    /** The application this resume was sent with; none for staff uploads. */
+    applicationId: string | null = null,
   ) {
     const cfg = readConfig();
     const format = validateResume(
@@ -69,7 +71,7 @@ export class DocumentsService {
     );
     stored({ key, versionId });
     const row = await tx.one(
-      `INSERT INTO candidate_documents(id,tenant_id,candidate_id,object_key,original_name,content_type,byte_size,sha256,scan_status,storage_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,original_name,content_type,byte_size,sha256,scan_status,created_at`,
+      `INSERT INTO candidate_documents(id,tenant_id,candidate_id,object_key,original_name,content_type,byte_size,sha256,scan_status,storage_version,application_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,original_name,content_type,byte_size,sha256,scan_status,created_at,application_id`,
       [
         id,
         actor.tenantId,
@@ -81,6 +83,7 @@ export class DocumentsService {
         createHash('sha256').update(file.buffer).digest('hex'),
         status,
         versionId ?? null,
+        applicationId,
       ],
     );
     await tx.query(
@@ -140,9 +143,19 @@ export class DocumentsService {
     }
   }
   private async candidate(tx: DbClient, actor: Actor, candidateId: string) {
+    // A hiring manager: only someone who applied to one of their jobs.
+    const manager = actor.role === Role.HIRING_MANAGER;
     const candidate = await tx.one(
-      'SELECT id FROM candidates WHERE tenant_id=$1 AND id=$2 AND erased_at IS NULL FOR NO KEY UPDATE',
-      [actor.tenantId, candidateId],
+      `SELECT c.id FROM candidates c WHERE c.tenant_id=$1 AND c.id=$2 AND c.erased_at IS NULL${
+        manager
+          ? ` AND EXISTS (SELECT 1 FROM applications a JOIN job_assignments ja
+               ON ja.tenant_id=a.tenant_id AND ja.job_id=a.job_id AND ja.user_id=$3 AND ja.role='HIRING_MANAGER'
+               WHERE a.tenant_id=c.tenant_id AND a.candidate_id=c.id)`
+          : ''
+      } FOR NO KEY UPDATE OF c`,
+      manager
+        ? [actor.tenantId, candidateId, actor.userId]
+        : [actor.tenantId, candidateId],
     );
     if (!candidate) throw new NotFoundException('Candidate not found');
   }

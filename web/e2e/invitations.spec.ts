@@ -115,7 +115,7 @@ test('platform creates organization; emailed admin and staff invitations activat
   try {
     await acceptAndLogin(admin, adminLink, key, adminEmail, password);
     await expect(
-      admin.getByRole('heading', { name: 'Organization Admin overview' }),
+      admin.getByRole('heading', { level: 1, name: /^Welcome back, / }),
     ).toBeVisible();
     await admin
       .getByRole('navigation')
@@ -155,7 +155,12 @@ test('platform creates organization; emailed admin and staff invitations activat
       try {
         await acceptAndLogin(staff, link, key, email, password);
         await expect(
-          staff.getByRole('heading', { name: `${label} overview` }),
+          staff.getByRole('heading', {
+            level: 1,
+            // Recruiters get the Dashboard; hiring managers and
+            // interviewers their own home.
+            name: role === 'RECRUITER' ? /^Welcome back, / : /^Welcome, /,
+          }),
         ).toBeVisible();
         expect(
           (

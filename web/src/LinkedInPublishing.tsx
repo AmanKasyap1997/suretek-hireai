@@ -1,6 +1,24 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faArrowUpRightFromSquare,
+  faBullhorn,
+} from '@fortawesome/free-solid-svg-icons';
 import { api } from './api';
+
+/** A publication's status, in words and colour. */
+function publicationStatus(status: string) {
+  const text = status[0] + status.slice(1).toLowerCase().replace(/_/g, ' ');
+  const tone = ['PUBLISHED', 'LIVE'].includes(status)
+    ? 'success'
+    : status === 'FAILED'
+      ? 'danger'
+      : ['REMOVED', 'CLOSED'].includes(status)
+        ? 'neutral'
+        : 'warning';
+  return { text, tone };
+}
 const base = '/organization/integrations/linkedin';
 type Preview = {
   id: string;
@@ -82,13 +100,20 @@ export function LinkedInPublishing({
     }
   }
   return (
-    <section className="integration-card">
-      <h2>Publish jobs to LinkedIn</h2>
-      <p>
-        Choose an existing published job, preview the content, then confirm
-        publication. Company-page announcements and LinkedIn Jobs listings are
-        separate actions.
-      </p>
+    <section className="integration-card li-publishing">
+      <div className="li-banner">
+        <span className="li-banner-icon" aria-hidden="true">
+          <FontAwesomeIcon icon={faBullhorn} />
+        </span>
+        <div>
+          <h2>Publish jobs to LinkedIn</h2>
+          <p>
+            Choose an existing published job, preview the content, then confirm
+            publication. Company-page announcements and LinkedIn Jobs listings
+            are separate actions.
+          </p>
+        </div>
+      </div>
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
       {jobs.isPending ? (
@@ -302,51 +327,96 @@ export function LinkedInPublishing({
       ) : !history.data.length ? (
         <p>No publications yet.</p>
       ) : (
-        <div className="integration-grid">
-          {history.data.map((p) => (
-            <article key={p.id} className="integration-card">
-              <p>
-                {p.channel === 'job_listing'
-                  ? 'LinkedIn Jobs'
-                  : 'Company-page announcement'}
-              </p>
-              <p>Status: {p.status}</p>
-              <p>{new Date(p.created_at).toLocaleString()}</p>
-              {['SENDING', 'UNKNOWN'].includes(p.status) && (
-                <p>
-                  Delivery is unconfirmed. Check LinkedIn before asking your
-                  administrator to reconcile it; this request will not be sent
-                  again automatically.
-                </p>
-              )}
-              {p.status === 'PROCESSED' && (
-                <p>
-                  LinkedIn processed the job, but has not confirmed a live
-                  listing.
-                </p>
-              )}
-              {['SUBMITTED', 'PROCESSED'].includes(p.status) && (
-                <button
-                  disabled={busy}
-                  onClick={async () => {
-                    const r = await run('/publications/' + p.id + '/refresh');
-                    if (r) setMessage('Publication status: ' + r.status);
-                  }}
-                >
-                  Check LinkedIn status
-                </button>
-              )}
-              {p.remote_url && (
-                <a
-                  href={p.remote_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  View on LinkedIn
-                </a>
-              )}
-            </article>
-          ))}
+        <div className="table-scroll li-history-scroll">
+          <table className="li-history">
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Published to</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.data.map((p) => {
+                const status = publicationStatus(p.status);
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      <span className="li-history-job">
+                        <span
+                          className="int-mark int-mark-linkedin"
+                          aria-hidden="true"
+                        >
+                          in
+                        </span>
+                        {jobs.data?.find((j) => j.id === p.job_id)?.title ??
+                          'Job no longer published'}
+                      </span>
+                    </td>
+                    <td>
+                      {p.channel === 'job_listing'
+                        ? 'LinkedIn Jobs'
+                        : 'Company-page announcement'}
+                    </td>
+                    <td>
+                      <span className={`int-pill int-pill-${status.tone}`}>
+                        {status.text}
+                      </span>
+                      {['SENDING', 'UNKNOWN'].includes(p.status) && (
+                        <small>
+                          Delivery is unconfirmed. Check LinkedIn before asking
+                          your administrator to reconcile it; this request will
+                          not be sent again automatically.
+                        </small>
+                      )}
+                      {p.status === 'PROCESSED' && (
+                        <small>
+                          LinkedIn processed the job, but has not confirmed a
+                          live listing.
+                        </small>
+                      )}
+                    </td>
+                    <td>{new Date(p.created_at).toLocaleString()}</td>
+                    <td>
+                      <span className="li-history-actions">
+                        {['SUBMITTED', 'PROCESSED'].includes(p.status) && (
+                          <button
+                            disabled={busy}
+                            onClick={async () => {
+                              const r = await run(
+                                '/publications/' + p.id + '/refresh',
+                              );
+                              if (r)
+                                setMessage('Publication status: ' + r.status);
+                            }}
+                          >
+                            Check LinkedIn status
+                          </button>
+                        )}
+                        {p.remote_url && (
+                          <a
+                            href={p.remote_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            View on LinkedIn{' '}
+                            <FontAwesomeIcon
+                              icon={faArrowUpRightFromSquare}
+                              aria-hidden="true"
+                            />
+                          </a>
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </section>

@@ -109,7 +109,7 @@ describe('SMTP EmailPort with a fake TLS SMTP server', () => {
       expect(raw).toContain('text/plain');
       expect(raw).toContain('text/html');
       expect(raw.replace(/=\r\n/g, '').replace(/=3D/g, '=')).toContain(
-        '/contact-verification#tenant=pilot&token=test-secret-token',
+        '/console/contact-verification#tenant=pilot&token=test-secret-token',
       );
       expect(raw).not.toContain('?token=');
     },
@@ -156,6 +156,34 @@ describe('SMTP EmailPort with a fake TLS SMTP server', () => {
     expect(decoded).toContain('Organization Admin');
     expect(decoded).not.toContain('?token=');
     expect(decoded).not.toContain('test-password');
+  });
+  it('tells a repeat applicant, escaped, that the first application was kept', async () => {
+    let raw = '';
+    const port = await start({
+      secure: true,
+      onAuth(_auth, _session, callback) {
+        callback(null, { user: 'test' });
+      },
+      onData(stream, _session, callback) {
+        stream.on('data', (chunk) => {
+          raw += chunk.toString();
+        });
+        stream.on('end', () => callback());
+      },
+    });
+    expect(
+      await adapter(port).sendRepeatApplication({
+        to: 'applicant@example.test',
+        organizationName: '<Acme & Co>',
+        jobTitle: 'QA <Engineer>',
+        appliedAt: new Date('2026-11-20T10:00:00Z'),
+      }),
+    ).toBe(true);
+    const decoded = raw.replace(/=\r\n/g, '').replace(/=3D/g, '=');
+    expect(decoded).toContain('QA &lt;Engineer&gt;');
+    expect(decoded).toContain('&lt;Acme &amp; Co&gt;');
+    expect(decoded).toContain('20 November 2026');
+    expect(decoded).toContain('Your first application is unchanged.');
   });
   it('refuses a server that cannot authenticate even over TLS', async () => {
     const port = await start({

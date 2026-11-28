@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -21,8 +22,10 @@ import {
   assignmentSchema,
   jobSchema,
   closeJobSchema,
+  interviewSetupUpdateSchema,
   updateJobSchema,
   paginationSchema,
+  sendBackSchema,
 } from './jobs.schemas';
 import { JobsService } from './jobs.service';
 
@@ -33,7 +36,12 @@ import { JobsService } from './jobs.service';
 export class JobsController {
   constructor(private readonly hiring: JobsService) {}
 
+  /**
+   * Hiring managers request jobs (HR Admins create them too); recruiters
+   * work on them once approved.
+   */
   @Post()
+  @Roles(...ADMIN_ROLES, Role.HIRING_MANAGER)
   @BodySchema(jobSchema)
   create(@CurrentUser() actor: Actor, @Body() body: unknown) {
     return this.hiring.createJob(actor, parse(jobSchema, body));
@@ -52,6 +60,7 @@ export class JobsController {
   }
 
   @Patch(':id')
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER)
   @BodySchema(updateJobSchema)
   update(
     @CurrentUser() actor: Actor,
@@ -59,6 +68,50 @@ export class JobsController {
     @Body() body: unknown,
   ) {
     return this.hiring.updateJob(actor, id, parse(updateJobSchema, body));
+  }
+
+  @Put(':id/interview-setup')
+  @BodySchema(interviewSetupUpdateSchema)
+  @ApiOperation({
+    summary:
+      'How the AI books this job’s interviews on its booking call (null: a recruiter books them). Changeable until the job closes.',
+  })
+  interviewSetup(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.hiring.setInterviewSetup(
+      actor,
+      id,
+      parse(interviewSetupUpdateSchema, body).interviewSetup,
+    );
+  }
+
+  @Post(':id/submit')
+  @HttpCode(200)
+  @Roles(Role.HIRING_MANAGER)
+  @ApiOperation({
+    summary:
+      'Submit a draft for an HR Admin to approve (a hiring manager’s job request).',
+  })
+  submit(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.hiring.submitJob(actor, id);
+  }
+
+  @Post(':id/send-back')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  @BodySchema(sendBackSchema)
+  @ApiOperation({
+    summary: 'Send a job awaiting approval back to be changed, with a note.',
+  })
+  sendBack(
+    @CurrentUser() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.hiring.sendBack(actor, id, parse(sendBackSchema, body).note);
   }
 
   @Post(':id/approve')
@@ -72,7 +125,7 @@ export class JobsController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      'Publish the internal job record; no external CMS/LinkedIn integration is enabled.',
+      'Publish the job in HireAI. POST /jobs/{id}/channels then posts it to enabled external channels.',
   })
   publish(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.hiring.transitionJob(actor, id, JobStatus.PUBLISHED);

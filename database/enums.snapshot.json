@@ -73,6 +73,9 @@
       "constraintName": "call_requests_status_check",
       "values": [
         "CANCELLED",
+        "COMPLETED",
+        "FAILED",
+        "IN_PROGRESS",
         "PLANNED"
       ],
       "defaultValue": "PLANNED"

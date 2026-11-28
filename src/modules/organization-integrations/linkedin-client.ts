@@ -1,4 +1,59 @@
 import { BadGatewayException, BadRequestException } from '@nestjs/common';
+/** The post ID LinkedIn returns when a post is created. */
+export const linkedinPostUrn = /^urn:li:(share|ugcPost):[0-9]+$/;
+/** The most text LinkedIn accepts in a post. */
+export const POST_TEXT_LIMIT = 3000;
+/** Characters the Posts API's "little" text format reserves. */
+const littleReserved = /[|{}@[\]()<>#\\*_~]/g;
+const escapeLittle = (text: string) => text.replace(littleReserved, '\\$&');
+const encodeLittle = (text: string) =>
+  text
+    // A # starting a word with a letter is a hashtag; split() keeps the word.
+    .split(/(?<![\p{L}\p{N}_])#([\p{N}_]*\p{L}[\p{L}\p{N}_]*)/u)
+    .map((part, index) =>
+      index % 2 ? `{hashtag|\\#|${escapeLittle(part)}}` : escapeLittle(part),
+    )
+    .join('');
+/**
+ * Encodes plain text for a Posts API commentary. Reserved characters are
+ * escaped, because LinkedIn may drop text after an unescaped one, and #words
+ * become hashtags. Text that won't fit once encoded is shortened at a word.
+ */
+export function littleText(text: string, max = POST_TEXT_LIMIT) {
+  const whole = encodeLittle(text);
+  if (whole.length <= max) return whole;
+  let end = text.length;
+  for (;;) {
+    let space = end - 1;
+    while (space > 0 && !/\s/.test(text[space])) space--;
+    end = space > 0 ? space : end - 1;
+    const encoded = encodeLittle(text.slice(0, end).trimEnd() + '…');
+    if (encoded.length <= max) return encoded;
+  }
+}
+/** Plain text shortened at a word to fit, ending in "…". */
+function shorten(text: string, max: number) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, Math.max(0, max - 1));
+  const space = cut.search(/\s\S*$/);
+  return (space > 0 ? cut.slice(0, space) : cut).trimEnd() + '…';
+}
+
+/**
+ * A post's text ending with its apply link, so candidates can apply from the
+ * post. `encode` is applied to the text (e.g. littleText for the Posts API);
+ * the text is shortened to leave room for the link.
+ */
+export function withApplyLink(
+  text: string,
+  url: string,
+  encode: (text: string, max: number) => string = shorten,
+) {
+  if (text.includes(url)) return encode(text, POST_TEXT_LIMIT);
+  const line = encode(`\n\nApply here: ${url}`, POST_TEXT_LIMIT);
+  return encode(text, POST_TEXT_LIMIT - line.length) + line;
+}
+
 export function linkedinHeaders(token: string, jobs = false) {
   const version =
     process.env[
@@ -86,6 +141,27 @@ export async function companyPages(token: string, start = 0) {
       : null,
   };
 }
+/** The signed-in member, from Sign In with LinkedIn using OpenID Connect. */
+export async function linkedinMember(token: string) {
+  const response = await fetch('https://api.linkedin.com/v2/userinfo', {
+    headers: { Authorization: 'Bearer ' + token },
+    redirect: 'error',
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new BadGatewayException(
+      'LinkedIn profile access was denied or unavailable. Reconnect LinkedIn profile.',
+    );
+  }
+  const data = (await response.json()) as { sub?: unknown; name?: unknown };
+  if (typeof data.sub !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.sub))
+    throw new BadGatewayException('LinkedIn didn’t return a member ID');
+  return {
+    id: data.sub,
+    name: typeof data.name === 'string' ? data.name.slice(0, 200) : '',
+  };
+}
 export async function ownsPage(token: string, urn: string, start = 0) {
   const result = await companyPages(token, start);
   return result.pages.some((p) => p.urn === urn);
@@ -96,14 +172,25 @@ export async function sendLinkedIn(
   payload: unknown,
 ) {
   const jobs = channel === 'job_listing';
+  // Share on LinkedIn members post through the unversioned UGC API.
+  const profile = channel === 'profile_post';
   const response = await fetch(
-    'https://api.linkedin.com/rest/' + (jobs ? 'simpleJobPostings' : 'posts'),
+    profile
+      ? 'https://api.linkedin.com/v2/ugcPosts'
+      : 'https://api.linkedin.com/rest/' +
+          (jobs ? 'simpleJobPostings' : 'posts'),
     {
       method: 'POST',
-      headers: {
-        ...linkedinHeaders(token, jobs),
-        ...(jobs ? { 'X-Restli-Method': 'batch_create' } : {}),
-      },
+      headers: profile
+        ? {
+            Authorization: 'Bearer ' + token,
+            'X-Restli-Protocol-Version': '2.0.0',
+            'Content-Type': 'application/json',
+          }
+        : {
+            ...linkedinHeaders(token, jobs),
+            ...(jobs ? { 'X-Restli-Method': 'batch_create' } : {}),
+          },
       body: JSON.stringify(jobs ? { elements: [payload] } : payload),
       redirect: 'error',
       signal: AbortSignal.timeout(10000),
@@ -120,7 +207,7 @@ export async function sendLinkedIn(
   if (!jobs) {
     const id = response.headers.get('x-restli-id');
     await response.body?.cancel();
-    return id && /^urn:li:(share|ugcPost):[0-9]+$/.test(id)
+    return id && linkedinPostUrn.test(id)
       ? { status: 'PUBLISHED', remoteId: id, errorCode: null }
       : { status: 'UNKNOWN', remoteId: null, errorCode: 'MISSING_RECEIPT' };
   }
@@ -144,6 +231,38 @@ export async function sendLinkedIn(
     remoteId: null,
     errorCode: 'INVALID_TASK_RECEIPT',
   };
+}
+/**
+ * Deletes a post HireAI created and returns LinkedIn's HTTP status.
+ * Deletion is idempotent: a post already deleted on LinkedIn returns 204.
+ */
+export async function deleteLinkedInPost(
+  token: string,
+  channel: string,
+  urn: string,
+) {
+  if (!linkedinPostUrn.test(urn))
+    throw new BadRequestException('Invalid LinkedIn post ID');
+  // Profile posts were created through the UGC API; company posts through Posts.
+  const profile = channel === 'profile_post';
+  const response = await fetch(
+    (profile
+      ? 'https://api.linkedin.com/v2/ugcPosts/'
+      : 'https://api.linkedin.com/rest/posts/') + encodeURIComponent(urn),
+    {
+      method: 'DELETE',
+      headers: profile
+        ? {
+            Authorization: 'Bearer ' + token,
+            'X-Restli-Protocol-Version': '2.0.0',
+          }
+        : { ...linkedinHeaders(token), 'X-RestLi-Method': 'DELETE' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    },
+  );
+  await response.body?.cancel();
+  return response.status;
 }
 export async function jobTask(token: string, id: string) {
   const response = await fetch(

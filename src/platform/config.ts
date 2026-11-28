@@ -23,6 +23,47 @@ const schema = z
     SMTP_PASSWORD: z.string().min(1).optional(),
     SMTP_FROM: z.email().optional(),
     SMTP_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(10000),
+    /**
+     * The API's public HTTPS origin. The phone provider calls HireAI back at
+     * this address while placing AI calls (a tunnel URL in development).
+     */
+    PUBLIC_API_BASE_URL: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().url().optional(),
+    ),
+    /** How often due AI calls are dialed; 0 turns dialing off. */
+    CALL_DISPATCH_INTERVAL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(3600)
+      .optional(),
+    CALL_MAX_SECONDS: z.coerce.number().int().min(60).max(1800).default(600),
+    CALL_RING_SECONDS: z.coerce.number().int().min(10).max(120).default(30),
+    CALL_RETRY_MINUTES: z.coerce.number().int().min(5).max(10080).default(120),
+    CALL_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(3),
+    /** Calls an organization may have on the line at once. */
+    CALL_MAX_CONCURRENT: z.coerce.number().int().min(1).max(20).default(2),
+    GEMINI_LIVE_MODEL: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9.-]{3,100}$/)
+      .default('gemini-2.5-flash-native-audio-preview-12-2025'),
+    GEMINI_LIVE_VOICE: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z-]{2,40}$/)
+      .default('Kore'),
+    OPENAI_REALTIME_MODEL: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9.-]{3,100}$/)
+      .default('gpt-realtime'),
+    OPENAI_REALTIME_VOICE: z
+      .string()
+      .trim()
+      .regex(/^[a-z]{2,40}$/)
+      .default('marin'),
     MALWARE_SCANNER: z.enum(['clamav', 'pending']).optional(),
     CLAMAV_HOST: z.string().min(1).default('127.0.0.1'),
     CLAMAV_PORT: z.coerce.number().int().min(1).max(65535).default(3310),
@@ -41,6 +82,11 @@ const schema = z
     TURNSTILE_SECRET_KEY: z.preprocess(
       (v) => (v === '' ? undefined : v),
       z.string().min(1).optional(),
+    ),
+    /** Public widget key for HireAI's hosted apply page (not a secret). */
+    TURNSTILE_SITE_KEY: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(1).max(200).optional(),
     ),
     TURNSTILE_EXPECTED_HOSTNAME: z.preprocess(
       (v) => (v === '' ? undefined : v),
@@ -225,6 +271,18 @@ export function readConfig(): AppConfig {
       throw new Error(
         'PUBLIC_WEB_BASE_URL must be an HTTPS origin in production',
       );
+  }
+  if (cfg.PUBLIC_API_BASE_URL) {
+    const url = new URL(cfg.PUBLIC_API_BASE_URL);
+    if (
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== '/' ||
+      url.protocol !== 'https:'
+    )
+      throw new Error('PUBLIC_API_BASE_URL must be an HTTPS origin');
   }
   if (cfg.CAPTCHA_PROVIDER === 'turnstile' && !cfg.TURNSTILE_SECRET_KEY)
     throw new Error('Turnstile requires TURNSTILE_SECRET_KEY');

@@ -17,6 +17,7 @@ export function WorkspaceIcon({ name }: { name: string }) {
       'M3 21V3h12v18M15 9h6v12M6 7h1M10 7h1M6 11h1M10 11h1M6 15h1M10 15h1M18 13h1M18 17h1',
     team: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM17 9h5M19.5 6.5v5',
     home: 'M3 10 12 3l9 7M5 9v12h5v-7h4v7h5V9',
+    dashboard: 'M3 3h8v8H3V3Zm10 0h8v5h-8V3Zm0 7h8v11h-8V10ZM3 13h8v5H3v-5Z',
     jobs: 'M8 7V4h8v3M3 7h18v14H3V7Zm0 5h18M10 12v3h4v-3',
     applications: 'M6 3h9l4 4v14H6V3Zm9 0v5h4M9 12h7M9 16h7',
     candidates:

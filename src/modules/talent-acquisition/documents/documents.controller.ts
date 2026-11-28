@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { Actor, CurrentUser } from '../../../shared/actor';
 import { Roles } from '../../../shared/roles.decorator';
 import { RECRUITMENT_ROLES } from '../../../shared/role-groups';
+import { Role } from '../../../shared/enums';
 import { readConfig } from '../../../platform/config';
 import { DocumentsService, ResumeUpload } from './documents.service';
 @ApiTags('Candidate documents')
@@ -44,6 +45,7 @@ export class DocumentsController {
     return this.documents.upload(actor, candidateId, file);
   }
   @Get()
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER)
   list(
     @CurrentUser() actor: Actor,
     @Param('candidateId', ParseUUIDPipe) id: string,
@@ -51,6 +53,7 @@ export class DocumentsController {
     return this.documents.list(actor, id);
   }
   @Get(':id/download')
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER)
   async download(
     @CurrentUser() actor: Actor,
     @Param('candidateId', ParseUUIDPipe) candidateId: string,

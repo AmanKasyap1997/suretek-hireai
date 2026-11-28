@@ -19,6 +19,16 @@ export const callRequestSchema = z
   })
   .strict();
 
+/** Call every shortlisted candidate of a job who agreed to be called. */
+export const jobCallsSchema = z
+  .object({
+    language: z.enum(CallLanguage),
+    /** Only for candidates who agreed to it; others are called without. */
+    recording: z.boolean().default(false),
+    transcription: z.boolean().default(false),
+  })
+  .strict();
+
 export const callingPaginationSchema = z
   .object({
     limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -28,4 +38,5 @@ export const callingPaginationSchema = z
 
 export type ConsentInput = z.infer<typeof consentSchema>;
 export type CallRequestInput = z.infer<typeof callRequestSchema>;
+export type JobCallsInput = z.infer<typeof jobCallsSchema>;
 export type CallingPagination = z.infer<typeof callingPaginationSchema>;

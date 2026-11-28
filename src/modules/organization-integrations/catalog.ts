@@ -1,12 +1,15 @@
 import { z } from 'zod';
 export const providerIds = [
   'linkedin',
+  'linkedin_profile',
   'linkedin_jobs',
   'openai',
   'anthropic',
+  'google_ai',
   'google_calendar',
   'microsoft_calendar',
   'telephony',
+  'plivo',
   'email',
   'careers_cms',
   'e_signature',
@@ -20,6 +23,7 @@ export const methods = [
   'oauth_client_credentials',
   'oauth_refresh_token',
   'smtp',
+  'account_token',
 ] as const;
 export type Provider = (typeof providerIds)[number];
 export type Method = (typeof methods)[number];
@@ -34,12 +38,22 @@ export const catalog: {
     methods: ['oauth2'],
   },
   {
+    provider: 'linkedin_profile',
+    label: 'LinkedIn profile',
+    methods: ['oauth2'],
+  },
+  {
     provider: 'linkedin_jobs',
     label: 'LinkedIn Jobs',
     methods: ['oauth_client_credentials'],
   },
   { provider: 'openai', label: 'OpenAI', methods: ['api_key'] },
   { provider: 'anthropic', label: 'Anthropic', methods: ['api_key'] },
+  {
+    provider: 'google_ai',
+    label: 'Google AI Studio (Gemini)',
+    methods: ['api_key'],
+  },
   {
     provider: 'google_calendar',
     label: 'Google Calendar',
@@ -54,6 +68,11 @@ export const catalog: {
     provider: 'telephony',
     label: 'Telephony',
     methods: ['api_key', 'bearer', 'basic', 'oauth_client_credentials'],
+  },
+  {
+    provider: 'plivo',
+    label: 'Plivo',
+    methods: ['account_token'],
   },
   { provider: 'email', label: 'Email', methods: ['smtp', 'api_key', 'bearer'] },
   {
@@ -80,6 +99,7 @@ export const credentialFields: Record<Method, string[]> = {
   oauth_client_credentials: ['clientId', 'clientSecret', 'scope'],
   oauth_refresh_token: ['clientId', 'clientSecret', 'refreshToken'],
   smtp: ['username', 'password'],
+  account_token: ['authId', 'authToken', 'phoneNumber'],
 };
 export const providerToggle = z.object({ enabled: z.boolean() }).strict();
 const value = z
@@ -104,8 +124,17 @@ export const connectionSchema = z
         message: 'Unsupported method for this provider',
       });
     const fields = credentialFields[input.method];
+    if (
+      input.credentials.phoneNumber &&
+      !/^\+[1-9][0-9]{7,14}$/.test(input.credentials.phoneNumber)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['credentials', 'phoneNumber'],
+        message: 'Use the international format, e.g. +919876543210',
+      });
     for (const field of fields.filter(
-      (f) => !['username', 'clientId', 'scope'].includes(f),
+      (f) => !['username', 'clientId', 'scope', 'phoneNumber'].includes(f),
     )) {
       if (input.credentials[field] && input.credentials[field].length < 8)
         ctx.addIssue({
@@ -141,7 +170,12 @@ export const oauthStartSchema = z.union([
   connectionSchema,
   z
     .object({
-      provider: z.enum(['linkedin', 'google_calendar', 'microsoft_calendar']),
+      provider: z.enum([
+        'linkedin',
+        'linkedin_profile',
+        'google_calendar',
+        'microsoft_calendar',
+      ]),
       environment: z.enum(['sandbox', 'production']),
       method: z.literal('oauth2'),
       credentials: z.object({}).strict().default({}),

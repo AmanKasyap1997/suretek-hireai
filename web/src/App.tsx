@@ -25,7 +25,15 @@ import { z } from 'zod';
 import { useAuth } from './auth';
 import { loginError } from './api';
 import { Brand, WorkspaceIcon } from './Brand';
+import { Dashboard } from './Dashboard';
+import { JobsPage } from './Jobs';
+import { ApplicationsPage } from './Applications';
+import { CandidatesPage } from './Candidates';
+import { InterviewsPage } from './Interviews';
+import { ManagerHome } from './ManagerHome';
+import { ApplyPage, CareersJobsPage } from './Careers';
 import { Team, AcceptInvitation } from './SaasPages';
+import { ContactVerificationPage } from './ContactVerification';
 import {
   allowedDestination,
   homePath,
@@ -363,7 +371,19 @@ function Shell() {
               }
               to={homePath(user.role)}
             >
-              <WorkspaceIcon name="home" /> Overview
+              <WorkspaceIcon
+                name={
+                  ['HR_ADMIN', 'RECRUITER'].includes(user.role) &&
+                  (!user.enabled_modules ||
+                    user.enabled_modules.includes('hiring'))
+                    ? 'dashboard'
+                    : 'home'
+                }
+              />{' '}
+              {['HR_ADMIN', 'RECRUITER'].includes(user.role) &&
+              (!user.enabled_modules || user.enabled_modules.includes('hiring'))
+                ? 'Dashboard'
+                : 'Overview'}
             </NavLink>
           )}
           {visibleNavigation(user.role, user.enabled_modules, user.roles).map(
@@ -422,6 +442,19 @@ function Home() {
   if (role !== session.user.role.toLowerCase()) return <Forbidden />;
   if (session.user.role === 'SUPER_ADMIN')
     return <Navigate replace to="/super-admin/dashboard" />;
+  if (
+    ['HR_ADMIN', 'RECRUITER'].includes(session.user.role) &&
+    (!session.user.enabled_modules ||
+      session.user.enabled_modules.includes('hiring'))
+  )
+    return <Dashboard />;
+  // Hiring managers and interviewers: their jobs, applicants and interviews.
+  if (
+    ['HIRING_MANAGER', 'INTERVIEWER'].includes(session.user.role) &&
+    (!session.user.enabled_modules ||
+      session.user.enabled_modules.includes('hiring'))
+  )
+    return <ManagerHome />;
   const items = visibleNavigation(
     session.user.role,
     session.user.enabled_modules,
@@ -461,7 +494,8 @@ function Home() {
               <h3>{item.label}</h3>
               <p>
                 {item.built
-                  ? 'Invite staff and manage access within your organization.'
+                  ? (builtDescriptions[item.id] ??
+                    'Invite staff and manage access within your organization.')
                   : `Tools for your ${item.label.toLowerCase()} workflow will be available in a future update.`}
               </p>
               {item.built ? (
@@ -485,7 +519,13 @@ function Home() {
     </>
   );
 }
-function Future({ id }: { id: string }) {
+const builtDescriptions: Record<string, string> = {
+  jobs: 'Create, approve and publish job openings.',
+  applications: 'Review applications and what candidates told you.',
+  candidates: 'Manage shortlisted candidates through interviews to hiring.',
+  interviews: 'See every interview in a calendar, and give feedback.',
+};
+function Future({ id, children }: { id: string; children?: ReactNode }) {
   const { session } = useAuth();
   if (
     session?.user.enabled_modules &&
@@ -502,6 +542,7 @@ function Future({ id }: { id: string }) {
     if (id === 'organizations')
       return <Navigate replace to="/super-admin/organizations" />;
     if (id === 'team') return <Team />;
+    if (children) return children;
   }
   return session && permissionMap[session.user.role].includes(id) ? (
     <section className="state">
@@ -522,6 +563,14 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
+      {/* Candidates confirm the contact choices they made when applying. */}
+      <Route
+        path="/contact-verification"
+        element={<ContactVerificationPage />}
+      />
+      {/* Public careers pages: candidates apply without an account. */}
+      <Route path="/careers/:slug" element={<CareersJobsPage />} />
+      <Route path="/careers/:slug/jobs/:id" element={<ApplyPage />} />
       {/* Own the one-time callback outside Guard: session retries must not
           unmount it after its authorization code has been removed from the URL.
           The callback checks the session/role before any exchange itself. */}
@@ -535,9 +584,50 @@ export default function App() {
             element={<SuperAdminDetail />}
           />
           <Route path="integrations" element={<OrganizationIntegrations />} />
+          <Route
+            path="jobs"
+            element={
+              <Future id="jobs">
+                <JobsPage />
+              </Future>
+            }
+          />
+          <Route
+            path="applications"
+            element={
+              <Future id="applications">
+                <ApplicationsPage />
+              </Future>
+            }
+          />
+          <Route
+            path="candidates"
+            element={
+              <Future id="candidates">
+                <CandidatesPage />
+              </Future>
+            }
+          />
+          <Route
+            path="interviews"
+            element={
+              <Future id="interviews">
+                <InterviewsPage />
+              </Future>
+            }
+          />
           <Route path="home/:role" element={<Home />} />
           {navigation
-            .filter((n) => n.id !== 'integrations')
+            .filter(
+              (n) =>
+                ![
+                  'integrations',
+                  'jobs',
+                  'applications',
+                  'candidates',
+                  'interviews',
+                ].includes(n.id),
+            )
             .map((n) => (
               <Route key={n.id} path={n.id} element={<Future id={n.id} />} />
             ))}

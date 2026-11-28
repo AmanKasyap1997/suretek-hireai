@@ -49,7 +49,16 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
   const body = (email = `${randomUUID()}@example.test`) => ({
     fullName: 'Public Applicant',
     email,
+    phone: '+919876543210',
+    currentLocation: 'Noida',
+    totalExperienceMonths: 42,
+    noticePeriod: 'DAYS_30' as const,
+    expectedCtc: 1200000,
+    ctcCurrency: 'INR',
+    source: 'LINKEDIN' as const,
+    privacyAccepted: true as const,
     noticeVersion: '2026-11-v1',
+    resume: { filename: 'resume.pdf', base64: pdf.toString('base64') },
   });
   const apply = (
     jobId: string,
@@ -177,7 +186,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
       .expect(404);
     await apply(jobId, body()).expect(404);
   });
-  it('accepts separate default-false consents with evidence and the same response for existing candidates', async () => {
+  it('records the apply page notice as consent with evidence, and the same response for existing candidates', async () => {
     const { jobId } = await f.scenario();
     const input = body();
     const fresh = await apply(jobId, input).expect(202);
@@ -188,6 +197,15 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
     }).expect(202);
     expect(repeat.body).toEqual(fresh.body);
     expect(Object.keys(fresh.body)).toEqual(['message']);
+    // The repeat is recorded, so its "already applied" email goes out once a day at most.
+    expect(
+      (
+        await f.pool.query(
+          'SELECT n.* FROM application_repeat_notices n JOIN applications a ON a.tenant_id=n.tenant_id AND a.id=n.application_id JOIN candidates c ON c.tenant_id=a.tenant_id AND c.id=a.candidate_id WHERE c.tenant_id=$1 AND c.email=$2',
+          [f.tenantA, input.email],
+        )
+      ).rows,
+    ).toHaveLength(1);
     const candidate = (
       await f.pool.query(
         'SELECT * FROM candidates WHERE tenant_id=$1 AND email=$2',
@@ -207,8 +225,10 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
       'RECORDING',
       'TRANSCRIPTION',
     ]);
+    // No separate choices: the apply page's notice covers calls, recording
+    // and transcription. It's the candidate's own (unconfirmed) agreement.
     for (const row of evidence) {
-      expect(row.granted).toBe(false);
+      expect(row.granted).toBe(true);
       expect(row.verified).toBe(false);
       expect(row.captured_by).toBeNull();
       expect(row.notice_version).toBe(input.noticeVersion);
@@ -223,6 +243,21 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
     ).rows;
     expect(event).toHaveLength(1);
     expect(event[0].actor_id).toBeNull();
+    const details = (
+      await f.pool.query(
+        'SELECT d.* FROM application_details d JOIN applications a ON a.tenant_id=d.tenant_id AND a.id=d.application_id WHERE a.tenant_id=$1 AND a.candidate_id=$2',
+        [f.tenantA, candidate.id],
+      )
+    ).rows;
+    expect(details).toHaveLength(1);
+    expect(details[0]).toMatchObject({
+      phone: input.phone,
+      current_location: 'Noida',
+      total_experience_months: 42,
+      notice_period: 'DAYS_30',
+      expected_ctc: '1200000.00',
+      source: 'LINKEDIN',
+    });
     const existing = await apply(jobId, {
       ...body('candidate@example.test'),
       consents: { CALL: true, RECORDING: false, TRANSCRIPTION: true },
@@ -248,6 +283,8 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
     await apply(jobId, { ...input, tenantId: f.tenantB }).expect(400);
     await apply(jobId, { ...input, consents: { CALL: 'true' } }).expect(400);
     await apply(jobId, { ...input, noticeVersion: 'old-notice' }).expect(400);
+    await apply(jobId, { ...input, privacyAccepted: false }).expect(400);
+    await apply(jobId, { ...input, resume: undefined }).expect(400);
     await apply(jobId, { ...input, website: 'bot.example' }).expect(202);
     expect(
       (
@@ -656,7 +693,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
       .send({ scope: 'CALL', granted: false, source: 'public-careers' })
       .expect(201);
   });
-  it('never treats public self-reported grants as verified calling permission', async () => {
+  it('lets the candidate’s own agreement on the application permit calls', async () => {
     const { jobId } = await f.scenario();
     const input = body();
     await apply(jobId, {
@@ -682,7 +719,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
         transcription: true,
         idempotencyKey: randomUUID(),
       })
-      .expect(403);
+      .expect(201);
     const scanner = new PendingMalwareScanner();
     expect(await scanner.scan()).toBe(DocumentScanStatus.PENDING);
   });
@@ -690,7 +727,7 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
     const { jobId } = await f.scenario();
     process.env.INTAKE_EMAIL_LIMIT = '1';
     const careers = f.app!.get(CareersService),
-      input = body();
+      { resume, ...input } = body();
     const results = await Promise.allSettled(
       Array.from({ length: 4 }, () =>
         careers.apply(
@@ -700,6 +737,10 @@ describe('Milestone B intake, evidence, documents and erasure', () => {
             ...input,
             website: '',
             consents: { CALL: false, RECORDING: false, TRANSCRIPTION: false },
+          },
+          {
+            originalname: resume.filename,
+            buffer: Buffer.from(resume.base64, 'base64'),
           },
           '203.0.113.1',
           'Concurrent test',

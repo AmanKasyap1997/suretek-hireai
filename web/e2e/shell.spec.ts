@@ -1,5 +1,20 @@
 import { test, expect } from '@playwright/test';
-import { roles, roleLabel, visibleNavigation } from '../src/permissions';
+import {
+  roles,
+  roleLabel,
+  visibleNavigation,
+  type Role,
+} from '../src/permissions';
+// HR Admins and Recruiters (with hiring on) land on the hiring Dashboard;
+// hiring managers and interviewers on their own home.
+const homeHeading = (role: Role) =>
+  role === 'SUPER_ADMIN'
+    ? 'Platform dashboard'
+    : ['HR_ADMIN', 'RECRUITER'].includes(role)
+      ? /^Welcome back, /
+      : ['HIRING_MANAGER', 'INTERVIEWER'].includes(role)
+        ? /^Welcome, /
+        : `${roleLabel(role)} overview`;
 // Login throttle is real: give each role group time to avoid five/minute per-IP limit.
 for (const [index, role] of roles.entries())
   test(`${role} session, navigation, forbidden and logout`, async ({
@@ -18,13 +33,7 @@ for (const [index, role] of roles.entries())
       .fill(process.env.SEED_PASSWORD!);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(
-      page.getByRole('heading', {
-        level: 1,
-        name:
-          role === 'SUPER_ADMIN'
-            ? 'Platform dashboard'
-            : `${roleLabel(role)} overview`,
-      }),
+      page.getByRole('heading', { level: 1, name: homeHeading(role) }),
     ).toBeVisible();
     for (const item of visibleNavigation(role, [
       'hiring',
@@ -49,13 +58,7 @@ for (const [index, role] of roles.entries())
       ).toHaveCount(0);
     await page.reload();
     await expect(
-      page.getByRole('heading', {
-        level: 1,
-        name:
-          role === 'SUPER_ADMIN'
-            ? 'Platform dashboard'
-            : `${roleLabel(role)} overview`,
-      }),
+      page.getByRole('heading', { level: 1, name: homeHeading(role) }),
     ).toBeVisible();
     await page.goto(
       `home/${role === 'SUPER_ADMIN' ? 'employee' : 'super_admin'}`,

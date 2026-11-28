@@ -46,6 +46,16 @@ export class ApplicationsController {
     return this.hiring.getApplication(actor, id);
   }
 
+  @Get(':id/details')
+  @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER, Role.INTERVIEWER)
+  @ApiOperation({
+    summary:
+      'What the candidate submitted. Pay and contact details are omitted for interviewers.',
+  })
+  details(@CurrentUser() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.hiring.details(actor, id);
+  }
+
   @Patch(':id/stage')
   @Roles(...RECRUITMENT_ROLES, Role.HIRING_MANAGER)
   @BodySchema(stageSchema)

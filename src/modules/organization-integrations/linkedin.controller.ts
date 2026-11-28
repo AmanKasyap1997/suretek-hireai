@@ -10,6 +10,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { Actor, CurrentUser, Role } from '../../shared/actor';
 import { Roles } from '../../shared/roles.decorator';
+import { RECRUITMENT_ROLES } from '../../shared/role-groups';
 import { BodySchema, parse } from '../../platform/http/validation';
 import { LinkedInService } from './linkedin.service';
 import {
@@ -39,7 +40,9 @@ export class LinkedInController {
   @Get('jobs') jobs(@CurrentUser() actor: Actor) {
     return this.service.jobs(actor);
   }
+  /** Company pages to post to: recruiters publish approved jobs too. */
   @Get('pages')
+  @Roles(...RECRUITMENT_ROLES)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   pages(@CurrentUser() actor: Actor, @Query() q: unknown) {
     return this.service.pages(actor, parse(linkedinPageQuery, q).start);

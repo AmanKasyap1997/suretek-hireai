@@ -143,6 +143,6 @@ export const passwordChangeSchema = z
   .strict()
   .refine(
     (v) => v.password !== v.currentPassword,
-    'Choose a different password',
+    'Your new password must be different from your current password.',
   );
 export type Filters = z.infer<typeof filters>;

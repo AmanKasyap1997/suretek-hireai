@@ -111,7 +111,7 @@ Use [api-examples.http](docs/api-examples.http) with a REST client or copy its J
 
 1. Create a job; an HR administrator approves it; publish it to the application's internal job listing.
 2. Create a candidate and application; a recruiter manually shortlists the application.
-3. Record consent evidence. Optionally enable call planning and create a planning record during the configured calling window. No call is dialed.
+3. Record consent evidence. With AI calling set up, a recruiter asks for an AI call; HireAI dials during calling hours and saves the candidate's answers ([AI calls](docs/ai-calling.md)).
 4. Schedule an interview locally and collect immutable panelist scorecards. Staff retain control of application stages and hiring decisions.
 5. Prepare and approve an offer. An HR administrator records acceptance with an evidence reference.
 6. Convert the accepted offer to an employee. Retrying the same conversion returns the existing employee; it does not create another employee or duplicate onboarding tasks.
@@ -134,7 +134,7 @@ Each protected request rechecks the active user. Business queries retain their t
 
 Request middleware starts an `AsyncLocalStorage` store. Login sets its validated tenant ID before the user query; authenticated requests set it from the verified token before the active-user lookup. `DbService` uses a checked-out connection and transaction-local `set_config` for queries and transactions, so context is cleared before the connection returns to the pool. See [hardening design and checks](docs/hardening.md).
 
-Consent is separate for calling, recording and transcription. Revoking consent cancels affected pending planning records. `CALL_PLANNING_ENABLED=false` disables new call plans; the configured timezone and end-exclusive daily window are checked when creating a new plan. Planning records are never dispatched by this repository. A future worker must recheck all policy, consent, eligibility and emergency-stop conditions immediately before any external call.
+Consent is separate for calling, recording and transcription. Revoking consent cancels affected calls, including one on the line. `CALL_PLANNING_ENABLED=false` disables calls entirely. A call asked for outside the configured end-exclusive daily window (and the platform's hours) waits for the next window. The dispatcher rechecks policy, consent, eligibility and the platform's emergency pause immediately before every dial ([AI calls](docs/ai-calling.md)).
 
 ## Database changes
 
@@ -297,3 +297,7 @@ Super Admin enables providers under Integrations → Available to organizations.
 If Super Admin APIs return 404, rebuild/restart the backend from this branch and run `npm run api:check`; the registered protected routes return 401 without credentials. See [API/proxy troubleshooting](docs/super-admin.md#diagnosing-apiv1super-admin-404s).
 
 Hosted provider authorization windows and both LinkedIn publishing paths are documented in [LinkedIn integrations](docs/linkedin-integrations.md). Apply migrations through 019 before deploying these changes.
+
+## Candidate applications and AI resume screening
+
+Candidates apply on HireAI's hosted apply page or through the public API ([candidate applications](docs/candidate-applications.md)). The organization's enabled AI provider rates each resume against the job's screening criteria, HireAI computes the match score from the criteria weights, and recruiters shortlist or reject; a screening never changes a stage ([resume screening](docs/resume-screening.md)). With AI calling on, recruiters prepare each job's [AI call questions](docs/ai-call-questions.md), and an AI voice phones shortlisted candidates who agreed to be called, through the organization's Plivo number with Gemini Live or OpenAI Realtime ([AI calls](docs/ai-calling.md)). Shortlisted candidates are managed on the Candidates page: interviews, AI calls and stage changes ([Candidates page](docs/candidates-page.md)). Interviews are on the Interviews page's calendar and on each application, and with Google Calendar or Microsoft Calendar connected they're added there, inviting the panel and the candidate; panelists give feedback on them ([interviews](docs/interviews.md)). Jobs stay editable until they close, so questions and criteria can be added after publishing ([editing a job](docs/job-editing.md)). Hiring managers request jobs, an HR Admin approves them (or sends them back with a note), and recruiters publish them; each role has its own view ([hiring roles](docs/hiring-roles.md)). HR Admins can turn on automatic steps: shortlist at a resume score, call, move to interviews at a call score, and an AI call that books the interview in the connected calendar ([automatic hiring steps](docs/hiring-automation.md)). Apply migrations through 038.

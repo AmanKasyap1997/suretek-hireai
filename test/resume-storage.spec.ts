@@ -56,6 +56,12 @@ it('enforces the decoded public resume limit at the base64 padding boundary', ()
   const input = {
     fullName: 'Public applicant',
     email: 'test@example.test',
+    phone: '+919876543210',
+    currentLocation: 'Noida',
+    totalExperienceMonths: 12,
+    noticePeriod: 'IMMEDIATE',
+    expectedCtc: 600000,
+    privacyAccepted: true,
     noticeVersion: '2026-11-v1',
     resume: {
       filename: 'resume.pdf',

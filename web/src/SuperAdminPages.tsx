@@ -41,6 +41,12 @@ const label = (v: string) =>
       max_users: 'Maximum users',
       call_minutes_per_month: 'Monthly call minutes',
       storage_mb: 'Storage (MB)',
+      calls: 'AI calls',
+      call_minutes: 'Call minutes',
+      integrations_failing: 'Failing integrations',
+      integration_errors: 'Failed checks (all time)',
+      error_count: 'Failed checks (all time)',
+      last_verified_at: 'Last verified',
       calling_start: 'Calling starts (hour)',
       calling_end: 'Calling ends (hour)',
       call_quota: 'Monthly planned call quota',
@@ -200,6 +206,8 @@ function Pager({
 }
 type Field = {
   name: string;
+  /** Instead of the name's usual label. */
+  label?: string;
   type?: string;
   options?: string[];
   required?: boolean;
@@ -258,7 +266,7 @@ function Fields({ fields, value = {} }: { fields: Field[]; value?: Row }) {
     <>
       {fields.map((f) => (
         <label className="form-field" key={f.name}>
-          {label(f.name)}
+          {f.label ?? label(f.name)}
           {f.options ? (
             <select
               name={f.name}
@@ -273,7 +281,7 @@ function Fields({ fields, value = {} }: { fields: Field[]; value?: Row }) {
           ) : (
             <input
               name={f.name}
-              aria-label={label(f.name)}
+              aria-label={f.label ?? label(f.name)}
               aria-invalid={!!errors[f.name]}
               aria-describedby={errors[f.name] ? `error-${f.name}` : undefined}
               type={f.type ?? 'text'}
@@ -573,7 +581,13 @@ function DetailContent({ value }: { value: Row }) {
       <h2>Usage this month</h2>
       <Table
         rows={[value.usage as Row]}
-        columns={['users', 'call_minutes', 'unmetered_calls', 'storage_mb']}
+        columns={[
+          'users',
+          'calls',
+          'call_minutes',
+          'integrations_failing',
+          'storage_mb',
+        ]}
       />
       <h2>HR administrators</h2>
       <Table
@@ -816,7 +830,9 @@ function Reports() {
     <>
       <h1>Platform reports</h1>
       <p>
-        Aggregate usage only. Unmetered calls have no reported duration. Storage
+        Aggregate usage only. AI calls and call minutes are this month’s.
+        Failing integrations are connections failing now; failed checks count
+        every failed connection test since a connection was set up. Storage
         counts retained candidate documents.
       </p>
       <Data path="/reports">
@@ -831,16 +847,29 @@ function Reports() {
                 'name',
                 'status',
                 'users',
+                'calls',
                 'call_minutes',
-                'unmetered_calls',
+                'integrations_failing',
                 'integration_errors',
                 'storage_mb',
               ]}
             />
-            <h2>Integration errors</h2>
+            <h2>Organization integrations with failed checks</h2>
             <Table
-              rows={d.integrations as Row[]}
-              columns={['provider', 'environment', 'status', 'error_count']}
+              rows={(d.integrations as Row[]).map((r) => ({
+                ...r,
+                last_verified_at: r.last_verified_at
+                  ? new Date(String(r.last_verified_at)).toLocaleString()
+                  : 'Never',
+              }))}
+              columns={[
+                'organization',
+                'provider',
+                'environment',
+                'status',
+                'error_count',
+                'last_verified_at',
+              ]}
             />
           </>
         )}
@@ -1117,12 +1146,16 @@ export function PasswordChange() {
   return (
     <section>
       <h1>Change your initial password</h1>
-      <p>Choose a new password before accessing your workspace.</p>
+      <p>
+        Choose a new password before accessing your workspace. Your current
+        password is the one you signed in with; the new one must be different
+        and at least 12 characters.
+      </p>
       <PlatformForm className="platform-form" onSubmit={submit}>
         <Fields
           fields={[
             { name: 'currentPassword', type: 'password' },
-            { name: 'password', type: 'password' },
+            { name: 'password', label: 'New password', type: 'password' },
           ]}
         />
         <button disabled={busy}>Change password</button>

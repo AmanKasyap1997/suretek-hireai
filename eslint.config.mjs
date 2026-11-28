@@ -16,7 +16,7 @@ export default tseslint.config(
           patterns: [
             {
               regex:
-                '(^|/)(auth|hr|talent-acquisition|jobs|candidates|applications|offers|calling|careers|documents|privacy|interviews|scorecards|reports|employees|onboarding|leave|attendance)/.+',
+                '(^|/)(auth|hr|talent-acquisition|jobs|candidates|applications|offers|calling|careers|documents|privacy|interviews|scorecards|screening|reports|employees|onboarding|leave|attendance)/.+',
               message:
                 'Import another module through its public entrypoint and exported services, not its internal files. Shared contracts belong in shared/.',
             },

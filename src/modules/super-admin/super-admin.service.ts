@@ -85,9 +85,9 @@ export class SuperAdminService {
       await tx.query("SELECT set_config('app.tenant_id',$1,true)", [id]);
       const usage = await tx.one(
         `SELECT (SELECT count(*)::int FROM users WHERE tenant_id=$1) AS users,
-    (SELECT coalesce(sum(byte_size),0)::float/1048576 FROM candidate_documents WHERE tenant_id=$1) AS storage_mb,
-    (SELECT coalesce(sum(duration_seconds),0)::float/60 FROM call_requests WHERE tenant_id=$1 AND created_at>=date_trunc('month',now())) AS call_minutes,
-    (SELECT count(*)::int FROM call_requests WHERE tenant_id=$1 AND duration_seconds IS NULL AND created_at>=date_trunc('month',now())) AS unmetered_calls,
+    (SELECT round(coalesce(sum(byte_size),0)/1048576.0,2)::float FROM candidate_documents WHERE tenant_id=$1) AS storage_mb,
+    (SELECT round(coalesce(sum(duration_seconds),0)/60.0,1)::float FROM call_attempts WHERE tenant_id=$1 AND created_at>=date_trunc('month',now())) AS call_minutes,
+    (SELECT count(*)::int FROM call_attempts WHERE tenant_id=$1 AND created_at>=date_trunc('month',now())) AS calls,
     (SELECT coalesce(sum(error_count),0)::int FROM integration_configs WHERE tenant_id=$1 AND organization_id=$1) AS integration_errors,
     (SELECT count(*)::int FROM integration_configs c JOIN integration_providers p ON p.provider=c.provider AND p.enabled AND p.revision=c.provider_revision WHERE c.tenant_id=$1 AND c.organization_id=$1 AND c.status IN ('ok','enabled')) AS integrations_ok,
     (SELECT count(*)::int FROM integration_configs c JOIN integration_providers p ON p.provider=c.provider AND p.enabled AND p.revision=c.provider_revision WHERE c.tenant_id=$1 AND c.organization_id=$1 AND c.status='failing') AS integrations_failing`,
@@ -97,6 +97,25 @@ export class SuperAdminService {
         actor.tenantId,
       ]);
       return usage;
+    });
+  }
+  /**
+   * An organization's connections with failed checks: provider, status and
+   * how many checks failed. No credentials.
+   */
+  private async failedConnections(actor: Actor, id: string) {
+    return this.db.transaction(async (tx) => {
+      await tx.query("SELECT set_config('app.tenant_id',$1,true)", [id]);
+      const rows = await tx.query(
+        `SELECT provider,environment,status,error_count,last_verified_at FROM integration_configs
+         WHERE tenant_id=$1 AND organization_id=$1 AND (status='failing' OR error_count>0)
+         ORDER BY (status='failing') DESC,error_count DESC,provider,environment`,
+        [id],
+      );
+      await tx.query("SELECT set_config('app.tenant_id',$1,true)", [
+        actor.tenantId,
+      ]);
+      return rows;
     });
   }
   async detail(actor: Actor, id: string) {
@@ -222,16 +241,22 @@ export class SuperAdminService {
       'SELECT organization_id AS id,name,status,limits,trial_ends_at,created_at FROM platform_organizations WHERE tenant_id=$1 AND deleted_at IS NULL ORDER BY name',
       [actor.tenantId],
     );
-    for (const row of rows) row.usage = await this.usage(actor, row.id);
-    const integrations = await this.db.query(
-      'SELECT provider,environment,status,error_count FROM integration_configs WHERE tenant_id=$1 ORDER BY provider',
-      [actor.tenantId],
-    );
+    const integrations: Record<string, unknown>[] = [];
+    for (const row of rows) {
+      row.usage = await this.usage(actor, row.id);
+      for (const connection of await this.failedConnections(actor, row.id))
+        integrations.push({ organization: row.name, ...connection });
+    }
+    // Organizations' connections with failed checks (not the platform's own).
     return { organizations: rows, integrations };
   }
   async dashboard(actor: Actor) {
     const report = await this.reports(actor),
       rows = report.organizations;
+    const platform = await this.db.query<{ status: string }>(
+      'SELECT status FROM integration_configs WHERE tenant_id=$1',
+      [actor.tenantId],
+    );
     const month = new Date();
     month.setUTCDate(1);
     month.setUTCHours(0, 0, 0, 0);
@@ -243,12 +268,12 @@ export class SuperAdminService {
       total_users: rows.reduce((n, r) => n + r.usage.users, 0),
       new_this_month: rows.filter((r) => new Date(r.created_at) >= month)
         .length,
+      // The platform's own connections, and every organization's.
       integrations_ok:
-        report.integrations.filter((r) => ['ok', 'enabled'].includes(r.status))
-          .length +
+        platform.filter((r) => ['ok', 'enabled'].includes(r.status)).length +
         rows.reduce((n, r) => n + (r.usage.integrations_ok ?? 0), 0),
       integrations_failing:
-        report.integrations.filter((r) => r.status === 'failing').length +
+        platform.filter((r) => r.status === 'failing').length +
         rows.reduce((n, r) => n + (r.usage.integrations_failing ?? 0), 0),
       attention: rows.filter(
         (r) =>
